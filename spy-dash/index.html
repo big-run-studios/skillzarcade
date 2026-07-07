@@ -38,16 +38,16 @@
   #muteBtn{position:absolute;top:max(16px,env(safe-area-inset-top));right:16px;z-index:25;width:46px;height:46px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:20px;line-height:1;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
 
   /* cash-out: bank your score before you crash */
-  #cashBtn{position:absolute;bottom:max(24px,env(safe-area-inset-bottom));right:16px;z-index:24;width:96px;height:96px;border-radius:50%;cursor:pointer;border:3px solid rgba(255,255,255,.6);
-    display:none;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;
-    font-family:var(--display);font-weight:900;letter-spacing:1.5px;font-size:16px;color:#2a1c04;
+  #cashBtn{position:absolute;bottom:max(24px,env(safe-area-inset-bottom));left:16px;z-index:24;width:48px;height:48px;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,.6);
+    display:none;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;
+    font-family:var(--display);font-weight:900;letter-spacing:.5px;font-size:8px;color:#2a1c04;
     background:radial-gradient(100% 100% at 50% 28%, #ffe9a8, #ffc233 55%, #d9941e);
-    box-shadow:0 0 26px rgba(255,194,51,.6), 0 6px 18px rgba(0,0,0,.5), inset 0 0 0 4px rgba(255,255,255,.25);
+    box-shadow:0 0 16px rgba(255,194,51,.6), 0 4px 12px rgba(0,0,0,.5), inset 0 0 0 2px rgba(255,255,255,.25);
     animation:cashpulse 1.6s ease-in-out infinite;}
   #cashBtn.on{display:flex;}
   #cashBtn:active{transform:scale(.92);}
-  @keyframes cashpulse{0%,100%{box-shadow:0 0 18px rgba(255,194,51,.45),0 6px 18px rgba(0,0,0,.5),inset 0 0 0 4px rgba(255,255,255,.25);}
-    50%{box-shadow:0 0 34px rgba(255,194,51,.85),0 6px 18px rgba(0,0,0,.5),inset 0 0 0 4px rgba(255,255,255,.35);}}
+  @keyframes cashpulse{0%,100%{box-shadow:0 0 10px rgba(255,194,51,.45),0 4px 12px rgba(0,0,0,.5),inset 0 0 0 2px rgba(255,255,255,.25);}
+    50%{box-shadow:0 0 20px rgba(255,194,51,.85),0 4px 12px rgba(0,0,0,.5),inset 0 0 0 2px rgba(255,255,255,.35);}}
 
   #cashed .big{font-size:38px;font-weight:900;letter-spacing:2px;color:#7fe9ff;margin:10px 0 4px;text-shadow:var(--title-glow);}
   #cashed .lbl{font-size:12px;font-weight:700;letter-spacing:3px;color:var(--dim);margin-top:14px;}
@@ -137,7 +137,7 @@
     <button id="cashBtn"><span>CASH</span><span>OUT</span></button>
   </div>
 
-  <div class="brand">SKILLZARCADE · SPY DASH v0.8.2</div>
+  <div class="brand">SKILLZARCADE · SPY DASH v0.8.3</div>
 </div>
 
 <audio id="music" src="spy-music.mp3" loop preload="auto"></audio>
