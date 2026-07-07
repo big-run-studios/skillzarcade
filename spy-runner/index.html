@@ -177,7 +177,7 @@
       <div class="sub">Skill-based crash · prototype</div>
       <div class="skinpick">
         <button class="skinbtn" data-skin="neon">🌃 Neon</button>
-        <button class="skinbtn" data-skin="spyhunter">🕶️ Spy Hunter</button>
+        <button class="skinbtn" data-skin="spyhunter">🏁 Classic</button>
         <button class="skinbtn" data-skin="bootlegger">🥃 Bootlegger</button>
       </div>
       <div class="htp">
@@ -231,7 +231,7 @@
     </div>
   </div>
 
-  <div class="brand">Big Run Studios — Internal Prototype · v0.9.17</div>
+  <div class="brand">Big Run Studios — Internal Prototype · v0.9.18</div>
 </div>
 </div><!-- /#app -->
 
@@ -375,21 +375,29 @@ SKINS.neon = {
 // ---------- shared palette-driven builders for ground-vehicle reskins ----------
 // One continuous, deformable road surface — a grid mesh whose rows ride the curve every frame.
 // Being a single mesh, it can never show a seam/gap; the colored strips & lines ride on top of it.
-function buildRoadRibbon(root, P){
+function buildRoadRibbon(root, P, o){
+  o=o||{};
   const ROWS=130, Y0=-BEHIND-30, Y1=1620, rowsN=ROWS+1;
   const ys=[]; for(let r=0;r<rowsN;r++) ys.push(Y0+(Y1-Y0)*r/ROWS);
   const toRGB=h=>[((h>>16)&255)/255,((h>>8)&255)/255,(h&255)/255];
   const blend=(h1,h2,t)=>{ const a=toRGB(h1),b=toRGB(h2); return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]; };
-  // contiguous colored regions across the road, all part of ONE continuous mesh — lanes are vertex-coloured, so there are no tile seams to tear
-  const LT=(P.laneLT==null?0.8:P.laneLT), regions=[
-    [-112,-100, toRGB(P.road)],
-    [-100,-60,  blend(P.road,P.laneTint[0],LT)],
+  // ALL continuous strips (ground, edge lines, lanes, shoulder + its boundary line) live in this ONE mesh
+  // as DISJOINT vertex-coloured regions sharing the same per-frame deformation. They used to be overlapping
+  // per-slice boxes, which z-fought and shimmered whenever the road pitched/bent (worst on Classic's bright road).
+  const LT=(P.laneLT==null?0.8:P.laneLT), E=1.5;   // E = half-width of the painted edge/boundary lines
+  const regions=[
+    [-112,-100-E, toRGB(P.road)],
+    [-100-E,-100+E, toRGB(P.edge)],                 // left edge line
+    [-100+E,-60, blend(P.road,P.laneTint[0],LT)],
     [-60,-20,   blend(P.road,P.laneTint[1],LT)],
     [-20,20,    blend(P.road,P.laneTint[2],LT)],
-    [20,60,     blend(P.road,P.laneTint[3],LT)],
-    [60,100,    toRGB(P.shoulder)],
-    [100,112,   toRGB(P.road)],
+    [20,60-E,   blend(P.road,P.laneTint[3],LT)],
+    [60-E,60+E, toRGB(P.divider)],                  // boundary line into the cash-out shoulder
+    [60+E,100-E, toRGB(P.shoulder)],
+    [100-E,100+E, toRGB(P.edgeR)],                  // right edge line
+    [100+E,112, toRGB(P.road)],
   ];
+  if(o.ground!=null){ regions.unshift([-760,-112,toRGB(o.ground)]); regions.push([112,760,toRGB(o.ground)]); }   // grass/desert wings (Classic & Bootlegger)
   const baseX=[], vrow=[], posA=[], colA=[], idx=[]; let v=0;
   for(const [xL,xR,c] of regions){ const start=v;
     for(let r=0;r<rowsN;r++){
@@ -415,15 +423,8 @@ function stdTrack(root, P, o){
   const em=(c,i)=> glow?{emissive:c,emissiveIntensity:(i==null?1:i),cast:false}:{cast:false};
   // every scroller records its inherent x/z so the curve offset can be added on top each frame
   const push=(m,y,up)=>{ scrollers.push({m,baseY:y,bx:m.position.x,bz:m.position.z,up:!!up}); return m; };
-  const ribbon=buildRoadRibbon(root, P);   // continuous gap-free road surface WITH lanes baked in (vertex colors) — no tile seams
-  const STEP=40, SEGD=STEP+14;   // overlapping slices for the rails/markers that ride on the ribbon
-  for(let y=0;y<TLEN;y+=STEP){
-    const zb=((y/STEP)&1)*0.04;   // tiny alternating depth bias so overlapping coplanar slices don't z-fight on flat road
-    if(o.ground!=null) push(addBox(root,1500,SEGD,6,o.ground,0,y,-7+zb,{receive:true}),y);
-    push(addBox(root,3,SEGD,7,P.edge,ROAD_L,y,3+zb,em(P.edge,1)),y);
-    push(addBox(root,3,SEGD,7,P.edgeR,ROAD_R,y,3+zb,em(P.edgeR,1)),y);
-    push(addBox(root,3,SEGD,5,0xdfe8ff,laneX(SHOULDER)-LW/2,y,1.5+zb,em(0xdfe8ff,0.35)),y);   // clean boundary into the green cash-out lane
-  }
+  const ribbon=buildRoadRibbon(root, P, {ground:o.ground});   // ONE gap-free deformable surface: ground, edge lines, lanes, shoulder & boundary all baked in — no overlapping slices, so nothing to z-fight/flicker
+  const STEP=40;
   // white boundary dashes — skipped on skins that use coloured per-lane guide-lines instead (neon), so we never stack two sets of dashes
   if(!o.laneLines){ for(const dx of [laneX(0)+LW/2,laneX(1)+LW/2,laneX(2)+LW/2]){ for(let y=0;y<TLEN;y+=64) push(addBox(root,3,16,2.5,P.divider,dx,y,1.0,em(P.divider,0.3)),y); } }
   // accent-coded road: ONE glowing guide-line down each driving lane in that lane's multiplier colour — the colour cue lives on the stripe, not the (now dark) lane fill, so the road recedes while the player & traffic pop
@@ -595,7 +596,7 @@ function clearIntroCops(){ for(const c of introCops){ scene.remove(c.mesh); disp
 
 // ===== SPY HUNTER (classic arcade) =====
 SKINS.spyhunter = {
-  id:'spyhunter', label:'Spy Hunter', music:'spyhunter.mp3',
+  id:'spyhunter', label:'Classic', music:'spyhunter.mp3',   // renamed to "Classic" (id/file stay 'spyhunter' so saved prefs & audio keep working)
   bg:0x6fa8d6, fog:{color:0x6fa8d6,near:450,far:1750}, postFX:false,
   palette:{ road:0x5a606b, shoulder:0x3f7d3a, divider:0xf5f5f5, edge:0xc4c8cc, edgeR:0xc4c8cc,
     laneTint:[0x636974,0x5e646f,0x595f6a,0x545a64], horizon:0xbfe2f2,
