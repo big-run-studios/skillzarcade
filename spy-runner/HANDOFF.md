@@ -1,9 +1,9 @@
 # Spy Runner — Handoff / Status
 
-> Read this first when picking up the project in a new session. It captures the current state of the web prototype, how the code is organized, the tunables, how to run/host it, and the non-obvious gotchas. Companion docs: **UNITY_MIGRATION_PLAN.md** (the plan to rebuild on Skillz Arena) and **ARENA_QUESTIONS.md** (open questions for the platform). Long-term project memory also lives in the Claude memory file `skillzarcade-car-game.md`.
+> Read this first when picking up the project in a new session. It captures the current state of the web prototype, how the code is organized, the tunables, how to run/host it, and the non-obvious gotchas. Companion docs: **UNITY_MIGRATION_PLAN.md** (the plan to rebuild on Skillz Arena) and **ARENA_QUESTIONS.md** (open questions for the platform). Long-term project memory also lives in the Claude memory file `crasharcade-car-game.md`.
 
 ## What this is
-- Workspace: `/Users/bigrunandrew/Desktop/SkillzArcade`. Owner: **Andrew, Big Run Studios**.
+- Workspace: `/Users/bigrunandrew/Desktop/CrashArcade`. Owner: **Andrew, Big Run Studios**.
 - The active deliverable is the **car game** = `spy-runner/index.html`, a single-file Three.js prototype (Three r128 from unpkg CDN). `go-chicken-go/` is a separate copied game, not the focus.
 - Goal: evolve the web prototype, then **rebuild in Unity for the Skillz Arena platform** (see UNITY_MIGRATION_PLAN.md).
 - Current version tag is in the footer `.brand` text (currently **v0.9.17**). Bump it on every change.
