@@ -142,7 +142,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.9.3</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.9.4</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -872,9 +872,8 @@ function spriteReady(img){return img.complete&&img.naturalWidth>0;}
 function drawSprite(img,cols,rows,c,r,cx,footY,drawH,flip,rot,glow,glowBlur){ // anchor = bottom-center at (cx,footY)
   const cw=img.naturalWidth/cols,ch=img.naturalHeight/rows,k=drawH/ch,dw=cw*k,dh=ch*k;
   ctx.save();ctx.translate(cx,footY);if(rot)ctx.rotate(rot);if(flip)ctx.scale(-1,1);
-  if(glow){ // neon rim: two shadow passes build a glowing halo so units pop against the dark pitch & each other
-    ctx.shadowColor=glow;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;
-    ctx.shadowBlur=glowBlur||9;ctx.drawImage(img,c*cw,r*ch,cw,ch,-dw/2,-dh,dw,dh);
+  if(glow){ // subtle neon rim so units read against the dark pitch (single soft pass)
+    ctx.shadowColor=glow;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;ctx.shadowBlur=glowBlur||6;
     ctx.drawImage(img,c*cw,r*ch,cw,ch,-dw/2,-dh,dw,dh);
     ctx.shadowBlur=0;
   }
@@ -958,8 +957,6 @@ function draw(){
   line(-0.28,1,-0.28,0.9);line(0.28,1,0.28,0.9);line(-0.28,0.9,0.28,0.9);     // six-yard
   ctx.beginPath();ctx.arc(SXp(0,0.8),gy(0.8),2.5,0,7);ctx.fillStyle='rgba(120,225,255,.5)';ctx.fill();
   ctx.shadowBlur=0;
-
-  drawFence();                                           // perimeter fence around the pitch
 
   /* goal */
   const pl=CX-POST_PX,pr=CX+POST_PX;
@@ -1110,10 +1107,10 @@ function drawPlayer(x,z,kind,o){
   o=o||{};
   const s=sc(z),sx=SXp(x,z),ys=gy(z);
   const bw=26*s,bh=48*s,hr=8.5*s;
-  // grounded contact shadow (soft, sits under the wheel)
+  // grounded contact shadow (dark oval on the deck under the wheel)
   ctx.save();
-  ctx.fillStyle='rgba(0,0,0,.5)';ctx.shadowColor='rgba(0,0,0,.5)';ctx.shadowBlur=6*s;
-  ctx.beginPath();ctx.ellipse(sx,ys+2*s,20*s,7*s,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.6)';ctx.shadowColor='rgba(0,0,0,.55)';ctx.shadowBlur=7*s;
+  ctx.beginPath();ctx.ellipse(sx,ys+3*s,24*s,8*s,0,0,7);ctx.fill();
   ctx.restore();
   if(o.carrier){
     const pulse=1+0.12*Math.sin(performance.now()/160);
@@ -1122,7 +1119,7 @@ function drawPlayer(x,z,kind,o){
   const m=SHEETMAP[kind];
   if(m&&spriteReady(m.img)){
     const fr=faceFrame(m,faceOf(o.obj||{x,z},kind==='hero'));
-    drawSprite(m.img,m.cols,m.rows,fr.c,fr.r,sx,ys+3*s,BODY_H*s,fr.flip,0,GLOW[kind],9);
+    drawSprite(m.img,m.cols,m.rows,fr.c,fr.r,sx,ys+3*s,BODY_H*s,fr.flip,0,GLOW[kind],6);
     return;
   }
   const body=kind==='hero'?'#86d8ff':kind==='def'?'#8a2f56':'#2f8a5e';
@@ -1155,14 +1152,15 @@ function drawKeeper(){ // jetpack keeper: floats mid-goal, cheats sideways, dive
   const ky=GOALY-BAR_H*0.5+bob+keeper.oy;
   const bw=26*s,bh=48*s,hr=8.5*s;
   // ground shadow under the hover spot (keeper floats, so it stays put on the deck)
-  ctx.fillStyle='rgba(0,0,0,.4)';
-  ctx.beginPath();ctx.ellipse(CX+keeper.kx*POST_PX,GOALY+3,bw*0.85,bw*0.3,0,0,7);ctx.fill();
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,.5)';ctx.shadowColor='rgba(0,0,0,.5)';ctx.shadowBlur=6;
+  ctx.beginPath();ctx.ellipse(CX+keeper.kx*POST_PX,GOALY+4,bw*0.95,bw*0.34,0,0,7);ctx.fill();
+  ctx.restore();
   if(spriteReady(SPRITES.keep)){ // floating keeper: arms down idle, arms out on a dive
     const img=SPRITES.keep,cw=img.naturalWidth/4,ch=img.naturalHeight/4;
     const fr=diving?{c:0,r:1}:{c:0,r:0},k=(KEEP_H*s)/ch,dw=cw*k,dh=ch*k;
     ctx.save();ctx.translate(kx,ky);ctx.rotate(clamp(keeper.ox/45,-1,1)*0.5);
-    ctx.shadowColor=GLOW.keep;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;ctx.shadowBlur=12; // neon rim so he reads vs the dark net
-    ctx.drawImage(img,fr.c*cw,fr.r*ch,cw,ch,-dw/2,-dh*0.6,dw,dh);
+    ctx.shadowColor=GLOW.keep;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;ctx.shadowBlur=8; // soft neon rim vs the dark net
     ctx.drawImage(img,fr.c*cw,fr.r*ch,cw,ch,-dw/2,-dh*0.6,dw,dh);
     ctx.shadowBlur=0;
     ctx.drawImage(img,fr.c*cw,fr.r*ch,cw,ch,-dw/2,-dh*0.6,dw,dh);
