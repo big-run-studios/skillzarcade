@@ -142,7 +142,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.9</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.9.0</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -1033,7 +1033,7 @@ function draw(){
 function line(x0,z0,x1,z1){ctx.beginPath();ctx.moveTo(SXp(x0,z0),gy(z0));ctx.lineTo(SXp(x1,z1),gy(z1));ctx.stroke();}
 function drawFence(){ // neon perimeter railing: down both sidelines + flanking the goal behind the endline
   // sits on the true touchline; back edge is pulled to ~halfway between the goal line and the boards (no bg break)
-  const fw0=hw(0),fw1=hw(1),yT=220, eX=(y,s)=>{const t=(y-GOALY)/(H-GOALY);return CX+s*fw1+(s*fw0-s*fw1)*t;};
+  const fw0=hw(0)*1.2,fw1=hw(1)*1.2,yT=220, eX=(y,s)=>{const t=(y-GOALY)/(H-GOALY);return CX+s*fw1+(s*fw0-s*fw1)*t;}; // outside the touchlines
   const hAt=y=>lerp(9,26,clamp((y-yT)/(H-yT),0,1));
   function seg(ax,ay,bx,by){
     const ha=hAt(ay),hb=hAt(by),len=Math.hypot(bx-ax,by-ay),n=Math.max(1,Math.round(len/26));
