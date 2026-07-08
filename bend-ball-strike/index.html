@@ -119,7 +119,7 @@
         <div class="row"><div class="ic">🏃</div><div class="tx">Your team <b>chases the ball</b> — first one there takes it. <i>So do they.</i> End the line in the <u>goal</u> to shoot</div></div>
         <div class="row"><div class="ic">🪁</div><div class="tx">The <b>longer the curve, the harder &amp; higher</b> the ball — long lobs <b>sail over</b> defenders; short passes stay flat and <i>can be cut</i></div></div>
         <div class="row"><div class="ic">📈</div><div class="tx">Every pass raises your <u>×multiplier</u> — keep passing to multiply everything after. But <i>defenders are faster than you and close in fast</i> — pass sharp or shoot before they catch you</div></div>
-        <div class="row"><div class="ic">🥅</div><div class="tx"><u>One goal cashes out the pot</u> — shoot past the jetpack keeper's dive. The clock only runs <b>while the ball moves</b>. <i>Time up = 0</i></div></div>
+        <div class="row"><div class="ic">🥅</div><div class="tx"><u>One goal cashes out the pot</u> — shoot past the jetpack keeper's dive. The <b>60s match clock always runs</b> — even while you think. <i>Time up = 0</i></div></div>
       </div>
       <button class="btn" id="playBtn">KICK OFF</button>
       <div class="pb" id="menuBest"></div>
@@ -142,7 +142,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.1</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.2</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -196,7 +196,7 @@ const BAR_H=118;                     // crossbar height px above goal line
 const BAR_Y=GOALY-BAR_H;
 
 /* ================= tuning ================= */
-const SESSION_T=60;                  // ball-motion budget (s) — clock only runs while the ball moves
+const SESSION_T=60;                  // total match time (s) — always ticking during play, thinking included
 const TIME_BONUS_PER_S=10;           // goal time bonus = 10 pts per second left on the clock
 const PASS_MULT_STEP=0.25, PASS_MULT_MAX=5; // each completed pass raises the live multiplier
 const KEEP_REACH=0.40;               // keeper MAX dive TRAVEL as fraction of goal width; gloves reach a bit beyond
@@ -594,10 +594,11 @@ function update(dt){
   if(shake>0)shake=Math.max(0,shake-dt*22);
   if(paused||state!=='play')return;
 
-  // the clock only runs while the ball is moving — deciding is free
-  if(sub==='flight'&&flight&&!flight.shotOn){
+  // total match clock — always ticking during play, thinking time included
+  // (a shot already in the air gets its buzzer-beater; resolve pauses the clock so a scored goal isn't zeroed)
+  if((sub==='live'||sub==='flight')&&!(flight&&flight.shotOn)){
     T-=dt;
-    if(T<=0){ // time's up mid-move = 0 (a shot already in the air gets its buzzer-beater)
+    if(T<=0){
       potLost=Math.round(pot); pot=0; endKind='time'; endReason='';
       endSession(); return;
     }
