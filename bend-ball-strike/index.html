@@ -142,7 +142,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.8</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.9</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -890,26 +890,26 @@ function draw(){
   ctx.restore();ctx.globalAlpha=1;
 
   /* pitch */
-  const pw0=hw(0)*1.18,pw1=hw(1)*1.18;
+  const pw0=hw(0)*1.5,pw1=hw(1)*1.5;                     // grass fill runs past the screen edges (no dark side triangles)
   let g=ctx.createLinearGradient(0,GOALY,0,NEARY);
   g.addColorStop(0,'#0d2a4a');g.addColorStop(1,'#071630');
   ctx.fillStyle=g;
   ctx.beginPath();ctx.moveTo(CX-pw1,GOALY);ctx.lineTo(CX+pw1,GOALY);
   ctx.lineTo(CX+pw0,H);ctx.lineTo(CX-pw0,H);ctx.closePath();ctx.fill();
-  // grass runs up BEHIND the goal to meet the stands (no dark gap)
-  const FYT=192, eXp=(y,s)=>{const t=(y-GOALY)/(H-GOALY);return CX+s*pw1+(s*pw0-s*pw1)*t;};
+  // grass runs up BEHIND the goal to meet the stands, full width (no dark gap)
+  const FYT=192;
   let ge=ctx.createLinearGradient(0,FYT,0,GOALY);
   ge.addColorStop(0,'#11365c');ge.addColorStop(1,'#0d2a4a');
   ctx.fillStyle=ge;
-  ctx.beginPath();ctx.moveTo(eXp(FYT,-1),FYT);ctx.lineTo(eXp(FYT,1),FYT);
+  ctx.beginPath();ctx.moveTo(-16,FYT);ctx.lineTo(W+16,FYT);
   ctx.lineTo(CX+pw1,GOALY);ctx.lineTo(CX-pw1,GOALY);ctx.closePath();ctx.fill();
   for(let i=0;i<8;i++){ // mow stripes
     if(i%2)continue;
     const z0=i/8,z1=(i+1)/8;
     ctx.fillStyle='rgba(95,224,255,.035)';
     ctx.beginPath();
-    ctx.moveTo(CX-hw(z1)*1.18,gy(z1));ctx.lineTo(CX+hw(z1)*1.18,gy(z1));
-    ctx.lineTo(CX+hw(z0)*1.18,Math.min(H,gy(z0)));ctx.lineTo(CX-hw(z0)*1.18,Math.min(H,gy(z0)));
+    ctx.moveTo(CX-hw(z1)*1.5,gy(z1));ctx.lineTo(CX+hw(z1)*1.5,gy(z1));
+    ctx.lineTo(CX+hw(z0)*1.5,Math.min(H,gy(z0)));ctx.lineTo(CX-hw(z0)*1.5,Math.min(H,gy(z0)));
     ctx.closePath();ctx.fill();
   }
   /* markings */
@@ -921,7 +921,7 @@ function draw(){
   ctx.beginPath();ctx.arc(SXp(0,0.8),gy(0.8),2.5,0,7);ctx.fillStyle='rgba(120,225,255,.5)';ctx.fill();
   ctx.shadowBlur=0;
 
-  drawFence(pw0,pw1);                                    // perimeter fence around the pitch
+  drawFence();                                           // perimeter fence around the pitch
 
   /* goal */
   const pl=CX-POST_PX,pr=CX+POST_PX;
@@ -1031,8 +1031,9 @@ function draw(){
   ctx.restore();
 }
 function line(x0,z0,x1,z1){ctx.beginPath();ctx.moveTo(SXp(x0,z0),gy(z0));ctx.lineTo(SXp(x1,z1),gy(z1));ctx.stroke();}
-function drawFence(pw0,pw1){ // neon perimeter railing: down both sidelines + flanking the goal behind the endline
-  const yT=192, eX=(y,s)=>{const t=(y-GOALY)/(H-GOALY);return CX+s*pw1+(s*pw0-s*pw1)*t;};
+function drawFence(){ // neon perimeter railing: down both sidelines + flanking the goal behind the endline
+  // sits on the true touchline; back edge is pulled to ~halfway between the goal line and the boards (no bg break)
+  const fw0=hw(0),fw1=hw(1),yT=220, eX=(y,s)=>{const t=(y-GOALY)/(H-GOALY);return CX+s*fw1+(s*fw0-s*fw1)*t;};
   const hAt=y=>lerp(9,26,clamp((y-yT)/(H-yT),0,1));
   function seg(ax,ay,bx,by){
     const ha=hAt(ay),hb=hAt(by),len=Math.hypot(bx-ax,by-ay),n=Math.max(1,Math.round(len/26));
