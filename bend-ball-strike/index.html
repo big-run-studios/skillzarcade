@@ -112,6 +112,7 @@
       <div class="htp">
         <div class="row"><div class="ic">✍️</div><div class="tx"><b>Draw anywhere</b> — your line becomes <b>one clean curve</b> from the ball: where you start, how hard you bend, where you end</div></div>
         <div class="row"><div class="ic">🏃</div><div class="tx">Your team <b>chases the ball</b> — first one there takes it. <i>So do they.</i> End the line in the <u>goal</u> to shoot</div></div>
+        <div class="row"><div class="ic">🪁</div><div class="tx">The <b>longer the curve, the harder &amp; higher</b> the ball — long lobs <b>sail over</b> defenders; short passes stay flat and <i>can be cut</i></div></div>
         <div class="row"><div class="ic">📈</div><div class="tx">Passes grow the pot — and <u>every meter the ball travels</u> grows it faster. <i>Lose the ball and the pot crashes to 0</i></div></div>
         <div class="row"><div class="ic">🥅</div><div class="tx"><u>One goal cashes out the pot</u> — shoot past the jetpack keeper's dive. The clock only runs <b>while the ball moves</b>. <i>Time up = 0</i></div></div>
       </div>
@@ -136,7 +137,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.5.1</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.6.0</div>
 </div>
 
 <script>
@@ -196,7 +197,15 @@ const K_TIP=22, K_CORE=13;           // keeper hitbox radii (px): gloves = parry
 const K_EXT=KEEP_REACH*2*POST_PX;    // max dive body-travel (≈52px); glove tip reaches K_EXT + K_TIP
 const K_SPD=105;                     // dive speed (px/s): he only reaches full stretch on slow shots — pace beats him
 const BASE_POT=500;
-const PASS_SPD=16;                   // ball speed along drawn path (m/s)
+const PASS_SPD=16;                   // reference ball speed (m/s); actual scales with power
+const PASS_SPD_MIN=12, PASS_SPD_MAX=27; // harder hit (longer curve) = faster ball
+const POW_FULL=17;                   // drawn-curve length (m) that counts as full power
+const LOFT_FLAT=0.30;                // below this power a pass stays flat & driven
+const HLIFT_PX=90;                   // screen px of lift per unit ball height, at near scale
+const H_CUT=0.22;                    // ball must be below this height for a defender to cut it
+const H_DANGER=0.18;                 // danger-meters only score while the ball is this low
+const BOUNCE_N=2, BOUNCE_H=0.2;      // settle: number of hops + hop height (frac of loft peak)
+const SHOT_LIFT_MIN=26, SHOT_LIFT_MAX=66; // shot arc bulge (px) by power
 const RUN_SPD=5.6, DEF_CHASE=5.0;    // chase speeds: attackers vs defenders (m/s)
 const REACT=0.45;                    // defender reaction delay before chasing (s)
 const TAKE_R=0.85;                   // possession radius at reception (m)
@@ -362,10 +371,11 @@ function strokeInfo(){ // the drawn shape reduces to ONE smooth curve: where you
   if(!path.length){const w=unproj(b.x,b.y);path=[{x:w.x,z:w.z,s:0}];}
   path=densify(path);
   const totalS=path[path.length-1].s;
-  const shot=gi>0?{pts:pts.slice(Math.max(0,gi-1)),
-                   tx:(last.x-CX)/POST_PX,ty:(GOALY-last.y)/BAR_H,
-                   pow:clamp((stroke.lenPx-60)/380,0.35,1)}:null;
-  return{kind:shot?'shot':'pass',pts,path,totalS,shot,gi};
+  let slen=0;for(let i=1;i<pts.length;i++)slen+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);
+  // a shot flies the WHOLE curve (foot -> target) airborne; power from the resolved curve length
+  const shot=gi>0?{pts,tx:(last.x-CX)/POST_PX,ty:(GOALY-last.y)/BAR_H,
+                   pow:clamp((slen-90)/380,0.2,1),slen}:null;
+  return{kind:shot?'shot':'pass',pts,path,totalS,slen,shot,gi};
 }
 function classifyPass(fx,fz,wx,wz,lead,firstTime){
   const ev=[];
@@ -381,18 +391,30 @@ function releaseStroke(){
   const info=strokeInfo(); stroke=null;
   if(info.kind==='none'||sub!=='live')return;
   const c=att[ball.carrier];
+  const pow=clamp(info.totalS/POW_FULL,0,1);            // pass power from resolved curve length
   flight={kind:'ball',path:info.path,totalS:info.totalS,sPos:0,passer:ball.carrier,
           shot:info.shot,shotOn:false,att0:att.map(a=>({x:a.x,z:a.z})),
           fromX:c.x,fromZ:c.z,firstTime:heldT<FT_WIN,relClock:readClock,
-          minDef:1e9,close:def.map(()=>false),t:0,settled:0,loose:false,distM:0,distPts:0};
+          minDef:1e9,close:def.map(()=>false),t:0,settled:0,loose:false,distM:0,distPts:0,
+          pow,spd:lerp(PASS_SPD_MIN,PASS_SPD_MAX,pow),peakH:passLoft(pow),bounceH:0};
   ball.carrier=-1; sub='flight';
-  if(flight.totalS<=0.05&&flight.shot)beginShot();
+  if(info.shot)beginShot();                             // shots leave the foot in the air, no ground roll
 }
-function shotBallPos(s){ // ball's screen position along the drawn shot curve (shared by update + draw)
+function passLoft(pow){ // longer curve (more power) => higher lob; short/straight stays flat
+  return pow<LOFT_FLAT?0:Math.pow((pow-LOFT_FLAT)/(1-LOFT_FLAT),0.6);
+}
+function ballHeight(u,peak){ // normalized flight height 0..1: rise, fall, then settle-bounce
+  if(peak<=0.001)return 0;
+  const uL=0.80;
+  if(u<uL){const t=u/uL;return peak*4*t*(1-t);}          // parabola 0 -> peak -> 0 at landing
+  const t=(u-uL)/(1-uL);                                  // final stretch: decaying hops
+  return peak*BOUNCE_H*Math.abs(Math.sin(t*Math.PI*BOUNCE_N))*(1-t);
+}
+function shotBallPos(s){ // ball's screen position along the FULL drawn curve (foot -> target), with a 3D arc
   const u=clamp(s.t/s.dur,0,1);
   const pts=s.pts,fi=u*(pts.length-1),i0=Math.floor(fi),i1=Math.min(pts.length-1,i0+1),ft=fi-i0;
   return{x:lerp(pts[i0].x,pts[i1].x,ft),
-         y:lerp(pts[i0].y,pts[i1].y,ft)-Math.sin(u*Math.PI)*lerp(8,26,s.pow),u};
+         y:lerp(pts[i0].y,pts[i1].y,ft)-Math.sin(u*Math.PI)*s.liftpx,u}; // bulge 0 at foot & target
 }
 function setBallFromPath(f){
   const path=f.path,s=Math.min(f.sPos,f.totalS);
@@ -413,7 +435,7 @@ function chasePoint(ex,ez,speed,hx,hz){ // earliest path point this chaser can b
     if(hx!=null&&gdist(hx,hz,p.x,p.z)>ZONE_R)continue;
     if(hx!=null)inZoneEnd=p;
     if(p.s<f.sPos)continue;
-    const bt=(p.s-f.sPos)/PASS_SPD, mt=gdist(ex,ez,p.x,p.z)/speed;
+    const bt=(p.s-f.sPos)/(f.spd||PASS_SPD), mt=gdist(ex,ez,p.x,p.z)/speed;
     if(mt<=bt)return p;
   }
   return hx!=null?inZoneEnd:path[path.length-1]; // null = nothing in my zone, hold post
@@ -452,10 +474,9 @@ function goalZone(tx,ty){
   if(side>0.6)return{key:'low',pts:300,label:'LOW CORNER'};
   return{key:'center',pts:0,label:''};
 }
-function beginShot(){ // ball has reached the end of the ground path; launch along drawn curve
+function beginShot(){ // shot leaves the foot in the air and arcs the WHOLE drawn curve to the target
   const f=flight,s=f.shot;
   finalizeDist(f); f.distPts=0;
-  awardBeats(f,ball.x,ball.z);
   noteAction({t:'shoot',rc:f.relClock});
   if(!f.firstTime)allFT=false;
   let tx=s.tx+(Math.random()-0.5)*0.10*s.pow;
@@ -467,10 +488,14 @@ function beginShot(){ // ball has reached the end of the ground path; launch alo
   else if(ty>0.97){special=Math.random()<0.5?'barin':'barout';outcome=special==='barin'?'goal':'miss';}
   // keeper is NOT precomputed — he dives at the ball and a real hitbox decides (see shot update)
   s.tx=tx;s.ty=ty;s.outcome=outcome;s.special=special;
-  s.t=0;s.dur=lerp(0.5,0.3,s.pow);s.fz=ball.z;
-  s.rebound=lastRebound;s.firstTime=f.firstTime;s.minK=1e9;
   s.gx=CX+clamp(tx,-1.08,1.08)*POST_PX;
   s.gy=GOALY-clamp(ty,-0.05,1.12)*BAR_H;
+  s.pts[s.pts.length-1]={x:s.gx,y:s.gy};            // land exactly where the outcome says
+  s.t=0;
+  s.liftpx=lerp(SHOT_LIFT_MIN,SHOT_LIFT_MAX,s.pow); // harder shot = higher 3D arc
+  s.dur=clamp(s.slen/lerp(680,1500,s.pow),0.34,1.2);// harder shot = faster flight
+  s.fz=ball.z;
+  s.rebound=lastRebound;s.firstTime=f.firstTime;s.minK=1e9;
   keeper.bx=CX+keeper.kx*POST_PX; keeper.by=GOALY-BAR_H*0.5;
   const ddx=s.gx-keeper.bx, ddy=s.gy-keeper.by, dl=Math.hypot(ddx,ddy)||1;
   keeper.tox=ddx/dl*Math.min(dl,K_EXT); keeper.toy=ddy/dl*Math.min(dl,K_EXT);
@@ -500,7 +525,8 @@ function landShot(){
     flight={kind:'ball',path:[{x:nx,z:nz,s:0}],totalS:0,sPos:0,passer:-1,
             shot:null,shotOn:false,att0:att.map(a=>({x:a.x,z:a.z})),
             fromX:nx,fromZ:nz,firstTime:false,relClock:readClock,
-            minDef:1e9,close:def.map(()=>false),t:0,settled:0,loose:true,distM:0,distPts:0};
+            minDef:1e9,close:def.map(()=>false),t:0,settled:0,loose:true,distM:0,distPts:0,
+            spd:PASS_SPD,pow:0,peakH:0};
     sub='flight'; shake=6;
   }
 }
@@ -607,19 +633,26 @@ function update(dt){
     readClock+=dt; heldT+=dt;
     keeper.ox*=Math.max(0,1-dt*5); keeper.oy*=Math.max(0,1-dt*5); // keeper floats back to center
     const c=att[ball.carrier];
-    ball.x=c.x; ball.z=c.z;
+    ball.x=c.x; ball.z=c.z; ball.h=0;
   }
   else if(sub==='flight'&&flight){
     const f=flight; f.t+=dt;
     if(f.shotOn){
       const s=f.shot; s.t+=dt;
-      // keeper launches at the ball; a real hitbox decides the outcome
-      keeper.diveT+=dt;
-      const need=Math.hypot(keeper.tox,keeper.toy)||1;
-      const ext=Math.min(1,K_SPD*keeper.diveT/need);
-      keeper.ox=keeper.tox*ext; keeper.oy=keeper.toy*ext;
       const bp=shotBallPos(s);
-      if(bp.y<GOALY+12&&Math.abs(bp.x-CX)<POST_PX+30){ // ball is in the goal mouth
+      if(bp.y<GOALY+150){                             // ball nearing goal: keeper commits the dive
+        keeper.diveT+=dt;
+        const need=Math.hypot(keeper.tox,keeper.toy)||1;
+        const ext=Math.min(1,K_SPD*keeper.diveT/need);
+        keeper.ox=keeper.tox*ext; keeper.oy=keeper.toy*ext;
+      }else{                                          // still airborne downfield: keeper tracks the ball's line
+        const txp=clamp((bp.x-CX)/POST_PX,-0.62,0.62);
+        keeper.kx+=clamp(txp-keeper.kx,-KEEP_CHEAT*dt,KEEP_CHEAT*dt);
+        keeper.bx=CX+keeper.kx*POST_PX;
+        const ddx=s.gx-keeper.bx,ddy=s.gy-keeper.by,dl=Math.hypot(ddx,ddy)||1;
+        keeper.tox=ddx/dl*Math.min(dl,K_EXT); keeper.toy=ddy/dl*Math.min(dl,K_EXT);
+      }
+      if(bp.y<GOALY+12&&Math.abs(bp.x-CX)<POST_PX+30){ // in the goal mouth: real hitbox decides
         const d=Math.hypot(bp.x-(keeper.bx+keeper.ox),bp.y-(keeper.by+keeper.oy));
         if(d<s.minK)s.minK=d;
         if(s.outcome==='goal'&&!s.special){
@@ -629,15 +662,17 @@ function update(dt){
       }
       if(s.t>=s.dur)landShot();
     }else{
-      // ball rolls along the drawn path
+      // ball travels the drawn curve; height = lift. Long/curvy => lofted lob, short/straight => driven.
       const prevS=Math.min(f.sPos,f.totalS);
-      f.sPos+=PASS_SPD*dt;
+      f.sPos+=(f.spd||PASS_SPD)*dt;
       setBallFromPath(f);
-      // push-your-luck: every meter of travel grows the pot, at an escalating rate
+      const u=f.totalS>0?clamp(f.sPos/f.totalS,0,1):1;
+      ball.h=f.loose?Math.abs(Math.sin(f.t*7))*Math.exp(-f.t*1.4)*0.5:ballHeight(u,f.peakH);
+      // push-your-luck: distance grows the pot; the danger bonus only counts LOW meters near defenders
       const dm=Math.min(f.sPos,f.totalS)-prevS;
       if(dm>0){
-        let hot=0; // meters near defenders pay extra — crazy beats safe
-        for(const d of def)if(gdist(d.x,d.z,ball.x,ball.z)<DANGER_R)hot++;
+        let hot=0;
+        if(ball.h<H_DANGER)for(const d of def)if(gdist(d.x,d.z,ball.x,ball.z)<DANGER_R)hot++;
         const rate=DIST_RATE*(1+f.distM/DIST_ACCEL)*(1+0.5*hot);
         f.distM+=dm; f.distPts+=dm*rate; pot+=dm*rate;
         $('potVal').textContent=fmt(pot);
@@ -649,13 +684,7 @@ function update(dt){
       keeper.kx+=clamp(tk-keeper.kx,-KEEP_CHEAT*dt,KEEP_CHEAT*dt);
       keeper.ox*=Math.max(0,1-dt*5); keeper.oy*=Math.max(0,1-dt*5);
       if(Math.abs(ball.x)>1.03||ball.z>1.005||ball.z<0.005){crash('OUT OF PLAY');return;}
-      if(f.sPos>=f.totalS){
-        if(f.shot){beginShot();return;}
-        f.settled+=dt;
-        if(f.settled>4){crash('CLEARED');return;}
-      }
-      // attackers run to where the drawn line ENDS and collect there;
-      // defenders hunt the ball anywhere along it — that's the crash risk
+      if(f.sPos>=f.totalS){ f.settled+=dt; if(f.settled>4){crash('CLEARED');return;} }
       const endP=f.path[f.path.length-1];
       for(let i=0;i<att.length;i++){
         if(i===f.passer&&f.sPos<2.5&&!f.loose)continue;
@@ -668,18 +697,18 @@ function update(dt){
       let dBest=1e9;
       for(let di=0;di<def.length;di++){
         const dd=gdist(def[di].x,def[di].z,ball.x,ball.z);
-        if(dd<BEAT_R)f.close[di]=true; // came near the line — beaten only if ball ends goal-side
+        if(dd<BEAT_R&&ball.h<H_CUT)f.close[di]=true; // only a LOW ball that passed near a defender beats him
         if(dd<f.minDef)f.minDef=dd;
         if(dd<dBest)dBest=dd;
       }
       const arrived=f.sPos>=f.totalS;
       if(!arrived&&!f.loose){
-        // rolling ball: a defender body on the line always blocks it (REACT only delays chasing)
-        if(dBest<DEF_CUT){
+        // a lofted ball sails over; only a ball below head height can be cut
+        if(dBest<DEF_CUT&&ball.h<H_CUT){
           popup('CUT OUT','#ff3d6e',ball.x,ball.z,true);crash('INTERCEPTED');return;
         }
       }else{
-        // reception contest at the end of the line
+        // reception contest at the landing
         let aBest=1e9,aWin=-1;
         for(let i=0;i<att.length;i++){
           if(i===f.passer&&f.sPos<2.5&&!f.loose)continue;
@@ -688,7 +717,6 @@ function update(dt){
         }
         const attTake=aWin>=0&&aBest<TAKE_R;
         const defTake=dBest<TAKE_R;
-        // receiver shields the ball; defender must be clearly closer to steal it
         if(defTake&&(!attTake||dBest<aBest-0.3)){
           popup('CUT OUT','#ff3d6e',ball.x,ball.z,true);crash('INTERCEPTED');return;
         }
@@ -836,75 +864,65 @@ function draw(){
 
   drawBall();
 
-  /* drawn line preview: ground portion cyan (red if a defender wins the race), shot portion gold */
+  /* drawn line preview */
   if(info&&info.kind!=='none'){
-    const gEnd=info.gi>0?info.gi:info.pts.length;
-    const endP=info.path[info.path.length-1];
-    const ballHold=info.totalS/PASS_SPD;
-    let bestAtt=1e9,win=-1;
-    for(let i=0;i<att.length;i++){
-      if(i===ball.carrier&&info.totalS<2.5)continue;
-      const t2=gdist(att[i].x,att[i].z,endP.x,endP.z)/RUN_SPD;
-      if(t2<bestAtt){bestAtt=t2;win=i;}
-    }
-    let danger=false;
-    for(const d of def){
-      for(let i=0;i<info.path.length;i+=2){
-        const p=info.path[i];
-        if(gdist(d.hx,d.hz,p.x,p.z)>ZONE_R)continue; // outside this defender's zone
-        const bt=p.s/PASS_SPD, mt=Math.max(0,gdist(d.x,d.z,p.x,p.z)-DEF_CUT)/DEF_CHASE+REACT;
-        if(mt<bt-0.05){danger=true;break;}
-      }
-      if(!danger&&!info.shot&&gdist(d.hx,d.hz,endP.x,endP.z)<=ZONE_R){
-        const t2=gdist(d.x,d.z,endP.x,endP.z)/DEF_CHASE+REACT;
-        if(t2<Math.max(bestAtt,ballHold))danger=true;
-      }
-      if(danger)break;
-    }
-    const gcol=danger?'#ff3d6e':'#5fe0ff';
-    ctx.lineWidth=3;ctx.setLineDash([9,8]);
-    ctx.strokeStyle=gcol;ctx.shadowColor=gcol;ctx.shadowBlur=8;
-    ctx.beginPath();ctx.moveTo(info.pts[0].x,info.pts[0].y);
-    for(let i=1;i<gEnd;i++)ctx.lineTo(info.pts[i].x,info.pts[i].y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    const n=info.pts.length,ep=info.pts[n-1];
+    const n=info.pts.length,ep=info.pts[n-1],endP=info.path[info.path.length-1];
     if(info.shot){
-      // shot fires in 3D: the drawn curve lifts off the ground and rises to the target spot
-      const sp=info.shot.pts,M=sp.length,lift=lerp(16,42,info.shot.pow);
+      // airborne strike: one gold 3D arc from the ball, lifting off the foot to the target reticle
+      const sp=info.shot.pts,M=sp.length,lift=lerp(SHOT_LIFT_MIN,SHOT_LIFT_MAX,info.shot.pow);
       const arc=i=>({x:sp[i].x,y:sp[i].y-Math.sin(i/(M-1)*Math.PI)*lift});
-      // faint ground shadow (curve on the deck) sells the height
-      ctx.strokeStyle='rgba(255,194,51,.22)';ctx.lineWidth=2;
-      ctx.beginPath();ctx.moveTo(sp[0].x,sp[0].y);
-      for(let i=1;i<M;i++)ctx.lineTo(sp[i].x,sp[i].y);ctx.stroke();
-      // vertical tethers between deck and flight at a few points
-      ctx.strokeStyle='rgba(255,194,51,.16)';ctx.lineWidth=1;
+      ctx.strokeStyle='rgba(255,194,51,.22)';ctx.lineWidth=2;   // ground shadow on the deck
+      ctx.beginPath();ctx.moveTo(sp[0].x,sp[0].y);for(let i=1;i<M;i++)ctx.lineTo(sp[i].x,sp[i].y);ctx.stroke();
+      ctx.strokeStyle='rgba(255,194,51,.16)';ctx.lineWidth=1;   // height tethers
       for(let i=2;i<M-1;i+=3){const a=arc(i);ctx.beginPath();ctx.moveTo(sp[i].x,sp[i].y);ctx.lineTo(a.x,a.y);ctx.stroke();}
-      // the rising flight line
-      ctx.strokeStyle='#ffc233';ctx.shadowColor='#ffc233';ctx.shadowBlur=9;ctx.lineWidth=3;
-      ctx.beginPath();const a0=arc(0);ctx.moveTo(a0.x,a0.y);
-      for(let i=1;i<M;i++){const a=arc(i);ctx.lineTo(a.x,a.y);}ctx.stroke();ctx.shadowBlur=0;
+      ctx.strokeStyle='#ffc233';ctx.shadowColor='#ffc233';ctx.shadowBlur=9;ctx.lineWidth=3;ctx.setLineDash([9,8]);
+      ctx.beginPath();const a0=arc(0);ctx.moveTo(a0.x,a0.y);for(let i=1;i<M;i++){const a=arc(i);ctx.lineTo(a.x,a.y);}
+      ctx.stroke();ctx.setLineDash([]);ctx.shadowBlur=0;
       drawReticle(ep.x,ep.y,'#ffc233');
     }else{
-      const pp=info.pts[Math.max(0,n-2)];
-      const an=Math.atan2(ep.y-pp.y,ep.x-pp.x);
+      // pass: lofted lobs clear mid-line defenders (only the landing is contested)
+      const ppow=clamp(info.totalS/POW_FULL,0,1),peak=passLoft(ppow),lofted=peak>0;
+      const spdP=lerp(PASS_SPD_MIN,PASS_SPD_MAX,ppow),ballHold=info.totalS/spdP;
+      let bestAtt=1e9,win=-1;
+      for(let i=0;i<att.length;i++){
+        if(i===ball.carrier&&info.totalS<2.5)continue;
+        const t2=gdist(att[i].x,att[i].z,endP.x,endP.z)/RUN_SPD;
+        if(t2<bestAtt){bestAtt=t2;win=i;}
+      }
+      let danger=false;
+      for(const d of def){
+        if(!lofted)for(let i=0;i<info.path.length;i+=2){       // only a flat ball can be cut mid-line
+          const p=info.path[i];
+          if(gdist(d.hx,d.hz,p.x,p.z)>ZONE_R)continue;
+          const bt=p.s/spdP, mt=Math.max(0,gdist(d.x,d.z,p.x,p.z)-DEF_CUT)/DEF_CHASE+REACT;
+          if(mt<bt-0.05){danger=true;break;}
+        }
+        if(!danger&&gdist(d.hx,d.hz,endP.x,endP.z)<=ZONE_R){    // landing contest (flat & lofted)
+          const t2=gdist(d.x,d.z,endP.x,endP.z)/DEF_CHASE+REACT;
+          if(t2<Math.max(bestAtt,ballHold))danger=true;
+        }
+        if(danger)break;
+      }
+      const gcol=danger?'#ff3d6e':(lofted?'#39ffa0':'#5fe0ff'); // green = a clean lofted ball
+      const liftpx=peak*56;
+      ctx.strokeStyle=gcol;ctx.shadowColor=gcol;ctx.shadowBlur=8;ctx.lineWidth=3;ctx.setLineDash([9,8]);
+      ctx.beginPath();
+      for(let i=0;i<n;i++){const u=i/(n-1),ly=info.pts[i].y-Math.sin(u*Math.PI)*liftpx;
+        i?ctx.lineTo(info.pts[i].x,ly):ctx.moveTo(info.pts[i].x,ly);}
+      ctx.stroke();ctx.setLineDash([]);
+      const pp=info.pts[Math.max(0,n-2)],an=Math.atan2(ep.y-pp.y,ep.x-pp.x);
       ctx.fillStyle=gcol;ctx.shadowColor=gcol;ctx.shadowBlur=8;
       ctx.beginPath();ctx.moveTo(ep.x,ep.y);
       ctx.lineTo(ep.x-13*Math.cos(an-0.42),ep.y-13*Math.sin(an-0.42));
       ctx.lineTo(ep.x-13*Math.cos(an+0.42),ep.y-13*Math.sin(an+0.42));
       ctx.closePath();ctx.fill();ctx.shadowBlur=0;
-    }
-    // push-your-luck projection: meters + points this line would earn
-    if(info.totalS>1){
-      ctx.font='800 13px Fredoka';ctx.textAlign='center';
-      ctx.fillStyle='#ffc233';ctx.shadowColor='rgba(255,194,51,.8)';ctx.shadowBlur=6;
-      ctx.fillText(Math.round(info.totalS)+'m · +'+fmt(distEst(info.totalS)),ep.x,ep.y-18);
-      ctx.shadowBlur=0;
-    }
-    if(!info.shot&&win>=0){ // predicted receiver + landing spot
-      const r=att[win];
-      ring(SXp(r.x,r.z),gy(r.z),22*sc(r.z),gcol);
-      ring(SXp(endP.x,endP.z),gy(endP.z),9,gcol);
+      if(win>=0){const r=att[win];ring(SXp(r.x,r.z),gy(r.z),22*sc(r.z),gcol);ring(SXp(endP.x,endP.z),gy(endP.z),9,gcol);}
+      if(info.totalS>1){ // distance/points projection (passes build the pot)
+        ctx.font='800 13px Fredoka';ctx.textAlign='center';
+        ctx.fillStyle='#ffc233';ctx.shadowColor='rgba(255,194,51,.8)';ctx.shadowBlur=6;
+        ctx.fillText(Math.round(info.totalS)+'m · +'+fmt(distEst(info.totalS)),ep.x,ep.y-18);
+        ctx.shadowBlur=0;
+      }
     }
   }
 
@@ -1008,19 +1026,23 @@ function drawKeeper(){ // jetpack keeper: floats mid-goal, cheats sideways, dive
   ctx.restore();
 }
 function drawBall(){
-  let x,y,r;
+  let x,y,r,shy,sh;
   if(flight&&flight.shotOn){
     const s=flight.shot,bp=shotBallPos(s);
-    x=bp.x; y=bp.y;
-    r=7*lerp(sc(s.fz),sc(0.98),bp.u);
+    const liftNow=Math.sin(bp.u*Math.PI)*s.liftpx;
+    x=bp.x; y=bp.y; r=7*lerp(sc(s.fz),sc(0.98),bp.u);
+    shy=bp.y+liftNow;                          // ground directly under the flying ball
+    sh=1-Math.min(0.6,liftNow/70);
   }else{
     const s=sc(ball.z);
     x=SXp(ball.x,ball.z)+(ball.carrier>=0?10*s:0);
-    y=gy(ball.z)-5*s-ball.h*70*s;
+    y=gy(ball.z)-5*s-(ball.h||0)*HLIFT_PX*s;
     r=7*s;
+    shy=gy(ball.z);
+    sh=1-Math.min(0.55,(ball.h||0)*0.6);       // shadow shrinks as the ball climbs
   }
-  ctx.fillStyle='rgba(0,0,0,.4)';
-  ctx.beginPath();ctx.ellipse(x,gy(flight&&flight.shotOn?0.9:ball.z),r*0.9,r*0.35,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,'+(0.4*sh)+')';
+  ctx.beginPath();ctx.ellipse(x,shy,r*0.9*sh,r*0.35*sh,0,0,7);ctx.fill();
   ctx.fillStyle='#ffffff';ctx.shadowColor='#bfeaff';ctx.shadowBlur=10;
   ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
   ctx.shadowBlur=0;
