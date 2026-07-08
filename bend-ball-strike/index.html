@@ -142,7 +142,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.6</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.7</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -217,7 +217,7 @@ const SHOT_LIFT_MIN=26, SHOT_LIFT_MAX=66; // shot arc bulge (px) by power
 const RUN_SPD=5.6, DEF_CHASE=RUN_SPD*1.2; // defenders run 20% faster than players — they WILL catch up
 const REACT=0.10;                    // defender reaction delay before chasing (s) — near-instant
 const TAKE_R=0.9;                    // possession radius at reception (m)
-const DEF_CUT=0.7;                   // defender radius to cut a rolling ball mid-path (m)
+const DEF_CUT=0.45;                  // cut radius (m) = defender body half-width (~0.30) + ball (~0.16): only a real touch blocks
 const ZONE_R=8;                      // defenders hunt the ball this far from their post (m) — wider coverage
 const DANGER_R=4;                    // ball travel near defenders pays extra (m)
 const BEAT_R=2.7;                    // "beats defender" bonus radius (m)
@@ -705,7 +705,7 @@ function update(dt){
           if(dd<aBest){aBest=dd;aWin=i;}
         }
         const attTake=aWin>=0&&aBest<TAKE_R;
-        const defTake=dBest<TAKE_R;
+        const defTake=dBest<DEF_CUT;                          // a defender steals it only on contact, not from a body-width away
         if(defTake&&(!attTake||dBest<aBest-0.3)){
           popup('CUT OUT','#ff3d6e',ball.x,ball.z,true);crash('INTERCEPTED');return;
         }
