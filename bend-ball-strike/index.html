@@ -142,7 +142,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.7</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.8</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -797,16 +797,17 @@ const CROWD=[];
 (function(){
   const pal=['#7fa8e0','#9f88d8','#6fd0e0','#c2d2ff','#b98fd0','#5fb0d8'];
   const tiers=[
-    {y0:136,y1:166,step:3.6,dot:2.8,amin:0.20,amax:0.50},  // front tier (closest, biggest, brightest)
-    {y0:110,y1:134,step:3.5,dot:2.3,amin:0.16,amax:0.42},
-    {y0:84, y1:108,step:3.4,dot:1.9,amin:0.13,amax:0.32},
-    {y0:54, y1:82, step:3.2,dot:1.6,amin:0.10,amax:0.24},   // back tier (recedes, dimmer)
+    {y0:150,y1:178,step:3.6,dot:2.8,amin:0.20,amax:0.50},  // front tier (closest, biggest, brightest)
+    {y0:124,y1:148,step:3.5,dot:2.4,amin:0.17,amax:0.44},
+    {y0:98, y1:122,step:3.4,dot:2.0,amin:0.14,amax:0.34},
+    {y0:72, y1:96, step:3.2,dot:1.7,amin:0.11,amax:0.26},
+    {y0:48, y1:70, step:3.0,dot:1.5,amin:0.09,amax:0.20},   // back tier (recedes, dimmer, fills the top)
   ];
   for(const t of tiers){
     for(let y=t.y0;y<t.y1;y+=t.step){
       const rowJ=Math.random()*t.step*0.4;
-      for(let x=22;x<W-22;x+=4){                            // denser rows, wider stand
-        const bowl=Math.pow((x-CX)/CX,2)*15;                // stand curves up toward the edges (a bowl)
+      for(let x=3;x<W-3;x+=4){                              // FULL width, denser rows
+        const bowl=Math.pow((x-CX)/CX,2)*11;                // stand curves up toward the edges (a bowl)
         CROWD.push({x:x+(Math.random()*2.6-1.3),y:y-bowl+rowJ+(Math.random()*1.4-0.7),
                     s:t.dot,a:t.amin+Math.random()*(t.amax-t.amin),
                     col:Math.random()<0.12?'#ffcf9a':pal[(Math.random()*pal.length)|0]});
@@ -823,13 +824,20 @@ function buildStadium(){
   g=o.createRadialGradient(CX,150,10,CX,150,250);        // glow behind the goal
   g.addColorStop(0,'rgba(95,224,255,.13)');g.addColorStop(0.5,'rgba(120,70,210,.09)');g.addColorStop(1,'rgba(0,0,0,0)');
   o.fillStyle=g;o.fillRect(0,0,W,STAD_H);
-  o.fillStyle='#0a0e28';                                 // stand bowl structure
-  o.beginPath();o.moveTo(6,48);o.lineTo(W-6,48);o.lineTo(W-26,170);o.lineTo(26,170);o.closePath();o.fill();
-  o.strokeStyle='rgba(95,224,255,.18)';o.lineWidth=1.5;  // tier divider strips
-  for(const yy of [82,108,134]){o.beginPath();o.moveTo(20,yy);o.lineTo(W-20,yy);o.stroke();}
+  o.fillStyle='#0f1a3a';                                 // ground surround (fills the corners / stand-to-pitch gap)
+  o.fillRect(0,176,W,STAD_H-176);
+  o.fillStyle='#0a0e28';                                 // stand structure — FULL width
+  o.fillRect(0,44,W,134);
+  o.strokeStyle='rgba(95,224,255,.16)';o.lineWidth=1.5;  // tier divider strips
+  for(const yy of [96,122,148]){o.beginPath();o.moveTo(0,yy);o.lineTo(W,yy);o.stroke();}
   for(const c of CROWD){o.globalAlpha=c.a;o.fillStyle=c.col;o.fillRect(c.x,c.y,c.s,c.s);} // the crowd
   o.globalAlpha=1;
-  o.fillStyle='#0b1030';o.fillRect(0,18,W,28);           // roof canopy
+  for(let x=0;x<W;x+=26){                                 // LED advertising boards along the stand front
+    o.fillStyle=['rgba(95,224,255,.5)','rgba(255,61,154,.42)','rgba(57,255,160,.42)','rgba(255,194,51,.42)'][(x/26|0)%4];
+    o.fillRect(x+1,178,24,9);
+  }
+  o.fillStyle='rgba(4,8,22,.55)';o.fillRect(0,187,W,3);   // board base shadow
+  o.fillStyle='#0b1030';o.fillRect(0,8,W,38);            // roof canopy (higher, fills top)
   o.strokeStyle='rgba(95,224,255,.55)';o.lineWidth=2;o.shadowColor='#5fe0ff';o.shadowBlur=8; // neon roof edge
   o.beginPath();o.moveTo(0,46);o.lineTo(W,46);o.stroke();
   o.strokeStyle='rgba(255,61,154,.4)';o.shadowColor='#ff3d9a';o.beginPath();o.moveTo(0,49);o.lineTo(W,49);o.stroke();
@@ -888,6 +896,13 @@ function draw(){
   ctx.fillStyle=g;
   ctx.beginPath();ctx.moveTo(CX-pw1,GOALY);ctx.lineTo(CX+pw1,GOALY);
   ctx.lineTo(CX+pw0,H);ctx.lineTo(CX-pw0,H);ctx.closePath();ctx.fill();
+  // grass runs up BEHIND the goal to meet the stands (no dark gap)
+  const FYT=192, eXp=(y,s)=>{const t=(y-GOALY)/(H-GOALY);return CX+s*pw1+(s*pw0-s*pw1)*t;};
+  let ge=ctx.createLinearGradient(0,FYT,0,GOALY);
+  ge.addColorStop(0,'#11365c');ge.addColorStop(1,'#0d2a4a');
+  ctx.fillStyle=ge;
+  ctx.beginPath();ctx.moveTo(eXp(FYT,-1),FYT);ctx.lineTo(eXp(FYT,1),FYT);
+  ctx.lineTo(CX+pw1,GOALY);ctx.lineTo(CX-pw1,GOALY);ctx.closePath();ctx.fill();
   for(let i=0;i<8;i++){ // mow stripes
     if(i%2)continue;
     const z0=i/8,z1=(i+1)/8;
@@ -905,6 +920,8 @@ function draw(){
   line(-0.28,1,-0.28,0.9);line(0.28,1,0.28,0.9);line(-0.28,0.9,0.28,0.9);     // six-yard
   ctx.beginPath();ctx.arc(SXp(0,0.8),gy(0.8),2.5,0,7);ctx.fillStyle='rgba(120,225,255,.5)';ctx.fill();
   ctx.shadowBlur=0;
+
+  drawFence(pw0,pw1);                                    // perimeter fence around the pitch
 
   /* goal */
   const pl=CX-POST_PX,pr=CX+POST_PX;
@@ -1014,6 +1031,27 @@ function draw(){
   ctx.restore();
 }
 function line(x0,z0,x1,z1){ctx.beginPath();ctx.moveTo(SXp(x0,z0),gy(z0));ctx.lineTo(SXp(x1,z1),gy(z1));ctx.stroke();}
+function drawFence(pw0,pw1){ // neon perimeter railing: down both sidelines + flanking the goal behind the endline
+  const yT=192, eX=(y,s)=>{const t=(y-GOALY)/(H-GOALY);return CX+s*pw1+(s*pw0-s*pw1)*t;};
+  const hAt=y=>lerp(9,26,clamp((y-yT)/(H-yT),0,1));
+  function seg(ax,ay,bx,by){
+    const ha=hAt(ay),hb=hAt(by),len=Math.hypot(bx-ax,by-ay),n=Math.max(1,Math.round(len/26));
+    ctx.fillStyle='rgba(120,200,255,.05)';               // mesh panel
+    ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.lineTo(bx,by-hb);ctx.lineTo(ax,ay-ha);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='rgba(135,205,255,.5)';ctx.lineWidth=1.6;ctx.shadowColor='rgba(95,224,255,.6)';ctx.shadowBlur=4;
+    ctx.beginPath();ctx.moveTo(ax,ay-ha);ctx.lineTo(bx,by-hb);ctx.stroke();ctx.shadowBlur=0; // top rail
+    ctx.strokeStyle='rgba(135,205,255,.22)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(ax,ay-ha*0.5);ctx.lineTo(bx,by-hb*0.5);ctx.stroke();          // mid rail
+    ctx.strokeStyle='rgba(150,210,255,.38)';
+    for(let i=0;i<=n;i++){const t=i/n,px=ax+(bx-ax)*t,py=ay+(by-ay)*t,ph=ha+(hb-ha)*t;
+      ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,py-ph);ctx.stroke();}                   // posts
+  }
+  const gL=CX-POST_PX-6,gR=CX+POST_PX+6;
+  seg(eX(yT,-1),yT,eX(H,-1),H);                          // left sideline
+  seg(eX(yT,1),yT,eX(H,1),H);                            // right sideline
+  seg(eX(yT,-1),yT,gL,yT);                               // endline, left of goal
+  seg(gR,yT,eX(yT,1),yT);                                // endline, right of goal
+}
 function ring(x,y,r,col){ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.shadowColor=col;ctx.shadowBlur=8;
   ctx.beginPath();ctx.ellipse(x,y,r,r*0.42,0,0,7);ctx.stroke();ctx.shadowBlur=0;}
 function drawReticle(x,y,col){ // shot target marker (replaces the pass arrowhead)
