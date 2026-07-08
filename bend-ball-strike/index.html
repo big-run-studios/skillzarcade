@@ -142,7 +142,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.4</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.8.5</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -545,7 +545,7 @@ function showBanner(goal,total,zoneOrReason){
   }
   b.querySelector('.total').textContent=goal?'+'+fmt(total):'';
   b.querySelector('.why').textContent=goal?(passes+' pass'+(passes===1?'':'es')+' · ×'+passMult.toFixed(2)):zoneOrReason;
-  sub='resolve'; resolveT=goal?1.6:0.95; flight=null; stroke=null;
+  sub='resolve'; resolveT=goal?5:1.1; flight=null; stroke=null; // goal summary sits 5s to read
 }
 function endSession(){
   state='over'; stroke=null; flight=null;
@@ -797,16 +797,17 @@ const CROWD=[];
 (function(){
   const pal=['#7fa8e0','#9f88d8','#6fd0e0','#c2d2ff','#b98fd0','#5fb0d8'];
   const tiers=[
-    {y0:122,y1:152,step:4,dot:2.4,amin:0.16,amax:0.44},   // lower tier (nearest, brightest)
-    {y0:90, y1:118,step:4,dot:2.0,amin:0.13,amax:0.34},   // mid tier
-    {y0:60, y1:86, step:3.6,dot:1.7,amin:0.10,amax:0.26},  // upper tier (recedes, dimmer)
+    {y0:136,y1:166,step:3.6,dot:2.8,amin:0.20,amax:0.50},  // front tier (closest, biggest, brightest)
+    {y0:110,y1:134,step:3.5,dot:2.3,amin:0.16,amax:0.42},
+    {y0:84, y1:108,step:3.4,dot:1.9,amin:0.13,amax:0.32},
+    {y0:54, y1:82, step:3.2,dot:1.6,amin:0.10,amax:0.24},   // back tier (recedes, dimmer)
   ];
   for(const t of tiers){
     for(let y=t.y0;y<t.y1;y+=t.step){
       const rowJ=Math.random()*t.step*0.4;
-      for(let x=30;x<W-30;x+=5){
-        const bowl=Math.pow((x-CX)/CX,2)*13;             // stand curves up toward the edges (a bowl)
-        CROWD.push({x:x+(Math.random()*3-1.5),y:y-bowl+rowJ+(Math.random()*1.5-0.75),
+      for(let x=22;x<W-22;x+=4){                            // denser rows, wider stand
+        const bowl=Math.pow((x-CX)/CX,2)*15;                // stand curves up toward the edges (a bowl)
+        CROWD.push({x:x+(Math.random()*2.6-1.3),y:y-bowl+rowJ+(Math.random()*1.4-0.7),
                     s:t.dot,a:t.amin+Math.random()*(t.amax-t.amin),
                     col:Math.random()<0.12?'#ffcf9a':pal[(Math.random()*pal.length)|0]});
       }
@@ -823,9 +824,9 @@ function buildStadium(){
   g.addColorStop(0,'rgba(95,224,255,.13)');g.addColorStop(0.5,'rgba(120,70,210,.09)');g.addColorStop(1,'rgba(0,0,0,0)');
   o.fillStyle=g;o.fillRect(0,0,W,STAD_H);
   o.fillStyle='#0a0e28';                                 // stand bowl structure
-  o.beginPath();o.moveTo(12,52);o.lineTo(W-12,52);o.lineTo(W-42,158);o.lineTo(42,158);o.closePath();o.fill();
-  o.strokeStyle='rgba(95,224,255,.20)';o.lineWidth=1.5;  // tier divider strips
-  for(const yy of [88,120]){o.beginPath();o.moveTo(28,yy);o.lineTo(W-28,yy);o.stroke();}
+  o.beginPath();o.moveTo(6,48);o.lineTo(W-6,48);o.lineTo(W-26,170);o.lineTo(26,170);o.closePath();o.fill();
+  o.strokeStyle='rgba(95,224,255,.18)';o.lineWidth=1.5;  // tier divider strips
+  for(const yy of [82,108,134]){o.beginPath();o.moveTo(20,yy);o.lineTo(W-20,yy);o.stroke();}
   for(const c of CROWD){o.globalAlpha=c.a;o.fillStyle=c.col;o.fillRect(c.x,c.y,c.s,c.s);} // the crowd
   o.globalAlpha=1;
   o.fillStyle='#0b1030';o.fillRect(0,18,W,28);           // roof canopy
@@ -857,7 +858,8 @@ function draw(){
   /* futuristic stadium backdrop (baked) + live crowd flashes & jumbotron */
   ctx.drawImage(stadiumBG,0,0,W,STAD_H);
   const now=performance.now();
-  for(let i=0;i<9;i++){                                 // camera flashes rippling through the crowd
+  for(let i=0;i<9;i++){                                 // occasional camera flashes (sparse)
+    if(Math.random()>=0.1)continue;                     // ~90% fewer flashes than before
     const c=CROWD[(Math.random()*CROWD.length)|0];
     ctx.globalAlpha=0.85;ctx.fillStyle=Math.random()<0.5?'#ffffff':'#ffe6a8';
     ctx.fillRect(c.x-0.6,c.y-0.6,c.s+1.7,c.s+1.7);
