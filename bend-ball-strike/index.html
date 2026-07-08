@@ -136,7 +136,7 @@
     </div>
   </div>
 
-  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.5.0</div>
+  <div class="brand">SKILLZARCADE · BEND BALL STRIKE v0.5.1</div>
 </div>
 
 <script>
@@ -867,23 +867,33 @@ function draw(){
     ctx.beginPath();ctx.moveTo(info.pts[0].x,info.pts[0].y);
     for(let i=1;i<gEnd;i++)ctx.lineTo(info.pts[i].x,info.pts[i].y);
     ctx.stroke();
-    if(info.shot){
-      ctx.strokeStyle='#ffc233';ctx.shadowColor='#ffc233';
-      ctx.beginPath();
-      const g0=info.pts[Math.max(0,gEnd-1)];
-      ctx.moveTo(g0.x,g0.y);
-      for(let i=gEnd;i<info.pts.length;i++)ctx.lineTo(info.pts[i].x,info.pts[i].y);
-      ctx.stroke();
-    }
     ctx.setLineDash([]);
-    const n=info.pts.length,ep=info.pts[n-1],pp=info.pts[Math.max(0,n-2)];
-    const an=Math.atan2(ep.y-pp.y,ep.x-pp.x);
-    const acol=info.shot?'#ffc233':gcol;
-    ctx.fillStyle=acol;ctx.shadowColor=acol;ctx.shadowBlur=8;
-    ctx.beginPath();ctx.moveTo(ep.x,ep.y);
-    ctx.lineTo(ep.x-13*Math.cos(an-0.42),ep.y-13*Math.sin(an-0.42));
-    ctx.lineTo(ep.x-13*Math.cos(an+0.42),ep.y-13*Math.sin(an+0.42));
-    ctx.closePath();ctx.fill();ctx.shadowBlur=0;
+    const n=info.pts.length,ep=info.pts[n-1];
+    if(info.shot){
+      // shot fires in 3D: the drawn curve lifts off the ground and rises to the target spot
+      const sp=info.shot.pts,M=sp.length,lift=lerp(16,42,info.shot.pow);
+      const arc=i=>({x:sp[i].x,y:sp[i].y-Math.sin(i/(M-1)*Math.PI)*lift});
+      // faint ground shadow (curve on the deck) sells the height
+      ctx.strokeStyle='rgba(255,194,51,.22)';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(sp[0].x,sp[0].y);
+      for(let i=1;i<M;i++)ctx.lineTo(sp[i].x,sp[i].y);ctx.stroke();
+      // vertical tethers between deck and flight at a few points
+      ctx.strokeStyle='rgba(255,194,51,.16)';ctx.lineWidth=1;
+      for(let i=2;i<M-1;i+=3){const a=arc(i);ctx.beginPath();ctx.moveTo(sp[i].x,sp[i].y);ctx.lineTo(a.x,a.y);ctx.stroke();}
+      // the rising flight line
+      ctx.strokeStyle='#ffc233';ctx.shadowColor='#ffc233';ctx.shadowBlur=9;ctx.lineWidth=3;
+      ctx.beginPath();const a0=arc(0);ctx.moveTo(a0.x,a0.y);
+      for(let i=1;i<M;i++){const a=arc(i);ctx.lineTo(a.x,a.y);}ctx.stroke();ctx.shadowBlur=0;
+      drawReticle(ep.x,ep.y,'#ffc233');
+    }else{
+      const pp=info.pts[Math.max(0,n-2)];
+      const an=Math.atan2(ep.y-pp.y,ep.x-pp.x);
+      ctx.fillStyle=gcol;ctx.shadowColor=gcol;ctx.shadowBlur=8;
+      ctx.beginPath();ctx.moveTo(ep.x,ep.y);
+      ctx.lineTo(ep.x-13*Math.cos(an-0.42),ep.y-13*Math.sin(an-0.42));
+      ctx.lineTo(ep.x-13*Math.cos(an+0.42),ep.y-13*Math.sin(an+0.42));
+      ctx.closePath();ctx.fill();ctx.shadowBlur=0;
+    }
     // push-your-luck projection: meters + points this line would earn
     if(info.totalS>1){
       ctx.font='800 13px Fredoka';ctx.textAlign='center';
@@ -913,6 +923,16 @@ function draw(){
 function line(x0,z0,x1,z1){ctx.beginPath();ctx.moveTo(SXp(x0,z0),gy(z0));ctx.lineTo(SXp(x1,z1),gy(z1));ctx.stroke();}
 function ring(x,y,r,col){ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.shadowColor=col;ctx.shadowBlur=8;
   ctx.beginPath();ctx.ellipse(x,y,r,r*0.42,0,0,7);ctx.stroke();ctx.shadowBlur=0;}
+function drawReticle(x,y,col){ // shot target marker (replaces the pass arrowhead)
+  const spin=performance.now()/600;
+  ctx.strokeStyle=col;ctx.fillStyle=col;ctx.shadowColor=col;ctx.shadowBlur=10;ctx.lineWidth=2.4;
+  ctx.beginPath();ctx.arc(x,y,10,0,7);ctx.stroke();               // outer ring
+  ctx.save();ctx.translate(x,y);ctx.rotate(spin);
+  for(let k=0;k<4;k++){ctx.rotate(Math.PI/2);ctx.beginPath();ctx.moveTo(0,-6.5);ctx.lineTo(0,-14);ctx.stroke();} // crosshair ticks
+  ctx.restore();
+  ctx.beginPath();ctx.arc(x,y,2.4,0,7);ctx.fill();               // center dot
+  ctx.shadowBlur=0;
+}
 function zoneTag(tx,ty,txt){
   const x=CX+tx*POST_PX,y=GOALY-ty*BAR_H;
   ctx.fillStyle='rgba(255,194,51,.9)';ctx.shadowColor='rgba(255,194,51,.8)';ctx.shadowBlur=8;
