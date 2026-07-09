@@ -142,7 +142,7 @@
     <button id="cashBtn"><span>CASH</span><small>OUT</small></button>
   </div>
 
-  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.7</div>
+  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.8</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -157,7 +157,9 @@ const GY=520, MY=368, HY=220; // ground / mid / high platform surface Y (lifted 
 const PW=26, PH=52;
 const GRAV=2600;                          // grenades / death tumble
 // jump uses asymmetric gravity (floaty rise, snappier fall) — same apex(~192) & airtime(~0.77s) as before
-const JUMP_V=920, GRAV_UP=2200, GRAV_DOWN=3100, FLIP_DUR=0.3;
+const JUMP_V=920, GRAV_UP=2200, GRAV_DOWN=3100, FLIP_DUR=0.34;
+const HANG_VY=240, HANG_MULT=0.6;         // float near the apex (extra hang → more distance for platforming)
+const FOOT=13;                            // landing edge-forgiveness: land if any part of the foot is over the ledge
 const COYOTE=0.09, JBUF=0.13;
 const FIRE_CD=0.10, BSPD=780, PB_R=4.5, SPREAD_A=0.24;
 const DEAD=16;                // tap/gesture movement threshold px
@@ -283,19 +285,21 @@ function playerPhysics(dt){
   const wx=camX+PX;
   coyoteT-=dt; dropT-=dt; jbufT-=dt;
   const prev=py, prevVy=vy;
-  vy += (vy<0?GRAV_UP:GRAV_DOWN)*dt;      // floaty on the way up, heavier on the way down
+  let gg = vy<0?GRAV_UP:GRAV_DOWN;        // floaty up, heavier down
+  if(Math.abs(vy)<HANG_VY) gg*=HANG_MULT; // ...and a float at the apex (helps clear gaps / reach platforms)
+  vy += gg*dt;
   py += vy*dt;
   if(flipPending && prevVy<0 && vy>=0){ flipT=FLIP_DUR; flipPending=false; }  // hit the apex → quick flip
   if(flipT>0) flipT-=dt;
   let landed=false;
   if(vy>=0){
-    // solid ground
-    const gs=groundSegAt(wx);
-    if(gs && prev<=GY+2 && py>=GY){ py=GY; vy=0; landed=true; curPlat=null; }
-    // one-way thin platforms
+    // solid ground — land if ANY part of the foot is over the ledge (edge forgiveness, no cheap edge-falls)
+    let gseg=null; for(const s of ground){ if(wx+FOOT>s.x0 && wx-FOOT<s.x1){ gseg=s; break; } }
+    if(gseg && prev<=GY+2 && py>=GY){ py=GY; vy=0; landed=true; curPlat=null; }
+    // one-way thin platforms (same foot-width forgiveness)
     if(dropT<=0){
       for(const p of plats){
-        if(wx>=p.x0&&wx<=p.x1 && prev<=p.y+2 && py>=p.y && (!landed||p.y<py)){ py=p.y; vy=0; landed=true; curPlat=p; }
+        if(wx+FOOT>p.x0 && wx-FOOT<p.x1 && prev<=p.y+2 && py>=p.y && (!landed||p.y<py)){ py=p.y; vy=0; landed=true; curPlat=p; }
       }
     }
   }
@@ -326,9 +330,9 @@ function popTxt(wx,wy,txt,col,scr){ pops.push({wx,wy,txt,col:col||'#ffd76a',t:0.
 /* ================================================================= enemies */
 const ETYPE={
   grunt:  {w:22,h:40,hp:1,walk:64,score:50,col:'#4a2f4e',ac:'#ff5a4d'},
-  gunner: {w:26,h:44,hp:2,walk:8, score:90,col:'#3d2f56',ac:'#ff784d', fire:1.9,tel:0.5},
+  gunner: {w:26,h:44,hp:1,walk:8, score:90,col:'#3d2f56',ac:'#ff784d', fire:1.9,tel:0.5},
   prone:  {w:42,h:18,hp:1,walk:0, score:90,col:'#4a3a2a',ac:'#ffb04d', fire:1.7,tel:0.42},
-  gren:   {w:26,h:44,hp:2,walk:6, score:130,col:'#2f3f56',ac:'#ffd24d',fire:2.5,tel:0.55},
+  gren:   {w:26,h:44,hp:1,walk:6, score:130,col:'#2f3f56',ac:'#ffd24d',fire:2.5,tel:0.55},
   drone:  {w:44,h:24,hp:2,walk:0, score:150,col:'#33324e',ac:'#ff5a8a',fire:1.7,tel:0.4},
 };
 function spawnEnemy(type){
@@ -1241,7 +1245,7 @@ window.__game={
   step:d=>{ try{update(d);}catch(e){console.error(e);} },
   startRun, crash, cashOut, toMenu,
   jump:jumpInput, drop:dropInput, setAim:a=>{aimAng=a; aimTarget=a;}, fire:v=>{firing=v!==false;},
-  setHp:v=>{hp=v;}, invuln:(v=1e9)=>{invulnT=v;},
+  setHp:v=>{hp=v;}, invuln:(v=1e9)=>{invulnT=v;}, setPhys:(p,v)=>{py=p; vy=v||0; grounded=false; curPlat=null;},
   spawn:t=>spawnEnemy(t), boss:()=>{ runT=Math.max(runT,bossAt); },
   ents:()=>({enemies,pB,eB,bB,boss,plats,ground}),
   bench:(n=120)=>{ const t0=performance.now(); for(let i=0;i<n;i++){ update(1/60);
