@@ -110,7 +110,7 @@
       <div class="title">FINAL <span>APPROACH</span></div>
       <div class="sub">ROUTE PLANES · LAND SAFE · CASH OUT BEFORE THEY COLLIDE</div>
       <div class="htp">
-        <div class="row"><div class="ic">✍️</div><div class="tx"><b>Drag from a plane</b> to draw its route — release to lock it in. Touch it again to <b>redraw anytime</b>.</div></div>
+        <div class="row"><div class="ic">✍️</div><div class="tx"><b>Drag from a plane</b> — it follows your line as you draw it. Release to lock the route, touch it again to <b>redraw anytime</b>.</div></div>
         <div class="row"><div class="ic">🛬</div><div class="tx"><u>End a route on a runway</u>, matching its arrows, to land. <b>3 landings open runway 2</b> — keep landing for runway 3.</div></div>
         <div class="row"><div class="ic">⚠️</div><div class="tx">Rings mean planes are <i>too close</i>. If two planes touch, the run ends and an unbanked pot pays <i>zero</i>.</div></div>
         <div class="row"><div class="ic">💰</div><div class="tx">Faster planes score bigger. <u>Hold CASH OUT</u> to bank your pot and end the run safely.</div></div>
@@ -137,7 +137,7 @@
     </div>
   </div>
 
-  <div class="brand">CRASHARCADE · FINAL APPROACH v0.1.2</div>
+  <div class="brand">CRASHARCADE · FINAL APPROACH v0.1.3</div>
 </div>
 
 <script>
@@ -268,24 +268,31 @@ cv.addEventListener('pointerdown',e=>{
   if(drawing)return;
   const g=toGame(e);
   const p=planeAt(g);
-  if(p){drawing={plane:p,pts:[{x:p.x,y:p.y}],id:e.pointerId};try{cv.setPointerCapture(e.pointerId);}catch(_){} }
+  if(p){drawing={plane:p,pts:[{x:p.x,y:p.y}],id:e.pointerId,moved:false};try{cv.setPointerCapture(e.pointerId);}catch(_){} }
 });
 cv.addEventListener('pointermove',e=>{
   if(!drawing||e.pointerId!==drawing.id)return;
   const g=toGame(e);g.x=clamp(g.x,4,W-4);g.y=clamp(g.y,4,H-4);
   const pts=drawing.pts;
-  if(dist(pts[pts.length-1],g)>6)pts.push(g);
+  if(!pts.length||dist(pts[pts.length-1],g)>6){
+    pts.push(g);
+    if(!drawing.moved){ // first real drag: plane abandons its old route and follows the new line LIVE
+      drawing.moved=true;
+      const p=drawing.plane;
+      p.route=[];p.landRw=null;p.ret=false;
+    }
+  }
 });
 function endDraw(e){
   if(!drawing||(e&&e.pointerId!==drawing.id))return;
-  const p=drawing.plane,raw=drawing.pts;
+  const p=drawing.plane,raw=drawing.pts,moved=drawing.moved;
   drawing=null;
-  if(raw.length>=3&&state==='play'&&!p.landing){
+  if(moved&&raw.length>=1&&state==='play'&&!p.landing){
     const r=buildRoute(p,raw);
     p.route=r.pts;
     p.landRw=r.rw;   // only routes that END on a runway may land
     p.ret=false;
-  }
+  } // a tap without dragging keeps the old route
 }
 cv.addEventListener('pointerup',endDraw);
 cv.addEventListener('pointercancel',endDraw);
@@ -360,7 +367,7 @@ function buildRoute(p,raw){
 }
 /* live preview of the smoothed committed path */
 function previewRoute(){
-  if(!drawing||drawing.pts.length<3)return null;
+  if(!drawing||!drawing.pts.length)return null;
   return buildRoute(drawing.plane,drawing.pts).pts;
 }
 
@@ -432,6 +439,22 @@ function approachAssist(p,dt){
   }
   return false;
 }
+function followPts(p,pts,dt){
+  // consume waypoints we've reached OR can no longer reach (close + behind);
+  // steering at an unreachable point is what made planes orbit in place
+  const acc=Math.max(15,p.spd*.3), tr=p.spd/p.turn;
+  while(pts.length){
+    const t=pts[0];
+    const d=Math.hypot(t.x-p.x,t.y-p.y);
+    const off=Math.abs(angNorm(Math.atan2(t.y-p.y,t.x-p.x)-p.hdg));
+    if(d<acc||(off>1.75&&d<tr*1.7)){pts.shift();continue;}
+    break;
+  }
+  if(pts.length){
+    const t=pts[0];
+    p.hdg=turnToward(p.hdg,Math.atan2(t.y-p.y,t.x-p.x),p.turn*dt);
+  }
+}
 function updatePlane(p,dt){
   if(p.grace>0)p.grace-=dt;
   if(p.gaCool>0)p.gaCool-=dt;
@@ -449,27 +472,19 @@ function updatePlane(p,dt){
     return;
   }
 
+  const liveDraw=drawing&&drawing.plane===p&&drawing.moved;
   // off-screen → clear route + landing intent, loop back toward the field
-  if(p.x<-24||p.x>W+24||p.y<-24||p.y>H+24){if(!p.ret){p.ret=true;p.route=[];p.landRw=null;}}
-  if(p.ret){
+  if(!liveDraw&&(p.x<-24||p.x>W+24||p.y<-24||p.y>H+24)){if(!p.ret){p.ret=true;p.route=[];p.landRw=null;}}
+  if(liveDraw){
+    // the plane traces the line WHILE it is being drawn — the visible route
+    // always starts at the plane and can never point backwards
+    followPts(p,drawing.pts,dt);
+  }else if(p.ret){
     const aim=Math.atan2(380-p.y,240-p.x);
     p.hdg=turnToward(p.hdg,aim,p.turn*dt);
     if(p.x>50&&p.x<W-50&&p.y>50&&p.y<H-50)p.ret=false;
   }else if(p.route.length){
-    // consume waypoints we've reached OR can no longer reach (close + behind);
-    // steering at an unreachable point is what made planes orbit in place
-    const acc=Math.max(15,p.spd*.3), tr=p.spd/p.turn;
-    while(p.route.length){
-      const t=p.route[0];
-      const d=Math.hypot(t.x-p.x,t.y-p.y);
-      const off=Math.abs(angNorm(Math.atan2(t.y-p.y,t.x-p.x)-p.hdg));
-      if(d<acc||(off>1.75&&d<tr*1.7)){p.route.shift();continue;}
-      break;
-    }
-    if(p.route.length){
-      const t=p.route[0];
-      p.hdg=turnToward(p.hdg,Math.atan2(t.y-p.y,t.x-p.x),p.turn*dt);
-    }
+    followPts(p,p.route,dt);
   }else{
     approachAssist(p,dt);
   }
@@ -922,6 +937,7 @@ window.FA_DEBUG={
   get state(){return state;},get pot(){return pot;},get landings(){return landings;},
   get planes(){return planes.map(p=>({id:p.id,x:p.x,y:p.y,hdg:p.hdg,type:p.type.key,route:p.route.length,landing:!!p.landing}));},
   routeOf(id){const p=planes.find(q=>q.id===id);return p?p.route.map(q=>({x:Math.round(q.x),y:Math.round(q.y)})):null;},
+  get drawing(){return drawing?{plane:drawing.plane.id,pts:drawing.pts.length,moved:drawing.moved}:null;},
   get rwyCount(){return rwyCount;},get view(){return{VS,VOX,VOY};},
 };
 })();
