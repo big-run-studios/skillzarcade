@@ -141,7 +141,7 @@
     <button id="cashBtn"><span>CASH</span><small>OUT</small></button>
   </div>
 
-  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.4</div>
+  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.5</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -464,6 +464,14 @@ function updatePB(dt){
         if(boss.hp<=0) bossDie(); else if(Math.random()<0.4) sfx('bosshit');
       }
     }
+    if(b.dead) continue;
+    // vs boss bombs (screen-space) — shoot them down before they land
+    if(boss && boss.bombs.length){ for(const bm of boss.bombs){ if(bm.done) continue;
+      if(Math.hypot((b.wx-camX)-bm.x, b.wy-bm.y)<15){ bm.done=true; b.dead=true; addScore(100);
+        popTxt(bm.x,bm.y,'+'+Math.max(1,Math.round(100*mult)),'#ffd24d',true);
+        for(let i=0;i<7;i++){ const ang=R(0,6.28),v=R(50,120); parts.push({wx:bm.x,wy:bm.y,vx:Math.cos(ang)*v,vy:Math.sin(ang)*v,r:R(2,3.5),c:'#ffd24d',t:.3,scr:true}); }
+        sfx('pop'); break; }
+    }}
   }
   pB=pB.filter(b=>!b.dead);
 }
@@ -562,12 +570,13 @@ function bossPick(){
     const n=2+(bossCount>1?1:0); const idx=[]; while(idx.length<n){ const k=RI(0,bands.length-1); if(!idx.includes(k)) idx.push(k);}
     boss.lanes=idx.map(k=>bands[k]); }
   else if(p==='spiral'){ boss.patT=3.0; boss.spA=0; boss.spCd=0; }
-  else if(p==='cannon'){ boss.patT=2.6; boss.cannonY=clamp(py-PH/2,80,H-40); boss.cFired=false; }
+  else if(p==='cannon'){ boss.patT=2.6; boss.cannonY=clamp(py-PH/2,96,GY-14); boss.cFired=false; }
   else if(p==='bomb'){ boss.patT=2.8; boss.bombs=[]; boss.bDrop=0; boss.bN=0; }
   else if(p==='summon'){ boss.patT=2.2; boss.sN=0; boss.sCd=0; }
   boss.spdF=spdF;
 }
 function bSpawn(x,y,ang,sp,r,col){ bB.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,r:r||7,col:col||'#ff5a4d'}); }
+function bossMuzzle(){ return {x:boss.x - boss.w/2 + 8, y:boss.y + 16}; }  // the gun pod under the boss — ALL boss fire spawns here
 function updateBoss(dt){
   boss.rot+=dt*22; boss.hitT-=dt;
   if(boss.state==='enter'){
@@ -588,41 +597,47 @@ function updateBoss(dt){
   boss.patT-=dt;
   if(!boss.pat || boss.patT<=0){ if(boss.pat) { bossPick(); } else bossPick(); }
 
-  const p=boss.pat; boss.patPh+=dt;
+  const p=boss.pat; boss.patPh+=dt; const m=bossMuzzle();
   if(p==='strafe'){
-    boss.swAng+=dt*1.1;
     if(!boss._sc) boss._sc=0; boss._sc-=dt;
-    if(boss._sc<=0){ boss._sc=0.09/F; const a=Math.PI - (0.35 - boss.swAng*0.55); // sweep downward-left
-      bSpawn(boss.x-40,boss.y+10, Math.PI-0.1+Math.sin(boss.patPh*3)*0.55, 300*F, 7, '#ff7a4d'); }
+    if(boss._sc<=0){ boss._sc=0.09/F;
+      bSpawn(m.x,m.y, Math.PI-0.1+Math.sin(boss.patPh*3)*0.55, 300*F, 7, '#ff7a4d'); }   // from the gun, sweeping down-left
   } else if(p==='missiles'){
     if(boss.patPh>1.0 && !boss.mFired){ boss.mFired=true;
-      for(const ly of boss.lanes){ bB.push({x:boss.x-50,y:ly,vx:-360*F,vy:0,r:9,col:'#ff3d6e',missile:true}); }
+      // launch from the muzzle, then swoop into the telegraphed lane
+      for(const ly of boss.lanes){ bB.push({x:m.x,y:m.y,vx:-360*F,vy:0,r:9,col:'#ff3d6e',missile:true,laneY:ly,seek:1}); }
       sfx('efire'); }
   } else if(p==='spiral'){
     boss.spCd-=dt;
     if(boss.spCd<=0){ boss.spCd=0.13/F; boss.spA+=0.5;
-      for(let k=0;k<2;k++){ bSpawn(boss.x-30,boss.y, boss.spA+k*Math.PI, 165*F, 7, '#ff5a8a'); } }
+      for(let k=0;k<2;k++){ bSpawn(m.x,m.y, boss.spA+k*Math.PI, 165*F, 7, '#ff5a8a'); } }
   } else if(p==='cannon'){
     if(boss.patPh>1.1 && !boss.cFired){ boss.cFired=true;
-      bB.push({x:boss.x-60,y:boss.cannonY,vx:-560*F,vy:0,r:16,col:'#ffec6a',cannon:true});
+      const a=Math.atan2(boss.cannonY-m.y, PX-m.x), sp=600*F;   // fire FROM the gun toward the locked spot
+      bB.push({x:m.x,y:m.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:15,col:'#ffec6a',cannon:true});
       sfx('boom'); shake=Math.max(shake,10); }
   } else if(p==='bomb'){
     boss.bDrop-=dt;
-    if(boss.bDrop<=0 && boss.bN<3){ boss.bDrop=0.5; boss.bN++;
-      const bx=R(60,W-40); boss.bombs.push({x:bx,y:boss.y+20,vy:120,tx:bx}); }
-    for(const bm of boss.bombs){ if(bm.done) continue; bm.vy+=520*dt; bm.y+=bm.vy*dt;
-      if(bm.y>=GY){ explode(bm.x,GY,60,true); bm.done=true; } }
-    boss.bombs=boss.bombs.filter(b=>!b.done);
+    if(boss.bDrop<=0 && boss.bN<3){ boss.bDrop=0.55; boss.bN++;
+      // drop from the boss's belly, arcing down to a spot AHEAD of the player so it can be shot in time
+      const landX=clamp(PX+R(80,180),40,W-24), T=0.9, g=1150;
+      const vy0=((GY-m.y)-0.5*g*T*T)/T, vx=(landX-m.x)/T;
+      boss.bombs.push({x:m.x,y:m.y,vx,vy:vy0,g,tx:landX,hp:1}); }
   } else if(p==='summon'){
     boss.sCd-=dt;
     if(boss.sCd<=0 && boss.sN<3){ boss.sCd=0.5; boss.sN++; spawnEnemy(runT>30?'gunner':'grunt'); }
   }
+  // bombs keep falling to the ground even after the pattern moves on
+  for(const bm of boss.bombs){ if(bm.done) continue; bm.vy+=bm.g*dt; bm.x+=bm.vx*dt; bm.y+=bm.vy*dt;
+    if(bm.y>=GY){ explode(bm.x,GY,58,true); bm.done=true; } }
+  boss.bombs=boss.bombs.filter(b=>!b.done);
 }
 function updateBB(dt){
   for(const b of bB){
+    if(b.seek){ const dy=b.laneY-b.y; if(Math.abs(dy)<10){ b.y=b.laneY; b.seek=0; } else b.y+=Math.sign(dy)*Math.min(Math.abs(dy),1400*dt); }
     b.x+=b.vx*dt; b.y+=b.vy*dt;
     if(b.x<-40||b.x>W+60||b.y>H+40||b.y<-60){ b.dead=true; continue; }
-    if(invulnT<=0 && hitPlayer(b.x,b.y,b.r)){ b.dead=true; if(!b.cannon) hurt(false); else hurt(false); }
+    if(invulnT<=0 && hitPlayer(b.x,b.y,b.r)){ b.dead=true; hurt(false); }
     if(b.missile||b.cannon){ if(Math.random()<0.6) parts.push({wx:b.x,wy:b.y,vx:R(-10,30),vy:R(-20,20),r:R(2,4),c:'#ff9a5a',t:.22,scr:true}); }
   }
   bB=bB.filter(b=>!b.dead);
@@ -631,7 +646,7 @@ function bossDie(){
   boss.state='dying'; boss.dyingT=0;
   addScore(1500+bossCount*400); popTxt(boss.x+camX,boss.y,'TARGET DOWN','#ffd24d',false);
   flash('#fff',0.2); shake=Math.max(shake,16); sfx('die');
-  bB.length=0;
+  bB.length=0; boss.bombs.length=0;
 }
 function finishBoss(){
   boss=null; bossAt=runT+50; spawnT=1.0; warn=0;
@@ -983,14 +998,18 @@ function drawTelegraphs(){
     ctx.setLineDash([]);
   }
   if(boss.pat==='cannon' && !boss.cFired && boss.patPh>0.15){
-    const a=0.2+Math.sin(boss.patPh*14)*0.15;
-    ctx.fillStyle=`rgba(255,236,106,${a})`; ctx.fillRect(0,boss.cannonY-16,boss.x-40,32);
+    const m=bossMuzzle(), a=0.25+Math.abs(Math.sin(boss.patPh*12))*0.45;
+    const dx=PX-m.x, dy=boss.cannonY-m.y, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+    ctx.strokeStyle=`rgba(255,236,106,${a})`; ctx.lineWidth=8; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(m.x,m.y); ctx.lineTo(m.x+ux*1000,m.y+uy*1000); ctx.stroke();
+    ctx.lineCap='butt';
   }
-  if(boss.pat==='bomb'){
-    for(const bm of boss.bombs){ if(bm.done) continue;
-      ctx.fillStyle='rgba(255,90,60,.5)'; ctx.beginPath(); ctx.ellipse(bm.tx,GY,16,5,0,0,6.28); ctx.fill();
-      ctx.fillStyle='#ffb04d'; ctx.beginPath(); ctx.arc(bm.x,bm.y,6,0,6.28); ctx.fill();
-    }
+  // bombs: landing-spot shadow (ahead of the player) + the falling shell you can shoot
+  for(const bm of boss.bombs){ if(bm.done) continue;
+    ctx.fillStyle='rgba(255,90,60,.5)'; ctx.beginPath(); ctx.ellipse(bm.tx,GY,16,5,0,0,6.28); ctx.fill();
+    ctx.fillStyle='rgba(255,176,77,.35)'; ctx.beginPath(); ctx.arc(bm.x,bm.y,12,0,6.28); ctx.fill();
+    ctx.fillStyle='#ffb04d'; ctx.beginPath(); ctx.arc(bm.x,bm.y,7,0,6.28); ctx.fill();
+    ctx.fillStyle='#3a2a06'; ctx.fillRect(bm.x-2,bm.y-9,4,4);
   }
 }
 function drawBoss(){
