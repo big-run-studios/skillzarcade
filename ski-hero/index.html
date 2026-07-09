@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Ski Hero — Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Orbitron:wght@600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --display:'Orbitron',sans-serif;
+    --bg:#bfeaff;
+    --panel:rgba(10,26,54,.82); --panel-bd:2px solid #34e1ff; --panel-glow:0 0 20px rgba(52,225,255,.45),inset 0 0 14px rgba(52,225,255,.12);
+    --txt:#eaf7ff; --dim:#8fb8dc;
+    --cyan:#34e1ff; --gold:#ffc233; --magenta:#ff4fd8; --green:#39ffa0; --red:#ff5a6e; --violet:#8b6bff;
+    --score:#ffffff; --score-glow:0 0 10px #34e1ff,0 0 24px rgba(52,225,255,.7);
+    --btn:linear-gradient(180deg,#6ff0ff,#12b7e6); --btn-ink:#04283a; --btn-glow:0 0 24px rgba(52,225,255,.6),inset 0 0 0 2px rgba(255,255,255,.55);
+    --title:#ffffff; --title-glow:0 0 12px #34e1ff,0 0 30px rgba(52,225,255,.85);
+    --title2:#ff4fd8; --title2-glow:0 0 12px #ff4fd8,0 0 30px rgba(255,79,216,.8);
+    --crash:#ff4f6e; --crash-glow:0 0 12px #ff4f6e,0 0 30px rgba(255,79,110,.7);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  html,body{height:100%;overflow:hidden;background:#7fcff0;font-family:var(--display);color:var(--txt);}
+  #app{position:fixed;top:0;left:50%;transform:translateX(-50%);height:100%;width:100%;max-width:520px;overflow:hidden;background:var(--bg);touch-action:none;}
+  canvas{display:block;position:absolute;inset:0;}
+  .ui{position:absolute;inset:0;pointer-events:none;user-select:none;-webkit-user-select:none;}
+  .ui *{pointer-events:auto;}
+
+  /* HUD */
+  #hud{opacity:0;transition:opacity .25s;pointer-events:none;}
+  #hud *{pointer-events:none;}
+  #hud.on{opacity:1;}
+  #scoreBox{position:absolute;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);text-align:center;}
+  #scoreVal{font-size:34px;font-weight:800;letter-spacing:2px;color:var(--score);line-height:1;text-shadow:var(--score-glow);}
+  #multRow{margin-top:4px;font-size:14px;font-weight:800;letter-spacing:1px;color:var(--gold);text-shadow:0 0 8px rgba(255,194,51,.7);transition:font-size .2s,color .2s;}
+  #multRow.tm{color:var(--magenta);text-shadow:0 0 10px rgba(255,79,216,.9);font-size:16px;}
+
+  #backArcade{position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;z-index:25;width:44px;height:44px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:27px;font-weight:800;line-height:1;padding-bottom:4px;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
+  #muteBtn{position:absolute;top:max(14px,env(safe-area-inset-top));right:14px;z-index:25;width:44px;height:44px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:19px;line-height:1;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
+
+  /* cash-out */
+  #cashBtn{position:absolute;top:calc(max(14px,env(safe-area-inset-top)) + 54px);right:14px;z-index:24;width:56px;height:56px;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,.6);
+    display:none;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;
+    font-family:var(--display);font-weight:900;letter-spacing:.5px;font-size:10px;color:#2a1c04;
+    background:radial-gradient(100% 100% at 50% 28%, #ffe9a8, #ffc233 55%, #d9941e);
+    box-shadow:0 0 16px rgba(255,194,51,.6), 0 4px 12px rgba(0,0,0,.4), inset 0 0 0 2px rgba(255,255,255,.3);
+    animation:cashpulse 1.5s ease-in-out infinite;}
+  #cashBtn.on{display:flex;}
+  #cashBtn:active{transform:scale(.92);}
+  #cashBtn small{font-size:9px;font-weight:700;color:#5a3a06;letter-spacing:0;margin-top:1px;}
+  @keyframes cashpulse{0%,100%{box-shadow:0 0 10px rgba(255,194,51,.45),0 4px 12px rgba(0,0,0,.4),inset 0 0 0 2px rgba(255,255,255,.3);}
+    50%{box-shadow:0 0 22px rgba(255,194,51,.9),0 4px 12px rgba(0,0,0,.4),inset 0 0 0 2px rgba(255,255,255,.4);}}
+
+  /* overlays */
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:radial-gradient(95% 70% at 50% 34%, rgba(8,26,52,.72), rgba(4,14,34,.92));backdrop-filter:blur(4px);transition:opacity .25s;}
+  .overlay.hide{opacity:0;pointer-events:none;}
+  .overlay.hide *{pointer-events:none;}
+  .btn{border:none;cursor:pointer;font-family:var(--display);font-weight:800;color:var(--btn-ink);background:var(--btn);border-radius:999px;box-shadow:var(--btn-glow);padding:17px 30px;font-size:22px;letter-spacing:2px;width:100%;max-width:320px;transition:transform .06s;}
+  .btn:active{transform:scale(.97);}
+  .btn.ghost{background:transparent;color:var(--txt);box-shadow:inset 0 0 0 2px rgba(255,255,255,.4);font-size:15px;padding:13px 24px;max-width:220px;margin-top:12px;}
+
+  #menu .title{font-size:clamp(42px,13vw,72px);font-weight:900;line-height:.92;letter-spacing:2px;color:var(--title);text-shadow:var(--title-glow);}
+  #menu .title span{color:var(--title2);text-shadow:var(--title2-glow);}
+  #menu .sub{color:var(--cyan);font-weight:700;font-size:12px;letter-spacing:3px;margin:10px 0 20px;text-shadow:0 0 8px rgba(52,225,255,.7);}
+  .htp{display:flex;flex-direction:column;gap:9px;margin:0 24px 22px;max-width:346px;}
+  .htp .row{display:flex;align-items:center;gap:13px;background:rgba(10,26,52,.66);border:1.5px solid rgba(52,225,255,.3);border-radius:14px;padding:9px 13px;text-align:left;}
+  .htp .ic{font-size:23px;flex:none;width:32px;text-align:center;filter:drop-shadow(0 0 6px rgba(52,225,255,.8));}
+  .htp .tx{font-family:'Fredoka',sans-serif;font-weight:600;font-size:13.5px;color:var(--txt);line-height:1.3;}
+  .htp .tx b{color:var(--cyan);}
+  .htp .tx i{color:var(--magenta);font-style:normal;font-weight:700;}
+  .htp .tx u{color:var(--gold);text-decoration:none;font-weight:700;}
+  .pb{font-family:'Fredoka',sans-serif;font-weight:700;font-size:14px;color:var(--dim);letter-spacing:1px;margin-top:14px;}
+
+  #over .big{font-size:36px;font-weight:900;letter-spacing:2px;color:var(--crash);margin:10px 0 2px;text-shadow:var(--crash-glow);}
+  #over .why{font-family:'Fredoka',sans-serif;font-weight:700;font-size:15px;color:var(--gold);margin-bottom:6px;text-shadow:0 0 8px rgba(255,194,51,.5);}
+  #over .lbl,#cashed .lbl{font-size:12px;font-weight:700;letter-spacing:3px;color:var(--dim);margin-top:12px;}
+  #over .pts{font-size:60px;font-weight:900;color:#fff;line-height:1.05;text-shadow:var(--score-glow);}
+  #over .chips,#cashed .chips{font-size:14px;font-weight:800;color:var(--gold);letter-spacing:.5px;margin:6px 0 4px;text-shadow:0 0 8px rgba(255,194,51,.6);}
+  #over .best,#cashed .best{font-family:'Fredoka',sans-serif;font-weight:700;font-size:14px;color:var(--dim);margin:2px 0 22px;}
+  #over .best.newbest,#cashed .best.newbest{color:var(--gold);text-shadow:0 0 10px rgba(255,194,51,.7);font-weight:800;}
+  #cashed .big{font-size:38px;font-weight:900;letter-spacing:2px;color:var(--green);margin:10px 0 4px;text-shadow:0 0 12px rgba(57,255,160,.7),0 0 30px rgba(57,255,160,.5);}
+  #cashed .pts{font-size:60px;font-weight:900;color:var(--gold);line-height:1.05;text-shadow:0 0 10px rgba(255,194,51,.7),0 0 28px rgba(255,194,51,.5);}
+
+  .brand{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.75);font-size:10px;font-weight:600;letter-spacing:1px;opacity:.85;text-shadow:0 1px 4px rgba(0,0,0,.4);}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv"></canvas>
+
+  <div class="ui">
+    <button id="backArcade" title="Back to arcade">‹</button>
+    <button id="muteBtn" title="Mute">🔊</button>
+
+    <div id="hud">
+      <div id="scoreBox">
+        <div id="scoreVal">0</div>
+        <div id="multRow">×1.0</div>
+      </div>
+    </div>
+
+    <div id="menu" class="overlay">
+      <div class="title">SKI <span>HERO</span></div>
+      <div class="sub">CARVE · LAUNCH · STOMP IT</div>
+      <div class="htp">
+        <div class="row"><div class="ic">👇</div><div class="tx"><b>Hold</b> to crouch &amp; tuck down the slope — build speed</div></div>
+        <div class="row"><div class="ic">☝️</div><div class="tx"><b>Let go</b> to hop — release <b>climbing a hill</b> for big air</div></div>
+        <div class="row"><div class="ic">🏂</div><div class="tx">Land <u>3 jumps</u> to unlock <i>TRICK MODE</i></div></div>
+        <div class="row"><div class="ic">🌀</div><div class="tx">Then <i>swipe any way</i> in the air to trick · land <u>upright</u> or wipe out</div></div>
+        <div class="row"><div class="ic">💰</div><div class="tx"><u>Cash out</u> before you crash · <i>wipe out and the pot's gone</i></div></div>
+      </div>
+      <button class="btn" id="playBtn">DROP IN</button>
+      <div class="pb" id="menuBest"></div>
+    </div>
+
+    <div id="over" class="overlay hide">
+      <div class="big">WIPEOUT</div>
+      <div class="why" id="overWhy"></div>
+      <div class="lbl">PAYOUT</div>
+      <div class="pts" id="finalScore">0</div>
+      <div class="chips" id="finalChips"></div>
+      <div class="best" id="finalBest"></div>
+      <button class="btn" id="againBtn">DROP IN AGAIN</button>
+      <button class="btn ghost" id="menuBtn">ARCADE</button>
+    </div>
+
+    <div id="cashed" class="overlay hide">
+      <div class="big">CASHED OUT</div>
+      <div class="lbl">BANKED</div>
+      <div class="pts" id="cashPts">0</div>
+      <div class="chips" id="cashChips"></div>
+      <div class="best" id="cashBest"></div>
+      <button class="btn" id="cashAgainBtn">DROP IN AGAIN</button>
+      <button class="btn ghost" id="cashMenuBtn">ARCADE</button>
+    </div>
+
+    <button id="cashBtn"><span>CASH</span><small>OUT</small></button>
+  </div>
+
+  <div class="brand">CRASHARCADE · SKI HERO v0.1.0</div>
+</div>
+
+<script>
+(function(){
+'use strict';
+/* ================================================================= constants */
+const W=450, H=820;
+const ANCHOR_SX=W*0.34;          // rider screen x (left-of-centre → upcoming terrain visible)
+const ANCHOR_SY=H*0.44;          // rider screen y (upper-mid → landing zone visible below)
+const BASE_Y=430;                // world terrain baseline at x=0
+const DESCENT=0.17;              // overall downhill slope (net descent per world px)
+
+const G=950;                     // low gravity → long floaty hang time (travel farther, float longer)
+const DIVE_G=1200;               // extra downward accel while holding in the air (dive into your landing)
+const TUCK_BOOST=2.6;            // downhill hold → tuck accel multiplier (build speed; compensates for low G)
+const DRAG=0.16;                 // ground drag (fraction/s)
+const AIR_DRAG=0.02;             // tiny horizontal air drag
+const SPD_MIN=150;
+const HOP_BASE=110, HOP_K=0.47;  // RELEASE = hop; pop kept low vs speed → a FLAT, far-carrying launch (not a steep pop)
+const HOP_UPSLOPE=0.25;          // a little extra when you let go climbing toward a crest
+const MIN_HOP=150;               // release always pops you at least this far up (little hop on flat/downhill)
+const MAX_HOP_VY=900;            // ...but cap the very biggest launches so they stay framable
+const UNLOCK_JUMPS=3;            // land this many curve jumps to unlock Trick Mode
+const MAX_ROT=18;                // rad/s — trick rotation speed (a single flip fits early air)
+const SETTLE=0.35;               // rad: trick counts as "done" once rot is this close to its target
+const LAND_TOL=0.5;              // rad: board must be within this of the landing slope, or you wipe out
+const SWIPE_MIN=22;              // logical px to register a swipe
+const TRICK_CD=0.11;             // s between chained tricks from one drag
+const TAU=Math.PI*2;
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const app=document.getElementById('app');
+
+/* ================================================================= storage guard */
+const store={get(k){try{return localStorage.getItem(k);}catch(e){return null;}},set(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+
+/* ================================================================= helpers */
+const R=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rand=arr=>arr[Math.floor(Math.random()*arr.length)];
+const nearUpright=a=>Math.round(a/TAU)*TAU;
+const normAng=a=>{ a%=TAU; if(a>Math.PI)a-=TAU; if(a<-Math.PI)a+=TAU; return a; };
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+/* ================================================================= state */
+let state='menu';
+let runT=0, score=0, best=+(store.get('ski_best')||0);
+let mult=1, distAcc=0;
+let shake=0, flashT=0, flashCol='#fff', freezeT=0, deadT=0, timeScale=1, overShown=false, crashWhy='';
+
+// player — worldX(px), worldY(py), velocity, orientation
+let px=0, py=0, vx=0, vy=0, spd=0, air=false, holding=false, lastHold=false;
+let rot=0, rotTarget=0, tilt=0, grabT=0, airT=0, launchGuard=0, crouch=0;
+let facing=1;
+
+// camera
+let camX=0, camY=0, zoom=1;
+
+// jumps-to-unlock / flow  (flow = successful curve jumps landed; unlock Trick Mode at UNLOCK_JUMPS)
+let flow=0, trickMode=false, tmPulse=0;
+
+// air trick bookkeeping
+let comboN=0, airPts=0, comboList=[], lastTrickT=0, trickFlash=0, curTrickTxt='';
+
+// fx
+let trail=[], parts=[], pops=[], speedPh=0;
+
+/* ================================================================= audio (synth sfx + light synth groove) */
+let muted=store.get('ski_mute')==='1';
+let AC=null, musicGain=null, nextNote=0, beatN=0, musicOn=false;
+function ac(){ if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)(); musicGain=AC.createGain(); musicGain.gain.value=0.0; musicGain.connect(AC.destination);}catch(e){} } return AC; }
+function sfx(type){
+  if(muted) return; const c=ac(); if(!c) return;
+  const t=c.currentTime, o=c.createOscillator(), g=c.createGain();
+  o.connect(g); g.connect(c.destination);
+  if(type==='launch'){ o.type='sine'; o.frequency.setValueAtTime(240,t); o.frequency.exponentialRampToValueAtTime(760,t+.18); g.gain.setValueAtTime(.06,t); g.gain.exponentialRampToValueAtTime(.001,t+.22); o.start(t); o.stop(t+.24); }
+  else if(type==='trick'){ o.type='square'; o.frequency.setValueAtTime(520,t); o.frequency.exponentialRampToValueAtTime(940,t+.09); g.gain.setValueAtTime(.045,t); g.gain.exponentialRampToValueAtTime(.001,t+.12); o.start(t); o.stop(t+.13); }
+  else if(type==='land'){ o.type='triangle'; o.frequency.setValueAtTime(420,t); o.frequency.exponentialRampToValueAtTime(180,t+.12); g.gain.setValueAtTime(.06,t); g.gain.exponentialRampToValueAtTime(.001,t+.15); o.start(t); o.stop(t+.16); }
+  else if(type==='clean'){ o.type='sine'; o.frequency.setValueAtTime(660,t); o.frequency.setValueAtTime(990,t+.07); o.frequency.setValueAtTime(1320,t+.14); g.gain.setValueAtTime(.05,t); g.gain.exponentialRampToValueAtTime(.001,t+.2); o.start(t); o.stop(t+.21); }
+  else if(type==='flow'){ o.type='square'; o.frequency.setValueAtTime(700,t); o.frequency.exponentialRampToValueAtTime(1400,t+.12); g.gain.setValueAtTime(.05,t); g.gain.exponentialRampToValueAtTime(.001,t+.16); o.start(t); o.stop(t+.17); }
+  else if(type==='tm'){ // trick-mode stinger
+    [0,.08,.16,.24].forEach((d,i)=>{ const oo=c.createOscillator(),gg=c.createGain(); oo.connect(gg); gg.connect(c.destination); oo.type='sawtooth'; oo.frequency.setValueAtTime([392,523,659,784][i],t+d); gg.gain.setValueAtTime(.05,t+d); gg.gain.exponentialRampToValueAtTime(.001,t+d+.18); oo.start(t+d); oo.stop(t+d+.2); }); }
+  else if(type==='stumble'){ o.type='sawtooth'; o.frequency.setValueAtTime(200,t); o.frequency.exponentialRampToValueAtTime(90,t+.2); g.gain.setValueAtTime(.06,t); g.gain.exponentialRampToValueAtTime(.001,t+.22); o.start(t); o.stop(t+.23); }
+  else if(type==='crash'){ o.type='sawtooth'; o.frequency.setValueAtTime(300,t); o.frequency.exponentialRampToValueAtTime(40,t+.6); g.gain.setValueAtTime(.13,t); g.gain.exponentialRampToValueAtTime(.001,t+.65); o.start(t); o.stop(t+.67); }
+  else if(type==='cash'){ o.type='sine'; o.frequency.setValueAtTime(660,t); o.frequency.setValueAtTime(880,t+.1); o.frequency.setValueAtTime(1320,t+.2); g.gain.setValueAtTime(.07,t); g.gain.exponentialRampToValueAtTime(.001,t+.45); o.start(t); o.stop(t+.47); }
+}
+// bouncy pentatonic groove; brighter + faster in trick mode
+const SCALE=[0,3,5,7,10,12];            // minor pentatonic (semitones)
+function midiHz(m){ return 440*Math.pow(2,(m-69)/12); }
+function scheduleMusic(){
+  const c=ac(); if(!c) return;
+  const beat = trickMode ? 60/154 : 60/128;
+  while(nextNote < c.currentTime + 0.18){
+    const t=nextNote, b=beatN%16;
+    // bass on the beat
+    if(b%2===0){ const root=[36,36,41,43][(beatN/2|0)%4];
+      voice('triangle', midiHz(root), t, 0.22, trickMode?.10:.075); }
+    // arp on eighths
+    const deg=SCALE[(beatN*3)%SCALE.length];
+    voice(trickMode?'sawtooth':'square', midiHz(60+deg), t, 0.13, trickMode?.055:.038);
+    if(trickMode && b%4===2){ voice('square', midiHz(72+SCALE[(beatN)%SCALE.length]), t, 0.1, .04); }
+    beatN++; nextNote += beat;
+  }
+}
+function voice(type,hz,t,dur,vol){
+  const c=AC; const o=c.createOscillator(), g=c.createGain();
+  o.type=type; o.frequency.setValueAtTime(hz,t);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.01); g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+  o.connect(g); g.connect(musicGain); o.start(t); o.stop(t+dur+0.02);
+}
+function musicSet(on){
+  musicOn=on; const c=ac(); if(!c||!musicGain) return;
+  if(on){ nextNote=Math.max(nextNote,c.currentTime+0.05); musicGain.gain.setTargetAtTime(muted?0:0.5,c.currentTime,0.2); }
+  else musicGain.gain.setTargetAtTime(0,c.currentTime,0.15);
+}
+const muteBtn=document.getElementById('muteBtn');
+function applyMute(){ muteBtn.textContent=muted?'🔇':'🔊'; if(musicGain&&AC){ musicGain.gain.setTargetAtTime(muted?0:(musicOn?0.5:0),AC.currentTime,0.1);} }
+muteBtn.addEventListener('click',e=>{e.stopPropagation(); muted=!muted; store.set('ski_mute',muted?'1':'0'); applyMute();});
+applyMute();
+
+/* ================================================================= terrain (pure function of x) */
+// Long, gentle, READABLE curves for the whole run — the rhythm is meant to come easily so
+// the player drops into flow fast. The escalation is SPEED (faster → bigger air → tighter
+// trick timing), NOT harder curve timing. All the push-your-luck lives in the tricks.
+const WL=620;                                                // long constant wavelength → unhurried rhythm
+function diffAt(x){ return clamp(x/9000,0,1); }
+function terrainY(x){
+  const dd=diffAt(x);
+  const amp=28+34*dd;                                        // gentle early → bigger jumps late
+  const env=0.9+0.3*Math.sin(x*0.00055+1.3)*Math.sin(x*0.00019+0.4); // slow amplitude variety (floor ~0.6)
+  return BASE_Y + DESCENT*x + (amp*env)*Math.sin(x*TAU/WL);
+}
+function terrainSlope(x){ return (terrainY(x+2)-terrainY(x-2))/4; }
+function terrainAngle(x){ return Math.atan(terrainSlope(x)); }
+function spdMax(){ return 470+380*diffAt(px); }              // slower & easier to read early, ramps up
+
+/* ================================================================= flow / trick mode */
+// Trick Mode is UNLOCKED once you land UNLOCK_JUMPS successful curve jumps, then stays on
+// for the rest of the run. Before that, swipes only do a small safe tweak (no crash risk) —
+// the big SSX tricks (and their wipeout risk) begin after you've proven you can ride.
+function setTrickMode(on){
+  if(on===trickMode) return;
+  trickMode=on;
+  if(on){ tmPulse=1; sfx('tm'); flash('#ff4fd8',0.2); }
+}
+
+/* ================================================================= scoring */
+function addScore(base){ score+=Math.max(1,Math.round(base*mult)); }
+function popWorld(wx,wy,txt,col,big){ pops.push({wx,wy,txt,col:col||'#ffe07a',t:big?1.1:0.8,big:!!big}); }
+
+/* ================================================================= tricks */
+// swipe dir → trick. All rotations are whole turns so a completed trick lands upright.
+const TRICKS={
+  up:        {name:'BACKFLIP',    d:-TAU,   pts:150, grab:false},
+  down:      {name:'GRAB',        d:0,      pts:90,  grab:true},
+  left:      {name:'360 SPIN',    d:-TAU,   pts:130, grab:false},
+  right:     {name:'360 SPIN',    d:+TAU,   pts:130, grab:false},
+  upleft:    {name:'DOUBLE CORK', d:-2*TAU, pts:320, grab:false},
+  upright:   {name:'DOUBLE RODEO',d:+2*TAU, pts:320, grab:false},
+  downleft:  {name:'CORK GRAB',   d:-TAU,   pts:210, grab:true},
+  downright: {name:'TWEAK GRAB',  d:+TAU,   pts:210, grab:true},
+};
+function classifySwipe(dx,dy){
+  const a=Math.atan2(dy,dx);                 // screen: +y down
+  const deg=(a*180/Math.PI+360)%360;
+  // 8-way buckets (45° each), start at right=0
+  if(deg<22.5||deg>=337.5) return 'right';
+  if(deg<67.5) return 'downright';
+  if(deg<112.5) return 'down';
+  if(deg<157.5) return 'downleft';
+  if(deg<202.5) return 'left';
+  if(deg<247.5) return 'upleft';
+  if(deg<292.5) return 'up';
+  return 'upright';
+}
+function doTrick(dir){
+  if(!air) return;
+  if(!trickMode){
+    // pre-unlock: a small stylish tweak only — no rotation, so it can never cost you a landing
+    grabT=Math.max(grabT,0.4); curTrickTxt='TWEAK'; trickFlash=0.5;
+    addScore(10); sfx('trick');
+    facing = dir.indexOf('left')>=0?-1 : dir.indexOf('right')>=0?1 : facing;
+    return;
+  }
+  const t=TRICKS[dir]; if(!t) return;
+  rotTarget += t.d;
+  if(t.grab) grabT=Math.max(grabT,0.45);
+  comboN++; airPts += t.pts; comboList.push(t.name);
+  curTrickTxt=t.name+(comboN>1?' ×'+comboN:''); trickFlash=0.9;
+  facing = t.d<0?-1:(t.d>0?1:facing);
+  addScore(Math.round(t.pts*0.25));          // small instant taste; full bank on clean landing
+  sfx('trick'); flash('#34e1ff',0.06);
+  for(let i=0;i<8;i++){ const ang=R(0,TAU); parts.push({wx:px,wy:py-24,vx:Math.cos(ang)*R(40,150),vy:Math.sin(ang)*R(40,150),r:R(2,4),c:rand(['#34e1ff','#ff4fd8','#ffe07a']),t:R(.25,.5),g:120}); }
+}
+
+/* ================================================================= player physics */
+// where (and at what slope angle) the current trajectory will meet the snow — used so the board
+// can ANTICIPATE the landing and rotate flush with the curve it's about to hit.
+function predictLandAngle(){
+  let sx=px, sy=py, svy=vy, g2=G+(holding?DIVE_G:0);
+  for(let i=0;i<80;i++){ svy+=g2*0.03; sx+=vx*0.03; sy+=svy*0.03; if(sy>=terrainY(sx)) return terrainAngle(sx); }
+  return terrainAngle(sx);
+}
+function goAir(pop){
+  const th=terrainAngle(px);
+  air=true; airT=0; launchGuard=0.08;
+  vx=spd*Math.cos(th);
+  vy=clamp(spd*Math.sin(th)-pop, -MAX_HOP_VY, -MIN_HOP);  // little hop min, soaring max, capped so it stays framable
+  comboN=0; airPts=0; comboList=[]; curTrickTxt=''; grabT=0;
+  crouch=0; rot=nearUpright(rot); rotTarget=rot; tilt=0;
+  sfx('launch');
+  for(let i=0;i<12;i++) parts.push({wx:px,wy:py,vx:R(-60,60),vy:R(-40,-180),r:R(2,4.5),c:'#f2fbff',t:R(.3,.6),g:520});
+}
+function landSpray(q){
+  const n=q==='clean'?14:10;
+  for(let i=0;i<n;i++) parts.push({wx:px,wy:py,
+    vx:q==='stumble'?R(-260,-110):R(-160,160), vy:R(-40,-200), r:R(2,4.5), c:'#eaffff', t:R(.3,.6), g:520});
+}
+function land(){
+  const th=terrainAngle(px);
+  // the ONLY wipeout: the board isn't aligned with the curve you touch down on (still mid-trick).
+  const mis=normAng((rot+tilt) - th);
+  air=false;
+  if(Math.abs(mis)>LAND_TOL){ crash(comboN>1?'tricked too late':'over-rotated'); return; }
+
+  py=terrainY(px);
+  // ground speed = velocity projected onto the slope tangent → you keep (and on a downslope, GAIN) speed;
+  // the into-the-slope component is absorbed, so you slide right in instead of bouncing.
+  const tang=vx*Math.cos(th)+vy*Math.sin(th);
+  spd=clamp(Math.abs(tang), SPD_MIN, spdMax()*1.12);
+  const down=th>0.05, up=th<-0.06;
+  const quality = down?'clean' : up?'stumble' : 'ok';
+  // clean downslope carries you through; pressing down as you land dives you further into the curve
+  spd *= quality==='clean' ? (holding?1.14:1.05) : quality==='stumble' ? 0.7 : 0.96;
+  spd=Math.min(spd, spdMax()*1.12);
+
+  const realJump = airT>0.18;            // a genuine hop (not a micro-bounce)
+  if(realJump && airT>0.25) addScore(Math.round(airT*26));  // airtime bonus
+
+  if(!trickMode){
+    // ---- pre-unlock: land UNLOCK_JUMPS curve jumps to switch Trick Mode on ----
+    if(realJump){
+      flow++;
+      if(flow>=UNLOCK_JUMPS){
+        setTrickMode(true); addScore(150);
+        popWorld(px,py-56,'TRICK MODE!','#ff4fd8',true); landSpray('clean'); shake=Math.max(shake,6);
+      } else {
+        popWorld(px,py-48,'JUMP '+flow+' / '+UNLOCK_JUMPS,'#39ffa0'); sfx('clean'); landSpray(quality);
+      }
+    } else sfx('land');
+  } else {
+    // ---- post-unlock: bank the air's tricks, keep the multiplier climbing ----
+    if(comboN>0){
+      let factor = (quality==='clean'?1 : quality==='ok'?0.8 : 0.4) * (grabT>0?0.85:1) * 1.6;
+      const banked=Math.round(airPts*factor*(1+0.25*(comboN-1)));
+      addScore(banked);
+      popWorld(px,py-58, '+'+Math.max(1,Math.round(banked*mult)), quality==='stumble'?'#ffb04d':'#ffe07a', true);
+    }
+    if(realJump) flow++;                 // more jumps → higher multiplier
+    if(quality==='clean'){ popWorld(px,py-40, comboN>0?'STOMPED!':'CLEAN','#39ffa0'); sfx('clean'); landSpray('clean'); shake=Math.max(shake,4); }
+    else if(quality==='stumble'){ popWorld(px,py-40,'STUMBLE','#ffb04d'); sfx('stumble'); landSpray('stumble'); shake=Math.max(shake,7); }
+    else sfx('land');
+  }
+  comboN=0; airPts=0; comboList=[]; curTrickTxt=''; grabT=0;
+  rot=nearUpright(rot); rotTarget=rot; tilt=0;
+}
+
+function stepPlayer(dt){
+  const releaseEvent = lastHold && !holding;   // let go this frame
+  lastHold = holding;
+  // knee-bend: crouch when holding on the ground (loading a jump), spring out otherwise
+  crouch += ((holding && !air ? 1 : 0) - crouch) * Math.min(1, dt*13);
+
+  if(air){
+    airT+=dt; launchGuard-=dt;
+    vy+=G*dt;
+    if(holding) vy+=DIVE_G*dt;                 // press to dive back down (control your landing)
+    vx*=(1-AIR_DRAG*dt);
+    px+=vx*dt; py+=vy*dt;
+    // tricks spin the board toward their target; once the trick is DONE the board eases to align
+    // with the slope it's about to land on (anticipation) so it touches down flush and slides in.
+    const d=rotTarget-rot, step=clamp(d,-MAX_ROT*dt,MAX_ROT*dt); rot+=step;
+    const trickDone=Math.abs(rotTarget-rot)<SETTLE;
+    const tAim=(trickDone && vy>-140) ? predictLandAngle() : 0;   // anticipate near/after the apex
+    tilt=lerp(tilt, tAim, clamp(dt*7,0,1));
+    if(grabT>0) grabT-=dt;
+    // land when we fall back to the surface
+    const gy=terrainY(px);
+    if(vy>0 && launchGuard<=0 && py>=gy){ py=gy; land(); }
+    return;
+  }
+
+  // ---- grounded ----
+  const th=terrainAngle(px);
+  const slope=terrainSlope(px);
+  // gravity along the slope; tuck (hold on the downhill) supercharges it
+  let a=G*Math.sin(th);
+  if(holding && slope>0) a*=TUCK_BOOST;
+  spd+=a*dt;
+  spd-=DRAG*spd*dt;
+  spd=clamp(spd, SPD_MIN, spdMax());
+  vx=spd*Math.cos(th); vy=spd*Math.sin(th);
+  px+=vx*dt;
+  py=terrainY(px);
+
+  // RELEASE = HOP. Letting go springs you off the snow: a little hop on flat/downhill,
+  // a big launch when you release climbing toward a crest (your velocity already points up).
+  // Holding NEVER launches you — hold to stay glued to the curve, tuck & accelerate (no bounce
+  // off landings). Only a release jumps.
+  if(releaseEvent && spd>110){
+    let pop=HOP_BASE+spd*HOP_K;
+    if(th<-0.05) pop += (-Math.sin(th))*spd*HOP_UPSLOPE;   // upslope release → bigger air
+    goAir(pop);
+  }
+
+  // spray while carving fast
+  if(!air && spd>240 && Math.random()<0.5){
+    parts.push({wx:px-vx*0.02,wy:py-2,vx:-vx*0.35+R(-30,30),vy:R(-120,-30),r:R(1.5,3.5),c:'#f4fcff',t:R(.2,.4),g:480});
+  }
+}
+
+/* ================================================================= damage / flow control */
+function flash(c,d){ flashCol=c; flashT=Math.max(flashT,d||0.12); }
+function crash(why){
+  if(state!=='play') return;
+  state='dead'; crashWhy=why; deadT=0; overShown=false; timeScale=0.32; shake=18;
+  air=true; vy=-260; vx*=0.4; tilt=0;
+  cashBtn.classList.remove('on'); hudEl.classList.remove('on');
+  flash('#ff4f6e',0.2); sfx('crash'); musicSet(false);
+  for(let i=0;i<30;i++) parts.push({wx:px,wy:py-20,vx:R(-280,280),vy:R(-360,120),r:R(2,6),c:rand(['#ff4f6e','#ffe07a','#eaffff']),t:R(.4,.9),g:900});
+}
+
+/* ================================================================= screens */
+const menuEl=document.getElementById('menu'), overEl=document.getElementById('over'), hudEl=document.getElementById('hud');
+const cashedEl=document.getElementById('cashed'), cashBtn=document.getElementById('cashBtn');
+const multRow=document.getElementById('multRow');
+function reset(){
+  runT=0; score=0; mult=1; distAcc=0;
+  shake=0; flashT=0; freezeT=0; deadT=0; timeScale=1; overShown=false; crashWhy='';
+  px=120; py=terrainY(px); vx=0; vy=0; spd=240; air=false; holding=false; lastHold=false;
+  rot=0; rotTarget=0; tilt=0; grabT=0; airT=0; launchGuard=0; facing=1; crouch=0;
+  flow=0; trickMode=false; tmPulse=0;
+  comboN=0; airPts=0; comboList=[]; lastTrickT=0; trickFlash=0; curTrickTxt='';
+  trail=[]; parts=[]; pops=[]; speedPh=0;
+  camX=px-ANCHOR_SX; camY=py-ANCHOR_SY; zoom=1;
+}
+function startRun(){
+  reset(); state='play';
+  menuEl.classList.add('hide'); overEl.classList.add('hide'); cashedEl.classList.add('hide');
+  hudEl.classList.add('on'); cashBtn.classList.add('on');
+  ac(); musicSet(true);
+}
+function cashOut(){
+  if(state!=='play') return;
+  state='cashed'; cashBtn.classList.remove('on'); hudEl.classList.remove('on');
+  if(score>best){ best=score; store.set('ski_best',best); }
+  document.getElementById('cashPts').textContent=score.toLocaleString();
+  document.getElementById('cashChips').textContent=Math.floor(runT)+'s · ×'+mult.toFixed(1)+(trickMode?' · TRICK MODE':'');
+  const b=document.getElementById('cashBest');
+  if(score>=best&&score>0){ b.textContent='★ NEW BEST ★'; b.className='best newbest'; }
+  else { b.textContent='BEST '+best.toLocaleString(); b.className='best'; }
+  cashedEl.classList.remove('hide');
+  flash('#39ffa0',0.2); sfx('cash');
+  for(let i=0;i<30;i++) parts.push({wx:px,wy:py-20,vx:R(-160,160),vy:R(-380,-60),r:R(2,5),c:rand(['#ffc233','#39ffa0','#eaffff']),t:R(.5,1.1),g:600});
+  musicSet(false);
+}
+function showOver(){
+  overShown=true;
+  document.getElementById('overWhy').textContent=crashWhy?('— '+crashWhy+' —'):'';
+  document.getElementById('finalScore').textContent='0';
+  document.getElementById('finalChips').textContent='reached '+score.toLocaleString()+' — nothing banked';
+  document.getElementById('finalBest').textContent='BEST '+best.toLocaleString();
+  overEl.classList.remove('hide');
+}
+function toMenu(){
+  state='menu'; overEl.classList.add('hide'); cashedEl.classList.add('hide');
+  hudEl.classList.remove('on'); cashBtn.classList.remove('on');
+  document.getElementById('menuBest').textContent=best>0?('BEST '+best.toLocaleString()):'';
+  musicSet(false); reset();
+}
+document.getElementById('playBtn').addEventListener('click',()=>{ startRun(); });
+document.getElementById('againBtn').addEventListener('click',()=>startRun());
+document.getElementById('menuBtn').addEventListener('click',()=>toMenu());
+document.getElementById('cashAgainBtn').addEventListener('click',()=>startRun());
+document.getElementById('cashMenuBtn').addEventListener('click',()=>toMenu());
+cashBtn.addEventListener('click',e=>{ e.stopPropagation(); cashOut(); });
+cashBtn.addEventListener('pointerdown',e=>{ e.stopPropagation(); });
+document.getElementById('backArcade').addEventListener('click',()=>{ location.href='../index.html'; });
+document.getElementById('menuBest').textContent=best>0?('BEST '+best.toLocaleString()):'';
+
+/* ================================================================= input */
+let downId=null, swOX=0, swOY=0;
+function localPt(cx,cy){ const r=app.getBoundingClientRect(); return {x:(cx-r.left-offX)/scale, y:(cy-r.top-offY)/scale}; }
+function now(){ return performance.now()/1000; }
+app.addEventListener('pointerdown',e=>{
+  if(e.target.closest('button')) return;
+  if(state!=='play') return;
+  if(downId===null){ downId=e.pointerId; const L=localPt(e.clientX,e.clientY); swOX=L.x; swOY=L.y; }
+  holding=true;
+  if(app.setPointerCapture) try{app.setPointerCapture(e.pointerId);}catch(_){}
+});
+app.addEventListener('pointermove',e=>{
+  if(e.pointerId!==downId) return;
+  const L=localPt(e.clientX,e.clientY);
+  if(air){
+    const dx=L.x-swOX, dy=L.y-swOY;
+    if(Math.hypot(dx,dy)>SWIPE_MIN && now()-lastTrickT>TRICK_CD){
+      doTrick(classifySwipe(dx,dy)); lastTrickT=now(); swOX=L.x; swOY=L.y;
+    }
+  }
+});
+function endPointer(e){
+  if(e.pointerId!==downId) return;
+  downId=null; holding=false;
+}
+app.addEventListener('pointerup',endPointer);
+app.addEventListener('pointercancel',endPointer);
+app.addEventListener('touchstart',e=>{ if(!e.target.closest('button')) e.preventDefault(); },{passive:false});
+app.addEventListener('touchmove',e=>{ e.preventDefault(); },{passive:false});
+app.addEventListener('contextmenu',e=>e.preventDefault());
+
+window.addEventListener('keydown',e=>{
+  if(state==='menu'&&(e.code==='Space'||e.code==='Enter')){ startRun(); return; }
+  if((state==='dead'&&overShown||state==='cashed')&&(e.code==='Space'||e.code==='Enter')){ startRun(); return; }
+  if(state!=='play') return;
+  if(e.code==='KeyC'){ cashOut(); return; }
+  if(e.code==='Space'||e.code==='ArrowDown'){ holding=true; e.preventDefault(); }
+  else if(e.code==='ArrowUp'){ if(air) doTrick('up'); }
+  else if(e.code==='ArrowLeft'){ if(air) doTrick('left'); }
+  else if(e.code==='ArrowRight'){ if(air) doTrick('right'); }
+  else if(e.code==='KeyG'){ if(air) doTrick('down'); }
+});
+window.addEventListener('keyup',e=>{ if(e.code==='Space'||e.code==='ArrowDown') holding=false; });
+
+/* ================================================================= update */
+function update(dt){
+  speedPh+=dt*(spd/40);
+  if(state==='menu'){ return; }
+  if(state==='cashed'){ if(!muted&&musicOn) scheduleMusic(); return; }
+  if(state==='dead'){
+    deadT+=dt/Math.max(0.001,timeScale); timeScale=Math.min(1,timeScale+dt*1.1);
+    vy+=G*dt; px+=vx*dt; py+=vy*dt; rot+=6*dt*facing;
+    updateFx(dt);
+    if(shake>0) shake=Math.max(0,shake-dt*30);
+    updateCamera(dt);
+    if(deadT>1.0&&!overShown) showOver();
+    return;
+  }
+
+  runT+=dt;
+  mult=1 + diffAt(px)*3.2 + flow*0.04 + (trickMode?0.7:0);
+  distAcc+=Math.max(0,vx*dt); while(distAcc>=12){ distAcc-=12; score+=Math.max(1,Math.round(1*mult)); }
+
+  stepPlayer(dt);
+
+  if(flashT>0) flashT-=dt;
+  if(shake>0) shake=Math.max(0,shake-dt*22);
+  if(tmPulse>0) tmPulse-=dt*1.4;
+  if(trickFlash>0) trickFlash-=dt;
+
+  // trail
+  trail.push({x:px,y:py-22}); if(trail.length>42) trail.shift();
+  updateFx(dt);
+  updateCamera(dt);
+
+  if(!muted&&musicOn) scheduleMusic();
+}
+function updateFx(dt){
+  for(const p of parts){ p.vy+=(p.g||0)*dt; p.wx+=p.vx*dt; p.wy+=p.vy*dt; p.t-=dt; }
+  parts=parts.filter(p=>p.t>0);
+  for(const p of pops){ p.wy-=24*dt; p.t-=dt; }
+  pops=pops.filter(p=>p.t>0);
+}
+function updateCamera(dt){
+  const height=Math.max(0, terrainY(px)-py);           // how high above ground
+  const zT=clamp(0.92-height/900, 0.5, 0.92);          // zoom out relative to height — the higher you soar, the wider the view
+  const zRate = zT<zoom ? 5.5 : 2.6;                   // pull back fast as you rise; ease back in gently on the way down
+  zoom=lerp(zoom, zT, clamp(dt*zRate,0,1));
+  camX=px-ANCHOR_SX/zoom;                                // locked X (responsive)
+  const cyT=py-ANCHOR_SY/zoom;
+  camY=lerp(camY, cyT, clamp(dt*(air?3.4:5),0,1));       // smoothed Y — a little lag adds a rise pop; zoom carries the height read
+}
+
+/* ================================================================= rendering */
+function W2SX(wx){ return (wx-camX)*zoom; }
+function W2SY(wy){ return (wy-camY)*zoom; }
+
+let skyGrad=null;
+function buildSky(){ skyGrad=ctx.createLinearGradient(0,0,0,H);
+  skyGrad.addColorStop(0,'#2ea6e8'); skyGrad.addColorStop(0.34,'#63c6f2'); skyGrad.addColorStop(0.66,'#a9e4fb'); skyGrad.addColorStop(1,'#e8f8ff'); }
+buildSky();
+
+function drawSky(){
+  ctx.fillStyle=skyGrad; ctx.fillRect(0,0,W,H);
+  // sun
+  const sx=W*0.74, sy=H*0.17;
+  let g=ctx.createRadialGradient(sx,sy,4,sx,sy,190);
+  g.addColorStop(0,'rgba(255,255,255,.95)'); g.addColorStop(.25,'rgba(255,240,180,.7)'); g.addColorStop(1,'rgba(255,240,180,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sx,sy,190,0,TAU); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.95)'; ctx.beginPath(); ctx.arc(sx,sy,26,0,TAU); ctx.fill();
+}
+function drawMountains(){
+  // far range (parallax .12) — soft violet with a neon rim
+  drawRidge(0.12, H*0.30, 150, 120, '#9fb8e8', 'rgba(255,79,216,.55)', 0.6);
+  // near range (parallax .26) — cooler, taller, cyan rim
+  drawRidge(0.26, H*0.40, 220, 200, '#7fa0d8', 'rgba(52,225,255,.6)', 0.85);
+}
+function drawRidge(par, baseY, wl, amp, fill, rim, alpha){
+  const ox=camX*par;
+  ctx.save(); ctx.globalAlpha=alpha;
+  ctx.beginPath(); ctx.moveTo(0,H);
+  const pts=[];
+  for(let sx=-40; sx<=W+40; sx+=14){
+    const wx=sx+ox;
+    const y=baseY + Math.sin(wx/wl)*amp*0.5 + Math.sin(wx/(wl*0.37)+2)*amp*0.28 + Math.sin(wx/(wl*2.3))*amp*0.22;
+    pts.push([sx,y]); ctx.lineTo(sx,y);
+  }
+  ctx.lineTo(W+40,H); ctx.closePath();
+  ctx.fillStyle=fill; ctx.fill();
+  // neon rim light on the crest
+  ctx.beginPath();
+  pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+  ctx.strokeStyle=rim; ctx.lineWidth=2.5; ctx.shadowColor=rim; ctx.shadowBlur=10; ctx.stroke();
+  ctx.restore();
+}
+
+function drawTerrain(){
+  const step=6;
+  const x0=camX-20, x1=camX+W/zoom+30;
+  // build the surface polyline
+  const pts=[];
+  for(let wx=x0; wx<=x1; wx+=step) pts.push([W2SX(wx), W2SY(terrainY(wx))]);
+  // snow body
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.lineTo(pts[pts.length-1][0], H+40); ctx.lineTo(pts[0][0], H+40); ctx.closePath();
+  const g=ctx.createLinearGradient(0,W2SY(terrainY(px))-40,0,H);
+  g.addColorStop(0,'#ffffff'); g.addColorStop(0.32,'#e6f4ff'); g.addColorStop(1,'#b8d8f4');
+  ctx.fillStyle=g; ctx.fill();
+  // soft blue shading band below the crestline
+  ctx.save(); ctx.clip();
+  ctx.globalAlpha=.5;
+  for(let i=0;i<pts.length;i+=2){ const p=pts[i]; ctx.fillStyle='rgba(150,190,235,.10)'; ctx.fillRect(p[0]-1,p[1]+34,step+2,10); }
+  ctx.restore();
+  // groomer corduroy lines
+  ctx.save(); ctx.strokeStyle='rgba(150,195,240,.35)'; ctx.lineWidth=1;
+  for(let i=0;i<pts.length-1;i+=1){ const a=pts[i]; ctx.beginPath(); ctx.moveTo(a[0],a[1]+7); ctx.lineTo(a[0],a[1]+22); ctx.stroke(); }
+  ctx.restore();
+  // neon crest edge (cyan glow) — the readable line the player rides
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.strokeStyle=trickMode?'#ff4fd8':'#34e1ff'; ctx.lineWidth=3;
+  ctx.shadowColor=trickMode?'#ff4fd8':'#34e1ff'; ctx.shadowBlur=14; ctx.lineJoin='round'; ctx.stroke();
+  ctx.shadowBlur=0;
+  // upcoming-crest markers: little flags on the next couple of crests (feature flavour)
+  drawCrestFlags(x0,x1);
+}
+function drawCrestFlags(x0,x1){
+  // find crests (slope - → +) in view and plant a neon flag
+  let prev=terrainSlope(x0);
+  for(let wx=x0+8; wx<x1; wx+=8){
+    const s=terrainSlope(wx);
+    if(prev<0 && s>=0){
+      const sx=W2SX(wx), sy=W2SY(terrainY(wx));
+      const col = ((wx*0.013)|0)%2 ? '#ff4fd8' : '#ffc233';
+      ctx.save(); ctx.strokeStyle='rgba(60,90,130,.6)'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx,sy-22*zoom); ctx.stroke();
+      ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.moveTo(sx,sy-22*zoom); ctx.lineTo(sx+13*zoom,sy-18*zoom); ctx.lineTo(sx,sy-13*zoom); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    prev=s;
+  }
+}
+
+function drawTrail(){
+  if(trail.length<2) return;
+  ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round';
+  for(let pass=0;pass<2;pass++){
+    ctx.beginPath();
+    for(let i=0;i<trail.length;i++){ const t=trail[i]; const x=W2SX(t.x), y=W2SY(t.y); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+    ctx.strokeStyle=pass===0?(trickMode?'rgba(255,79,216,.35)':'rgba(52,225,255,.32)'):(trickMode?'#ff8fe6':'#8ff0ff');
+    ctx.lineWidth=(pass===0?11:4)*zoom; ctx.shadowColor=trickMode?'#ff4fd8':'#34e1ff'; ctx.shadowBlur=pass===0?16:6;
+    ctx.globalAlpha=pass===0?0.5:0.9; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawParts(){
+  for(const p of parts){ const x=W2SX(p.wx), y=W2SY(p.wy); if(x<-30||x>W+30) continue;
+    ctx.globalAlpha=clamp(p.t*2.2,0,1); ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(x,y,p.r*zoom,0,TAU); ctx.fill(); }
+  ctx.globalAlpha=1;
+}
+
+function drawRider(){
+  const x=W2SX(px), y=W2SY(py);
+  const ang = air ? rot+tilt : terrainAngle(px);
+  ctx.save();
+  ctx.translate(x,y); ctx.scale(zoom,zoom); ctx.rotate(ang);
+  const neon = trickMode?'#ff4fd8':'#34e1ff';
+  const grab = grabT>0 ? clamp(grabT/0.45,0,1) : 0;
+  // board
+  ctx.save();
+  ctx.shadowColor=neon; ctx.shadowBlur=12;
+  ctx.fillStyle='#0f2036'; rr(-24,-3,48,7,3.5); ctx.fill();
+  ctx.fillStyle=neon; rr(-24,-3,48,2.4,1.5); ctx.fill();
+  ctx.fillStyle='#ffc233'; ctx.beginPath(); ctx.arc(-24,0.5,3.2,0,TAU); ctx.arc(24,0.5,3.2,0,TAU); ctx.fill();
+  ctx.restore();
+  // body silhouette (dark) with neon rim.
+  // comp = how compressed/loaded the stance is: crouch when holding on the ground (prepping a
+  // jump), or a tuck when grabbing in the air. Higher comp → hips drop, knees bend & splay out.
+  const comp = clamp(air ? grab*0.75 : crouch, 0, 1);
+  const hipY  = -27 + comp*13;
+  const headY = -46 + comp*14;
+  const kneeY = -13 + comp*7;
+  const kneeX =   6 + comp*6;
+  ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.strokeStyle=neon; ctx.shadowColor=neon; ctx.shadowBlur=8; ctx.fillStyle='#12233b';
+  // legs: boot → bent knee → hip
+  ctx.lineWidth=6;
+  ctx.beginPath(); ctx.moveTo(-8,-2); ctx.lineTo(-kneeX,kneeY); ctx.lineTo(-1.5,hipY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo( 8,-2); ctx.lineTo( kneeX,kneeY); ctx.lineTo( 1.5,hipY); ctx.stroke();
+  // torso
+  ctx.lineWidth=9;
+  ctx.beginPath(); ctx.moveTo(0,hipY); ctx.lineTo(0.5,headY+6); ctx.stroke();
+  // arms — reach for the board on a grab, else out for balance (drop a touch when crouched)
+  ctx.lineWidth=5;
+  if(grab>0.2 && air){
+    ctx.beginPath(); ctx.moveTo(0.5,hipY-4); ctx.lineTo(-7,-9); ctx.lineTo(-13*facing,-2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0.5,hipY-4); ctx.lineTo(12,-15); ctx.stroke();
+  } else {
+    const ay=headY+9+comp*5;
+    ctx.beginPath(); ctx.moveTo(0.5,headY+7); ctx.lineTo(-13*facing,ay); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0.5,headY+7); ctx.lineTo( 15*facing,ay-4); ctx.stroke();
+  }
+  // head
+  ctx.beginPath(); ctx.arc(0.5,headY,6.5,0,TAU); ctx.fillStyle='#12233b'; ctx.fill(); ctx.lineWidth=2.4; ctx.stroke();
+  // goggles glint
+  ctx.shadowBlur=0; ctx.fillStyle=neon; rr(-2.5,headY-3,7,3,1.5); ctx.fill();
+  ctx.restore();
+}
+
+function drawSpeedLines(){
+  const intensity = trickMode?1: clamp((spd-360)/300,0,1);
+  if(intensity<=0.02 && !trickMode) return;
+  ctx.save(); ctx.strokeStyle=trickMode?'rgba(255,79,216,.4)':'rgba(255,255,255,.5)'; ctx.lineWidth=2; ctx.lineCap='round';
+  const n=trickMode?9:5;
+  for(let i=0;i<n;i++){
+    const seed=i*97.3;
+    const yy=((seed*7 + speedPh*90*(0.6+((i%3)*0.3)))%(H+60))-30;
+    const len=40+((i*53)%60);
+    const xx=((seed*13 - speedPh*160)%(W+120))-60;
+    ctx.globalAlpha=(trickMode?0.5:0.4)*(0.5+((i%2)*0.5));
+    ctx.beginPath(); ctx.moveTo(xx+len,yy); ctx.lineTo(xx,yy+6); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPops(){
+  for(const p of pops){ const x=W2SX(p.wx), y=W2SY(p.wy);
+    ctx.save(); ctx.globalAlpha=clamp(p.t*1.6,0,1);
+    ctx.font=(p.big?'900 26px ':'800 18px ')+'Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=p.col; ctx.shadowColor=p.col; ctx.shadowBlur=12; ctx.fillText(p.txt,x,y);
+    ctx.restore();
+  }
+}
+
+function drawHudCanvas(){
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  // flow pips (top-centre, under the DOM score)
+  const py0=86;
+  for(let i=0;i<3;i++){
+    const on=flow>i; const cx=W/2-22+i*22;
+    ctx.beginPath(); ctx.arc(cx,py0,7,0,TAU);
+    if(on){ ctx.fillStyle=trickMode?'#ff4fd8':'#39ffa0'; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=10; ctx.fill(); ctx.shadowBlur=0; }
+    else { ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=2; ctx.stroke(); }
+  }
+  if(flow>3){ ctx.fillStyle='#ff4fd8'; ctx.font='800 12px Orbitron'; ctx.shadowColor='#ff4fd8'; ctx.shadowBlur=8; ctx.fillText('FLOW ×'+flow, W/2, py0+18); ctx.shadowBlur=0; }
+
+  // TRICK MODE banner
+  if(trickMode){
+    const s=1+Math.max(0,tmPulse)*0.4;
+    ctx.save(); ctx.translate(W/2,124); ctx.scale(s,s);
+    ctx.font='900 22px Orbitron'; ctx.fillStyle='#ff4fd8'; ctx.shadowColor='#ff4fd8'; ctx.shadowBlur=16;
+    ctx.fillText('TRICK MODE',0,0); ctx.restore();
+  }
+
+  // current trick callout (centre) + combo
+  if(trickFlash>0 && curTrickTxt){
+    ctx.save(); ctx.globalAlpha=clamp(trickFlash*1.6,0,1);
+    const s=1+clamp(trickFlash-0.6,0,0.4);
+    ctx.translate(W/2,H*0.30); ctx.scale(s,s);
+    ctx.font='900 30px Orbitron'; ctx.fillStyle='#fff'; ctx.shadowColor='#34e1ff'; ctx.shadowBlur=18;
+    ctx.fillText(curTrickTxt,0,0); ctx.restore();
+  }
+  if(air && comboN>0){
+    const rx=W2SX(px), ry=W2SY(py)-70*zoom;
+    ctx.font='800 15px Orbitron'; ctx.fillStyle='#ffe07a'; ctx.shadowColor='#ffc233'; ctx.shadowBlur=8;
+    ctx.fillText('COMBO ×'+comboN, rx, ry); ctx.shadowBlur=0;
+  }
+
+  // landing warning — is the board lined up with the curve it's about to hit?
+  if(air && vy>0){
+    const landT=predictLand();
+    const ready=Math.abs(normAng((rot+tilt)-predictLandAngle()))<LAND_TOL;
+    if(landT<0.55 && !ready){
+      ctx.font='900 20px Orbitron'; ctx.fillStyle='#ff4f6e'; ctx.shadowColor='#ff4f6e'; ctx.shadowBlur=12;
+      ctx.fillText('LAND! ⚠', W/2, H*0.20); ctx.shadowBlur=0;
+    } else if(landT<0.6 && ready && comboN>0){
+      ctx.font='800 16px Orbitron'; ctx.fillStyle='#39ffa0'; ctx.shadowColor='#39ffa0'; ctx.shadowBlur=10;
+      ctx.fillText('STICK IT', W/2, H*0.20); ctx.shadowBlur=0;
+    }
+  }
+}
+function predictLand(){
+  let sy=py, svy=vy, sx=px, t=0;
+  for(let i=0;i<60;i++){ svy+=G*0.03; sx+=vx*0.03; sy+=svy*0.03; t+=0.03; if(sy>=terrainY(sx)) return t; }
+  return 99;
+}
+
+function render(){
+  ctx.save();
+  if(shake>0){ ctx.translate(R(-shake,shake),R(-shake,shake)); }
+  drawSky();
+  drawMountains();
+  drawTerrain();
+  drawTrail();
+  drawParts();
+  if(state==='play'||state==='dead'||state==='cashed') drawRider();
+  drawSpeedLines();
+  drawPops();
+  ctx.restore();
+
+  // flash
+  if(flashT>0){ ctx.globalAlpha=clamp(flashT*2.2,0,0.5); ctx.fillStyle=flashCol; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
+
+  // DOM-free canvas HUD
+  if(state==='play'){ drawHudCanvas(); }
+
+  // DOM score sync
+  if(state==='play'){
+    scoreVal.textContent=score.toLocaleString();
+    multRow.textContent='×'+mult.toFixed(1);
+    multRow.className=trickMode?'tm':'';
+  }
+}
+const scoreVal=document.getElementById('scoreVal');
+
+/* ================================================================= sizing / loop */
+let dpr=1, scale=1, offX=0, offY=0;
+function resize(){
+  dpr=Math.min(window.devicePixelRatio||1,2);
+  const cw=app.clientWidth, ch=app.clientHeight;
+  cv.width=cw*dpr; cv.height=ch*dpr; cv.style.width=cw+'px'; cv.style.height=ch+'px';
+  scale=Math.min(cw/W,ch/H); offX=(cw-W*scale)/2; offY=(ch-H*scale)/2;
+  buildSky();
+}
+window.addEventListener('resize',resize); resize();
+
+let last=performance.now();
+function frame(nw){
+  requestAnimationFrame(frame);
+  let dt=Math.min((nw-last)/1000,1/30); last=nw;
+  if(freezeT>0){ freezeT-=dt; dt*=0.12; }
+  if(state==='dead') dt*=timeScale;
+  try{ update(dt); }catch(err){ console.error('update',err); }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle='#7fcff0'; ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.setTransform(scale*dpr,0,0,scale*dpr,offX*dpr,offY*dpr);
+  ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
+  try{ render(); }catch(err){ console.error('render',err); }
+}
+requestAnimationFrame(frame);
+reset(); state='menu';
+
+/* ================================================================= debug hook */
+window.__game={
+  get s(){ return {state,runT:+runT.toFixed(1),score,mult:+mult.toFixed(2),px:Math.round(px),py:Math.round(py),
+    spd:Math.round(spd),vx:Math.round(vx),vy:Math.round(vy),air,holding,rot:+rot.toFixed(2),rotTarget:+rotTarget.toFixed(2),
+    tilt:+tilt.toFixed(2),flow,trickMode,comboN,airPts,slope:+terrainSlope(px).toFixed(3)}; },
+  step:d=>{ try{update(d);}catch(e){console.error(e);} },
+  startRun, cashOut, toMenu, crash,
+  hold:v=>{ holding=v!==false; }, trick:doTrick,
+  set:(k,v)=>{ if(k==='spd')spd=v; if(k==='px'){px=v;py=terrainY(px);} },
+  terrainY, terrainSlope, diffAt
+};
+})();
+</script>
+</body>
+</html>
