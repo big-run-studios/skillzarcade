@@ -37,8 +37,15 @@
   #backArcade{position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;z-index:25;width:44px;height:44px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:27px;font-weight:800;line-height:1;padding-bottom:4px;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
   #muteBtn{position:absolute;top:max(14px,env(safe-area-inset-top));right:14px;z-index:25;width:44px;height:44px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:19px;line-height:1;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
 
+  /* health pips — upper left, beside the back button */
+  #hpBox{position:absolute;top:calc(max(14px,env(safe-area-inset-top)) + 12px);left:68px;display:flex;gap:6px;z-index:25;}
+  #hpBox .pip{width:17px;height:20px;background:var(--green);clip-path:polygon(50% 0,100% 30%,100% 72%,50% 100%,0 72%,0 30%);box-shadow:0 0 8px rgba(57,255,160,.6);transition:background .15s,box-shadow .15s;}
+  #hpBox .pip.off{background:rgba(255,255,255,.16);box-shadow:none;}
+  #hpBox.hurt{animation:hpflash .3s;}
+  @keyframes hpflash{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+
   /* cash-out */
-  #cashBtn{position:absolute;bottom:max(20px,env(safe-area-inset-bottom));left:16px;z-index:24;width:60px;height:60px;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,.6);
+  #cashBtn{position:absolute;top:max(14px,env(safe-area-inset-top));right:68px;z-index:24;width:54px;height:54px;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,.6);
     display:none;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;
     font-family:var(--display);font-weight:900;letter-spacing:.5px;font-size:10px;color:#2a1c04;
     background:radial-gradient(100% 100% at 50% 28%, #ffe9a8, #ffc233 55%, #d9941e);
@@ -95,6 +102,7 @@
         <div id="scoreVal">0</div>
         <div id="multRow">×1.0</div>
       </div>
+      <div id="hpBox"><i class="pip"></i><i class="pip"></i><i class="pip"></i></div>
     </div>
 
     <div id="menu" class="overlay">
@@ -133,7 +141,7 @@
     <button id="cashBtn"><span>CASH</span><small>OUT</small></button>
   </div>
 
-  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.0</div>
+  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.3</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -150,7 +158,7 @@ const GRAV=2600, JUMP_V=1000;
 const COYOTE=0.09, JBUF=0.13;
 const FIRE_CD=0.10, BSPD=780, PB_R=4.5, SPREAD_A=0.24;
 const DEAD=16;                // tap/gesture movement threshold px
-const STICK_R=48, AIM_DEAD=7; // invisible floating analog stick: base follows the thumb within this radius
+const STICK_R=64, AIM_DEAD=13, AIM_SMOOTH=13; // floating analog stick: bigger throw + deadzone + eased aim = less twitchy
 const BOSS_BASE=60;           // first boss at ~60s
 
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
@@ -177,7 +185,7 @@ let bossCount=0, bossAt=BOSS_BASE, warn=0;
 // player
 let py=GY, vy=0, grounded=true, curPlat=null, coyoteT=0, jbufT=0, dropT=0;
 let hp=3, invulnT=0, runPh=0, hitK=0;
-let firing=false, aimAng=0, fireCd=0, muzzle=0, spreadT=0;
+let firing=false, aimAng=0, aimTarget=0, fireCd=0, muzzle=0, spreadT=0;
 
 // world objects
 let ground=[], plats=[], orbs=[], enemies=[], grenades=[], caps=[];
@@ -654,7 +662,7 @@ function reset(){
   bossCount=0; bossAt=BOSS_BASE; warn=0;
   py=GY; vy=0; grounded=true; curPlat=null; coyoteT=0; jbufT=0; dropT=0;
   hp=3; invulnT=1.2; runPh=0; hitK=0;
-  firing=false; aimAng=0; fireCd=0; muzzle=0; spreadT=0;
+  firing=false; aimAng=0; aimTarget=0; fireCd=0; muzzle=0; spreadT=0;
   ground=[]; plats=[]; orbs=[]; enemies=[]; grenades=[]; caps=[];
   pB=[]; eB=[]; bB=[]; boss=null; ex=[]; parts=[]; pops=[];
   lastGroundX=-200; generate(); spawnT=1.2;
@@ -715,7 +723,7 @@ app.addEventListener('pointerdown',e=>{
   touches.set(e.pointerId,t);
   // gun touch: the stick base = where you touched down; aim stays at its last direction until the
   // thumb actually moves, so a fresh grip anywhere doesn't snap the aim. (mouse = absolute for desktop)
-  if(gunId===null){ gunId=e.pointerId; firing=true; if(t.mouse){ const L=localPt(e.clientX,e.clientY); aimAng=Math.atan2(L.y-(py-30),L.x-PX); } }
+  if(gunId===null){ gunId=e.pointerId; firing=true; if(t.mouse){ const L=localPt(e.clientX,e.clientY); aimTarget=Math.atan2(L.y-(py-30),L.x-PX); } }
   if(app.setPointerCapture) try{app.setPointerCapture(e.pointerId);}catch(_){}
 });
 app.addEventListener('pointermove',e=>{
@@ -723,13 +731,13 @@ app.addEventListener('pointermove',e=>{
   t.x=e.clientX; t.y=e.clientY;
   if(Math.hypot(t.x-t.ox,t.y-t.oy)>DEAD) t.moved=true;   // for tap/jump/drop gesture detection
   if(e.pointerId===gunId){
-    if(t.mouse){ const L=localPt(e.clientX,e.clientY); aimAng=Math.atan2(L.y-(py-30),L.x-PX); return; }
+    if(t.mouse){ const L=localPt(e.clientX,e.clientY); aimTarget=Math.atan2(L.y-(py-30),L.x-PX); return; }
     // FLOATING invisible stick: if the thumb pulls past STICK_R, drag the base along so the thumb
     // stays inside a small radius. Only the direction from base→thumb sets the aim — never the
     // absolute finger position — so you can rest your thumb anywhere and never cover the action.
     let dx=t.x-t.bx, dy=t.y-t.by, dist=Math.hypot(dx,dy);
     if(dist>STICK_R){ t.bx=t.x-dx/dist*STICK_R; t.by=t.y-dy/dist*STICK_R; dx=t.x-t.bx; dy=t.y-t.by; dist=STICK_R; }
-    if(dist>AIM_DEAD) aimAng=Math.atan2(dy,dx);
+    if(dist>AIM_DEAD) aimTarget=Math.atan2(dy,dx);
   }
 });
 function endPointer(e){
@@ -787,6 +795,9 @@ function update(dt){
 
   invulnT-=dt; muzzle-=dt; hitK-=dt; if(spreadT>0) spreadT-=dt; if(flashT>0) flashT-=dt;
   if(shake>0) shake=Math.max(0,shake-dt*24);
+
+  // ease the aim toward the stick target so small thumb wobble doesn't snap the gun around
+  { let da=aimTarget-aimAng; while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI; aimAng+=da*Math.min(1,dt*AIM_SMOOTH); }
 
   playerPhysics(dt);
 
@@ -1066,17 +1077,7 @@ function drawParticles(){
   ctx.globalAlpha=1;
 }
 function drawHUD(){
-  // HP pips bottom-left, above cash button
-  const hx=22, hy=H-96;
-  for(let i=0;i<3;i++){ const on=i<hp; const x=hx+i*24;
-    ctx.fillStyle=on?'#39ffa0':'rgba(255,255,255,.14)';
-    ctx.save(); ctx.translate(x,hy);
-    ctx.beginPath(); ctx.moveTo(0,-8); ctx.lineTo(9,-2); ctx.lineTo(9,6); ctx.lineTo(0,11); ctx.lineTo(-9,6); ctx.lineTo(-9,-2); ctx.closePath();
-    ctx.fill();
-    if(on){ ctx.fillStyle='rgba(57,255,160,.3)'; ctx.fill(); }
-    ctx.restore();
-  }
-  // spread timer pill bottom-right
+  // (health pips are DOM now, top-left) — spread timer pill bottom-right
   if(spreadT>0){ const x=W-92, y=H-96;
     ctx.fillStyle='rgba(12,42,28,.85)'; rr(x,y-14,80,28,8); ctx.fill();
     ctx.strokeStyle='#39ffa0'; ctx.lineWidth=1.5; rr(x,y-14,80,28,8); ctx.stroke();
@@ -1098,10 +1099,16 @@ function drawHUD(){
     ctx.font='900 26px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('⚠ INCOMING ⚠',W/2,H*0.4); }
 }
-let lastScore=-1,lastMult=-1;
+let lastScore=-1,lastMult=-1,lastHp=-1;
 const scoreEl=document.getElementById('scoreVal'), multEl=document.getElementById('multRow');
+const hpBox=document.getElementById('hpBox'), pipEls=[...hpBox.children];
 function render(){
   if(lastScore!==score){ scoreEl.textContent=score.toLocaleString(); lastScore=score; }
+  if(lastHp!==hp){
+    for(let i=0;i<pipEls.length;i++) pipEls[i].classList.toggle('off', i>=hp);
+    if(lastHp>=0 && hp<lastHp){ hpBox.classList.remove('hurt'); void hpBox.offsetWidth; hpBox.classList.add('hurt'); }
+    lastHp=hp;
+  }
   const mr=Math.round(mult*10)/10;
   if(lastMult!==mr){ multEl.textContent='×'+mr.toFixed(1); multEl.style.fontSize=(14+Math.min(14,mr*1.1))+'px'; lastMult=mr; }
 
@@ -1157,7 +1164,7 @@ window.__game={
     en:enemies.length,pB:pB.length,eB:eB.length,bB:bB.length,boss:boss?boss.state+':'+boss.hp:null,py:Math.round(py),grounded,spread:+spreadT.toFixed(1)}; },
   step:d=>{ try{update(d);}catch(e){console.error(e);} },
   startRun, crash, cashOut, toMenu,
-  jump:jumpInput, drop:dropInput, setAim:a=>{aimAng=a;}, fire:v=>{firing=v!==false;},
+  jump:jumpInput, drop:dropInput, setAim:a=>{aimAng=a; aimTarget=a;}, fire:v=>{firing=v!==false;},
   setHp:v=>{hp=v;}, invuln:(v=1e9)=>{invulnT=v;},
   spawn:t=>spawnEnemy(t), boss:()=>{ runT=Math.max(runT,bossAt); },
   ents:()=>({enemies,pB,eB,bB,boss,plats,ground}),
