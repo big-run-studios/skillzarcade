@@ -141,7 +141,7 @@
     <button id="cashBtn"><span>CASH</span><small>OUT</small></button>
   </div>
 
-  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.3</div>
+  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.4</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -724,6 +724,7 @@ app.addEventListener('pointerdown',e=>{
   // gun touch: the stick base = where you touched down; aim stays at its last direction until the
   // thumb actually moves, so a fresh grip anywhere doesn't snap the aim. (mouse = absolute for desktop)
   if(gunId===null){ gunId=e.pointerId; firing=true; if(t.mouse){ const L=localPt(e.clientX,e.clientY); aimTarget=Math.atan2(L.y-(py-30),L.x-PX); } }
+  else if(state==='play'){ jumpInput(); t.acted=true; }   // 2nd finger while already firing → JUMP on touch-down (no release delay)
   if(app.setPointerCapture) try{app.setPointerCapture(e.pointerId);}catch(_){}
 });
 app.addEventListener('pointermove',e=>{
@@ -744,7 +745,7 @@ function endPointer(e){
   const t=touches.get(e.pointerId); if(!t) return;
   touches.delete(e.pointerId);
   const dt=now()-t.t0, dx=t.x-t.ox, dy=t.y-t.oy, quick=dt<0.24;
-  if(state==='play'){
+  if(state==='play' && !t.acted){        // t.acted → a 2nd finger that already jumped on touch-down
     if(quick && !t.moved) jumpInput();
     else if(quick && dy>34 && dy>Math.abs(dx)) dropInput();
     else if(quick && dy<-34 && Math.abs(dy)>Math.abs(dx)) jumpInput();
