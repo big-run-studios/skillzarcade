@@ -110,9 +110,9 @@
       <div class="title">STRIKE <span>FORCE</span></div>
       <div class="sub">RUN · GUN · SURVIVE</div>
       <div class="htp">
-        <div class="row"><div class="ic">🔫</div><div class="tx"><b>Hold</b> anywhere to fire · <b>drag</b> to aim 360°</div></div>
-        <div class="row"><div class="ic">👆</div><div class="tx"><b>Tap</b> to jump — tap a <i>2nd finger</i> to jump while firing</div></div>
-        <div class="row"><div class="ic">👇</div><div class="tx"><b>Flick down</b> to drop through thin platforms</div></div>
+        <div class="row"><div class="ic">🔫</div><div class="tx"><b>Right thumb</b>: hold to fire · drag to <b>aim 360°</b></div></div>
+        <div class="row"><div class="ic">👆</div><div class="tx"><b>Left thumb</b>: tap to <b>jump</b></div></div>
+        <div class="row"><div class="ic">👇</div><div class="tx"><b>Flick down</b> on the right to drop through platforms</div></div>
         <div class="row"><div class="ic">💰</div><div class="tx"><u>Cash out</u> before you crash · <i>3 hits</i> and the pot's gone</div></div>
       </div>
       <button class="btn" id="playBtn">DEPLOY</button>
@@ -142,7 +142,7 @@
     <button id="cashBtn"><span>CASH</span><small>OUT</small></button>
   </div>
 
-  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.6</div>
+  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.7</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -162,6 +162,7 @@ const COYOTE=0.09, JBUF=0.13;
 const FIRE_CD=0.10, BSPD=780, PB_R=4.5, SPREAD_A=0.24;
 const DEAD=16;                // tap/gesture movement threshold px
 const STICK_R=64, AIM_DEAD=13, AIM_SMOOTH=13; // floating analog stick: bigger throw + deadzone + eased aim = less twitchy
+const JUMP_ZONE_X=190;        // touches left of this (logical x) = JUMP; right = fire/aim
 const BOSS_BASE=60;           // first boss at ~60s
 
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
@@ -362,7 +363,8 @@ function enemyFire(e){
     grenades.push({wx:e.wx-10,wy:gy,vx:vxs+spd,vy:vys,hp:1,t:0});
   } else if(e.type==='drone'){
     const gsx=e.wx-camX, gy=e.wy+10, a=Math.atan2(pty-gy,ptx-gsx);
-    eB.push({wx:e.wx,wy:gy,vx:Math.cos(a)*250+spd,vy:Math.sin(a)*250,r:7,col:'#ff5a8a'});
+    // a lobbed BOMB (slower, larger, amber) that the player can shoot out of the air
+    eB.push({wx:e.wx,wy:gy,vx:Math.cos(a)*205+spd,vy:Math.sin(a)*205,r:9,col:'#ff8a3d',shoot:true});
   } else { // gunner
     const gsx=e.wx-camX, gy=e.wy-30, a=Math.atan2(pty-gy,ptx-gsx);
     eB.push({wx:e.wx,wy:gy,vx:Math.cos(a)*230+spd,vy:Math.sin(a)*230,r:7,col:'#ff7a4d'});
@@ -459,6 +461,14 @@ function updatePB(dt){
     // vs grenades (shoot them out of the air)
     for(const g of grenades){
       if(Math.hypot(b.wx-g.wx,b.wy-g.wy)<15){ b.dead=true; g.dead=true; addScore(100); popTxt(g.wx,g.wy,'+'+Math.round(100*mult),'#ffd24d'); explode(g.wx,g.wy,40,false); break; }
+    }
+    if(b.dead) continue;
+    // vs shootable enemy ordnance (drone bombs)
+    for(const eb of eB){ if(!eb.shoot||eb.dead) continue;
+      if(Math.hypot(b.wx-eb.wx,b.wy-eb.wy)<14){ eb.dead=true; b.dead=true; addScore(60);
+        popTxt(eb.wx,eb.wy,'+'+Math.max(1,Math.round(60*mult)),'#ffd24d');
+        for(let i=0;i<6;i++){ const ang=R(0,6.28),v=R(50,120); parts.push({wx:eb.wx,wy:eb.wy,vx:Math.cos(ang)*v,vy:Math.sin(ang)*v,r:R(2,3.5),c:'#ff8a3d',t:.3}); }
+        sfx('pop'); break; }
     }
     if(b.dead) continue;
     // vs boss
@@ -559,7 +569,7 @@ function startBoss(){
   bossCount++;
   boss={ x:W+180, y:172, w:150, h:78, hp:150+bossCount*70, maxhp:150+bossCount*70,
     state:'enter', t:0, patT:1.4, pat:null, patPh:0, hitT:0, dyingT:0, rot:0, bob:0,
-    lanes:[], bombs:[] };
+    dip:0, dipTarget:0, lanes:[], bombs:[] };
   warn=0; eB.length=0; enemies.length=0; grenades.length=0;
   sfx('warn');
 }
@@ -568,6 +578,7 @@ function bossPick(){
   const pats=['strafe','missiles','spiral','cannon','bomb','summon'];
   let p; do{ p=rand(pats); }while(p===boss.pat && pats.length>1);
   boss.pat=p; boss.patPh=0; boss.lanes=[];
+  boss.dipTarget=(p==='missiles')?160:0;                  // drop down to launch missiles from the body
   const spdF=1+bossCount*0.25;
   if(p==='strafe'){ boss.patT=2.2; boss.swAng=-0.35; }
   else if(p==='missiles'){ boss.patT=3.2; boss.mFired=false;
@@ -598,7 +609,8 @@ function updateBoss(dt){
     return;
   }
   // fight
-  boss.bob+=dt; boss.y=172+Math.sin(boss.bob*1.3)*40;
+  boss.bob+=dt; boss.dip+=(boss.dipTarget-boss.dip)*Math.min(1,dt*4);
+  boss.y=172+Math.sin(boss.bob*1.3)*40+boss.dip;         // dips lower for the missile volley
   const F=boss.spdF;
   boss.patT-=dt;
   if(!boss.pat || boss.patT<=0){ if(boss.pat) { bossPick(); } else bossPick(); }
@@ -740,12 +752,13 @@ function localPt(cx,cy){ const r=app.getBoundingClientRect(); return {x:(cx-r.le
 function now(){ return performance.now()/1000; }
 app.addEventListener('pointerdown',e=>{
   if(e.target.closest('button')) return;
-  const t={ox:e.clientX,oy:e.clientY,bx:e.clientX,by:e.clientY,x:e.clientX,y:e.clientY,t0:now(),moved:false,mouse:e.pointerType==='mouse'};
+  const L=localPt(e.clientX,e.clientY);
+  const zone=L.x<JUMP_ZONE_X?'jump':'fire';
+  const t={ox:e.clientX,oy:e.clientY,bx:e.clientX,by:e.clientY,x:e.clientX,y:e.clientY,t0:now(),moved:false,mouse:e.pointerType==='mouse',zone};
   touches.set(e.pointerId,t);
-  // gun touch: the stick base = where you touched down; aim stays at its last direction until the
-  // thumb actually moves, so a fresh grip anywhere doesn't snap the aim. (mouse = absolute for desktop)
-  if(gunId===null){ gunId=e.pointerId; firing=true; if(t.mouse){ const L=localPt(e.clientX,e.clientY); aimTarget=Math.atan2(L.y-(py-30),L.x-PX); } }
-  else if(state==='play'){ jumpInput(); t.acted=true; }   // 2nd finger while already firing → JUMP on touch-down (no release delay)
+  // LEFT zone = JUMP (instant on touch-down). RIGHT zone = fire + floating-stick aim.
+  if(zone==='jump'){ jumpInput(); }
+  else if(gunId===null){ gunId=e.pointerId; firing=true; if(t.mouse) aimTarget=Math.atan2(L.y-(py-30),L.x-PX); }
   if(app.setPointerCapture) try{app.setPointerCapture(e.pointerId);}catch(_){}
 });
 app.addEventListener('pointermove',e=>{
@@ -765,19 +778,16 @@ app.addEventListener('pointermove',e=>{
 function endPointer(e){
   const t=touches.get(e.pointerId); if(!t) return;
   touches.delete(e.pointerId);
-  const dt=now()-t.t0, dx=t.x-t.ox, dy=t.y-t.oy, quick=dt<0.24;
-  if(state==='play' && !t.acted){        // t.acted → a 2nd finger that already jumped on touch-down
-    if(quick && !t.moved) jumpInput();
-    else if(quick && dy>34 && dy>Math.abs(dx)) dropInput();
-    else if(quick && dy<-34 && Math.abs(dy)>Math.abs(dx)) jumpInput();
-  }
+  const dt=now()-t.t0, dx=t.x-t.ox, dy=t.y-t.oy, quick=dt<0.26;
+  // DROP: a quick down-flick in the fire zone (a sustained hold there is aiming, so only a flick drops)
+  if(state==='play' && t.zone==='fire' && quick && dy>34 && dy>Math.abs(dx)) dropInput();
   if(e.pointerId===gunId){
     gunId=null; firing=false;
-    for(const [k,tt] of touches){ gunId=k; firing=true; tt.bx=tt.x; tt.by=tt.y; break; }  // re-base under the new finger so aim holds
+    for(const [k,tt] of touches){ if(tt.zone==='fire'){ gunId=k; firing=true; tt.bx=tt.x; tt.by=tt.y; break; } }  // hand off to another fire-zone finger
   }
 }
 app.addEventListener('pointerup',endPointer);
-app.addEventListener('pointercancel',e=>{ touches.delete(e.pointerId); if(e.pointerId===gunId){ gunId=null; firing=false; for(const [k,tt] of touches){ gunId=k; firing=true; tt.bx=tt.x; tt.by=tt.y; break; } } });
+app.addEventListener('pointercancel',e=>{ touches.delete(e.pointerId); if(e.pointerId===gunId){ gunId=null; firing=false; for(const [k,tt] of touches){ if(tt.zone==='fire'){ gunId=k; firing=true; tt.bx=tt.x; tt.by=tt.y; break; } } } });
 // kill the mobile long-press text-selection / callout highlight (but let real buttons work)
 app.addEventListener('touchstart',e=>{ if(!e.target.closest('button')) e.preventDefault(); },{passive:false});
 app.addEventListener('touchmove',e=>{ e.preventDefault(); },{passive:false});
@@ -983,6 +993,13 @@ function drawBullets(){
   }
   // enemy bullets
   for(const b of eB){ const x=sc(b.wx);
+    if(b.shoot){ // shootable bomb — amber shell with a lit fuse
+      ctx.fillStyle='rgba(255,138,61,.4)'; ctx.beginPath(); ctx.arc(x,b.wy,b.r+4,0,6.28); ctx.fill();
+      ctx.fillStyle='#ff8a3d'; ctx.beginPath(); ctx.arc(x,b.wy,b.r,0,6.28); ctx.fill();
+      ctx.fillStyle='#3a2206'; ctx.fillRect(x-2,b.wy-b.r-3,4,4);
+      ctx.fillStyle='#ffe07a'; ctx.beginPath(); ctx.arc(x,b.wy-b.r-3,1.7,0,6.28); ctx.fill();
+      continue;
+    }
     ctx.fillStyle='rgba(255,80,60,.35)'; ctx.beginPath(); ctx.arc(x,b.wy,b.r+3,0,6.28); ctx.fill();
     ctx.fillStyle=b.col; ctx.beginPath(); ctx.arc(x,b.wy,b.r,0,6.28); ctx.fill();
     ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x-1.5,b.wy-1.5,b.r*0.4,0,6.28); ctx.fill();
@@ -1107,13 +1124,41 @@ function drawParticles(){
     ctx.fillStyle=p.col; ctx.fillText(p.txt,x,p.wy); }
   ctx.globalAlpha=1;
 }
+function drawControlGuides(){
+  const cy=724, half=54, a=Math.max(0.14, 0.5 - runT*0.012);   // bright while teaching, fades as the run goes
+  drawPadBtn(80, cy, half, 'jump', a);
+  drawPadBtn(W-80, cy, half, 'aim', a);
+}
+function drawPadBtn(cx,cy,half,kind,a){
+  ctx.save(); ctx.globalAlpha=a;
+  ctx.fillStyle='rgba(120,200,255,.06)'; rr(cx-half,cy-half,half*2,half*2,16); ctx.fill();
+  ctx.strokeStyle='rgba(180,235,255,.9)'; ctx.lineWidth=2; rr(cx-half,cy-half,half*2,half*2,16); ctx.stroke();
+  ctx.fillStyle='#bfeaff'; ctx.strokeStyle='#bfeaff';
+  if(kind==='jump'){
+    ctx.lineWidth=4; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(cx-16,cy-6); ctx.lineTo(cx,cy-24); ctx.lineTo(cx+16,cy-6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx-16,cy+12); ctx.lineTo(cx,cy-6); ctx.lineTo(cx+16,cy+12); ctx.stroke();
+    ctx.lineCap='butt';
+  } else {
+    for(let i=0;i<16;i++){ const ang=i*Math.PI/8, rIn=20, rOut=32, w=3.2;    // 16 arrows, empty middle = "move your finger around"
+      const bx=cx+Math.cos(ang)*rIn, by=cy+Math.sin(ang)*rIn, tx=cx+Math.cos(ang)*rOut, ty=cy+Math.sin(ang)*rOut, pr=ang+Math.PI/2;
+      ctx.beginPath(); ctx.moveTo(tx,ty);
+      ctx.lineTo(bx+Math.cos(pr)*w, by+Math.sin(pr)*w);
+      ctx.lineTo(bx-Math.cos(pr)*w, by-Math.sin(pr)*w);
+      ctx.closePath(); ctx.fill(); }
+  }
+  ctx.font='900 12px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(kind==='jump'?'JUMP':'AIM', cx, cy+half+13);
+  ctx.restore();
+}
 function drawHUD(){
-  // (health pips are DOM now, top-left) — spread timer pill bottom-right
-  if(spreadT>0){ const x=W-92, y=H-96;
-    ctx.fillStyle='rgba(12,42,28,.85)'; rr(x,y-14,80,28,8); ctx.fill();
-    ctx.strokeStyle='#39ffa0'; ctx.lineWidth=1.5; rr(x,y-14,80,28,8); ctx.stroke();
-    ctx.fillStyle='#39ffa0'; ctx.font='900 12px Orbitron'; ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText('SPREAD '+Math.ceil(spreadT)+'s',x+8,y);
+  if(state==='play') drawControlGuides();
+  // health pips are DOM (top-left) — spread timer pill top-center
+  if(spreadT>0){ const w=96, x=(W-w)/2, y=(boss&&boss.state!=='enter')?122:96;
+    ctx.fillStyle='rgba(12,42,28,.85)'; rr(x,y-14,w,26,8); ctx.fill();
+    ctx.strokeStyle='#39ffa0'; ctx.lineWidth=1.5; rr(x,y-14,w,26,8); ctx.stroke();
+    ctx.fillStyle='#39ffa0'; ctx.font='900 12px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('SPREAD '+Math.ceil(spreadT)+'s',x+w/2,y-1);
   }
   // boss HP bar
   if(boss && boss.state!=='enter'){ const bw=260, bx=(W-bw)/2, by=92;
