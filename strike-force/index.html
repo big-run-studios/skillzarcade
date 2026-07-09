@@ -19,7 +19,8 @@
     --title2:#ff3d9a; --title2-glow:0 0 10px #ff3d9a,0 0 28px rgba(255,61,154,.8);
     --crash:#ff3d6e; --crash-glow:0 0 12px #ff3d6e,0 0 30px rgba(255,61,110,.7);
   }
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
   html,body{height:100%;overflow:hidden;background:#03030b;font-family:var(--display);color:var(--txt);}
   #app{position:fixed;top:0;left:50%;transform:translateX(-50%);height:100%;width:100%;max-width:520px;overflow:hidden;background:var(--bg);touch-action:none;}
   canvas{display:block;position:absolute;inset:0;}
@@ -141,7 +142,7 @@
     <button id="cashBtn"><span>CASH</span><small>OUT</small></button>
   </div>
 
-  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.5</div>
+  <div class="brand">CRASHARCADE · STRIKE FORCE v0.2.6</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -154,7 +155,9 @@ const W=450, H=820;
 const PX=150;                 // player screen x — slightly left of centre (centre=225)
 const GY=520, MY=368, HY=220; // ground / mid / high platform surface Y (lifted — bottom ~37% is a thumb safe zone)
 const PW=26, PH=52;
-const GRAV=2600, JUMP_V=1000;
+const GRAV=2600;                          // grenades / death tumble
+// jump uses asymmetric gravity (floaty rise, snappier fall) — same apex(~192) & airtime(~0.77s) as before
+const JUMP_V=920, GRAV_UP=2200, GRAV_DOWN=3100, FLIP_DUR=0.3;
 const COYOTE=0.09, JBUF=0.13;
 const FIRE_CD=0.10, BSPD=780, PB_R=4.5, SPREAD_A=0.24;
 const DEAD=16;                // tap/gesture movement threshold px
@@ -184,7 +187,7 @@ let bossCount=0, bossAt=BOSS_BASE, warn=0;
 
 // player
 let py=GY, vy=0, grounded=true, curPlat=null, coyoteT=0, jbufT=0, dropT=0;
-let hp=3, invulnT=0, runPh=0, hitK=0;
+let hp=3, invulnT=0, runPh=0, hitK=0, flipT=0, flipPending=false;
 let firing=false, aimAng=0, aimTarget=0, fireCd=0, muzzle=0, spreadT=0;
 
 // world objects
@@ -267,7 +270,7 @@ function groundSegAt(wx){ for(const s of ground){ if(wx>=s.x0&&wx<=s.x1) return 
 /* ================================================================= player physics */
 function jumpInput(){
   if(state!=='play') return;
-  if(grounded||coyoteT>0){ vy=-JUMP_V; grounded=false; coyoteT=0; curPlat=null; sfx('jump'); puff('#ff9a5a'); }
+  if(grounded||coyoteT>0){ vy=-JUMP_V; grounded=false; coyoteT=0; curPlat=null; flipPending=true; sfx('jump'); puff('#ff9a5a'); }
   else jbufT=JBUF;
 }
 function dropInput(){
@@ -278,8 +281,11 @@ function puff(c){ for(let i=0;i<6;i++) parts.push({wx:camX+PX+R(-10,10),wy:py-2,
 function playerPhysics(dt){
   const wx=camX+PX;
   coyoteT-=dt; dropT-=dt; jbufT-=dt;
-  const prev=py;
-  vy+=GRAV*dt; py+=vy*dt;
+  const prev=py, prevVy=vy;
+  vy += (vy<0?GRAV_UP:GRAV_DOWN)*dt;      // floaty on the way up, heavier on the way down
+  py += vy*dt;
+  if(flipPending && prevVy<0 && vy>=0){ flipT=FLIP_DUR; flipPending=false; }  // hit the apex → quick flip
+  if(flipT>0) flipT-=dt;
   let landed=false;
   if(vy>=0){
     // solid ground
@@ -293,8 +299,8 @@ function playerPhysics(dt){
     }
   }
   if(landed){
-    if(!grounded && jbufT>0){ jbufT=0; vy=-JUMP_V; grounded=false; coyoteT=0; curPlat=null; sfx('jump'); }
-    else { grounded=true; coyoteT=COYOTE; }
+    if(!grounded && jbufT>0){ jbufT=0; vy=-JUMP_V; grounded=false; coyoteT=0; curPlat=null; flipPending=true; sfx('jump'); }
+    else { grounded=true; coyoteT=COYOTE; flipT=0; flipPending=false; }
   } else { if(grounded) coyoteT=COYOTE; grounded=false; }
   if(py>H+50) hurtFatal();               // fell into a pit
   if(grounded) runPh+=dt*(spd/34);
@@ -676,7 +682,7 @@ function reset(){
   shake=0; freezeT=0; flashT=0; deadT=0; timeScale=1;
   bossCount=0; bossAt=BOSS_BASE; warn=0;
   py=GY; vy=0; grounded=true; curPlat=null; coyoteT=0; jbufT=0; dropT=0;
-  hp=3; invulnT=1.2; runPh=0; hitK=0;
+  hp=3; invulnT=1.2; runPh=0; hitK=0; flipT=0; flipPending=false;
   firing=false; aimAng=0; aimTarget=0; fireCd=0; muzzle=0; spreadT=0;
   ground=[]; plats=[]; orbs=[]; enemies=[]; grenades=[]; caps=[];
   pB=[]; eB=[]; bB=[]; boss=null; ex=[]; parts=[]; pops=[];
@@ -772,6 +778,10 @@ function endPointer(e){
 }
 app.addEventListener('pointerup',endPointer);
 app.addEventListener('pointercancel',e=>{ touches.delete(e.pointerId); if(e.pointerId===gunId){ gunId=null; firing=false; for(const [k,tt] of touches){ gunId=k; firing=true; tt.bx=tt.x; tt.by=tt.y; break; } } });
+// kill the mobile long-press text-selection / callout highlight (but let real buttons work)
+app.addEventListener('touchstart',e=>{ if(!e.target.closest('button')) e.preventDefault(); },{passive:false});
+app.addEventListener('touchmove',e=>{ e.preventDefault(); },{passive:false});
+app.addEventListener('contextmenu',e=>e.preventDefault());
 
 window.addEventListener('keydown',e=>{
   if(state==='menu'&&(e.code==='Space'||e.code==='Enter')){ startRun(); return; }
@@ -1058,6 +1068,7 @@ function drawPlayer(){
 function drawPlayerBody(x,y,dead){
   ctx.save(); ctx.translate(x,y);
   if(dead){ ctx.rotate(Math.sin(deadT*8)*0.5+deadT*2); }
+  else if(flipT>0){ const fp=1-flipT/FLIP_DUR; ctx.translate(0,-PH/2); ctx.rotate(fp*Math.PI*2); ctx.translate(0,PH/2); }  // quick front-flip at the apex
   const air=!grounded && !dead;
   // legs
   ctx.fillStyle='#0a3350';
@@ -1181,7 +1192,7 @@ reset(); state='menu';
 /* ================================================================= debug hook */
 window.__game={
   get s(){ return {state,runT:+runT.toFixed(1),score,mult:+mult.toFixed(2),hp,spd:Math.round(spd),camX:Math.round(camX),PX,aim:+aimAng.toFixed(3),
-    en:enemies.length,pB:pB.length,eB:eB.length,bB:bB.length,boss:boss?boss.state+':'+boss.hp:null,py:Math.round(py),grounded,spread:+spreadT.toFixed(1)}; },
+    en:enemies.length,pB:pB.length,eB:eB.length,bB:bB.length,boss:boss?boss.state+':'+boss.hp:null,py:Math.round(py),vy:Math.round(vy),grounded,flip:+flipT.toFixed(2),spread:+spreadT.toFixed(1)}; },
   step:d=>{ try{update(d);}catch(e){console.error(e);} },
   startRun, crash, cashOut, toMenu,
   jump:jumpInput, drop:dropInput, setAim:a=>{aimAng=a; aimTarget=a;}, fire:v=>{firing=v!==false;},
