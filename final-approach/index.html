@@ -137,7 +137,7 @@
     </div>
   </div>
 
-  <div class="brand">CRASHARCADE · FINAL APPROACH v0.1.1</div>
+  <div class="brand">CRASHARCADE · FINAL APPROACH v0.1.2</div>
 </div>
 
 <script>
@@ -210,8 +210,8 @@ const TYPES={
 function mkRwy(tx,ty,a,len,num){return{tx,ty,a,len,num,dx:Math.cos(a),dy:Math.sin(a),busy:false,cool:0,flash:0};}
 const RWYS=[
   mkRwy(240,535,Math.PI/2,150,'18'),   // center vertical — land heading DOWN
-  mkRwy(55,595,0,135,'09'),            // lower-left horizontal — land heading RIGHT
-  mkRwy(425,655,Math.PI,135,'27'),     // lower-right horizontal — land heading LEFT
+  mkRwy(165,580,Math.PI,135,'27'),     // lower-left strip — threshold faces CENTER, land heading LEFT
+  mkRwy(305,680,0,140,'09'),           // lower-right strip — threshold faces CENTER, land heading RIGHT
 ];
 const RW_W=34;                 // strip width px
 const LAND_R=30;               // capture distance from threshold
@@ -341,10 +341,20 @@ function buildRoute(p,raw){
     const off=Math.abs(angNorm(Math.atan2(q.y-p.y,q.x-p.x)-p.hdg));
     if(d<18||(off>1.6&&d<70))pts.shift();else break;
   }
-  // snap: released on/near a runway → append clean final approach + landing intent
+  // snap: released on/near a runway → merge into a clean final approach.
+  // Cut the drawn line where it first enters the approach zone so the route
+  // never doubles back to an entry point behind where the player drew.
   const rw=nearRunway(raw[raw.length-1]);
   if(rw){
-    pts.push({x:rw.tx-rw.dx*90,y:rw.ty-rw.dy*90},{x:rw.tx-rw.dx*20,y:rw.ty-rw.dy*20},{x:rw.tx+rw.dx*30,y:rw.ty+rw.dy*30});
+    let cut=pts.length;
+    for(let i=0;i<pts.length;i++){if(Math.hypot(pts[i].x-rw.tx,pts[i].y-rw.ty)<100){cut=i;break;}}
+    pts=pts.slice(0,cut);
+    const last=pts.length?pts[pts.length-1]:{x:p.x,y:p.y};
+    // add an entry fix only if the line isn't already pointed down the runway
+    const E={x:rw.tx-rw.dx*80,y:rw.ty-rw.dy*80};
+    const angToT=Math.atan2(rw.ty-last.y,rw.tx-last.x);
+    if(Math.abs(angNorm(angToT-rw.a))>0.35&&Math.hypot(last.x-E.x,last.y-E.y)>30)pts.push(E);
+    pts.push({x:rw.tx-rw.dx*15,y:rw.ty-rw.dy*15},{x:rw.tx+rw.dx*30,y:rw.ty+rw.dy*30});
   }
   return {pts,rw};
 }
@@ -403,8 +413,8 @@ function landScore(p,rw){
   else if(extras.length)addPop(midX,midY+12,extras.join(' +'),'#ffffff');
   S.land();
   // runway unlocks (in-run only)
-  if(landings===RW2_AT&&rwyCount<2){rwyCount=2;RWYS[1].flash=2.2;bannerTxt='RUNWAY 09 OPEN';bannerT=2.2;S.unlock();}
-  if(landings===RW3_AT&&rwyCount<3){rwyCount=3;RWYS[2].flash=2.2;bannerTxt='RUNWAY 27 OPEN';bannerT=2.2;S.unlock();}
+  if(landings===RW2_AT&&rwyCount<2){rwyCount=2;RWYS[1].flash=2.2;bannerTxt='RUNWAY 27 OPEN';bannerT=2.2;S.unlock();}
+  if(landings===RW3_AT&&rwyCount<3){rwyCount=3;RWYS[2].flash=2.2;bannerTxt='RUNWAY 09 OPEN';bannerT=2.2;S.unlock();}
 }
 
 /* ================= plane update ================= */
@@ -911,6 +921,7 @@ el('menuBest').textContent=best>0?'Best payout: '+fmt(best):'';
 window.FA_DEBUG={
   get state(){return state;},get pot(){return pot;},get landings(){return landings;},
   get planes(){return planes.map(p=>({id:p.id,x:p.x,y:p.y,hdg:p.hdg,type:p.type.key,route:p.route.length,landing:!!p.landing}));},
+  routeOf(id){const p=planes.find(q=>q.id===id);return p?p.route.map(q=>({x:Math.round(q.x),y:Math.round(q.y)})):null;},
   get rwyCount(){return rwyCount;},get view(){return{VS,VOX,VOY};},
 };
 })();
