@@ -535,7 +535,7 @@ function cashOut(){
   cashedEl.classList.remove('hide');
   flash('#39ffa0',0.2); sfx('cash');
   for(let i=0;i<30;i++) parts.push({wx:px,wy:py-20,vx:R(-160,160),vy:R(-380,-60),r:R(2,5),c:rand(['#ffc233','#39ffa0','#eaffff']),t:R(.5,1.1),g:600});
-  musicSet(false);
+  // music keeps playing over the cash-out card (only stops on wipeout or back-to-arcade)
 }
 function showOver(){
   overShown=true;
