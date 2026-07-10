@@ -169,11 +169,11 @@ const SWIPE_MIN=22;              // logical px to register a swipe
 const TRICK_CD=0.11;             // s between chained tricks from one drag
 const TAU=Math.PI*2;
 const GAME_TIME=90;              // total session length (s)
-const PX_PER_M=9;                // world px per metre (distance signs / mega-ramp spacing)
-// mega-ramp: ~every 1000 m a 45° drop + kicker that launches you super far for a big trick window
-const RAMP_M=1000, RAMP_RI=RAMP_M*PX_PER_M, RAMP0=RAMP_RI;
-const RAMP_DROP=250, RAMP_RL=430;      // steep-section extra drop / length (≈45° at the steepest)
-const KICK_H=72, KICK_L=150;           // kicker lip height / length
+const PX_PER_M=30;               // world px per metre — distance climbs ~4× slower than v0.1.8 (1000 m ≈ 52 s)
+// mega-ramp: ~every 1000 m a long, gentle (~23°) slide of ~5 s into a kicker that launches you far
+const RAMP_M=1000, RAMP_RI=RAMP_M*PX_PER_M, RAMP0=600*PX_PER_M;  // first ramp ~600 m, then every 1000 m
+const RAMP_DROP=600, RAMP_RL=4000;     // extra drop over a LONG section → ~23° (half the old severity), ~5 s slide
+const KICK_H=82, KICK_L=190;           // kicker lip height / length
 const KICK_MINSPD=420, KICK_POP=150, KICK_MAXVY=1320;  // auto-launch off the kicker → huge floaty air
 
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
@@ -273,20 +273,20 @@ applyMute();
 // trick timing), NOT harder curve timing. All the push-your-luck lives in the tricks.
 const WL=620;                                                // long constant wavelength → unhurried rhythm
 const smooth=t=>{ t=clamp(t,0,1); return t*t*(3-2*t); };
-function diffAt(x){ return clamp(x/9000,0,1); }
+function diffAt(x){ return clamp(x/45000,0,1); }   // ramps difficulty over ~a full session's distance
 function metres(x){ return Math.max(0, Math.round((x-120)/PX_PER_M)); }  // world x → metres travelled (start px=120)
-// mega-ramp: a persistent steep drop (≈45°) + a raised kicker lip, recurring every RAMP_RI px.
+// mega-ramp: a persistent LONG gentle drop (~23°, ~5 s slide) + a raised kicker lip, every RAMP_RI px.
 function rampInfo(x){
-  if(x < RAMP0-200) return {drop:0, steep:0, kick:0, near:0};
+  if(x < RAMP0-400) return {drop:0, steep:0, kick:0, near:0};
   const idx=Math.floor((x-RAMP0)/RAMP_RI);
   const s=RAMP0 + Math.max(0,idx)*RAMP_RI, u=x-s;
   const prior=Math.max(0,idx)*RAMP_DROP;
   let d=0, steep=0;
-  if(u>=0 && u<RAMP_RL){ const t=u/RAMP_RL; d=RAMP_DROP*smooth(t); steep=Math.sin(Math.PI*t); }
+  if(u>=0 && u<RAMP_RL){ const t=u/RAMP_RL; d=RAMP_DROP*smooth(t); steep=smooth(t/0.12)*smooth((1-t)/0.12); }  // flatten rollers across the whole slide (plateau)
   else if(u>=RAMP_RL) d=RAMP_DROP;
   let kick=0; const ku=u-RAMP_RL;
-  if(ku>-30 && ku<KICK_L) kick=Math.sin(Math.PI*clamp((ku+30)/(KICK_L+30),0,1));  // raised lip after the drop
-  return {drop:prior+d, steep, kick, near:(u>-350 && u<RAMP_RL+KICK_L+260)?1:0};
+  if(ku>-40 && ku<KICK_L) kick=Math.sin(Math.PI*clamp((ku+40)/(KICK_L+40),0,1));  // raised lip after the drop
+  return {drop:prior+d, steep, kick, near:(u>-450 && u<RAMP_RL+KICK_L+400)?1:0};
 }
 function terrainY(x){
   const dd=diffAt(x);
@@ -741,17 +741,18 @@ function drawTerrain(){
 function drawSigns(x0,x1){
   ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
   // distance markers every 250 m (every 1000 m is a bigger gold sign)
-  const m0=Math.max(250, Math.ceil(metres(x0)/250)*250), m1=metres(x1);
-  for(let m=m0; m<=m1; m+=250){
+  const SI=100, m0=Math.max(SI, Math.ceil(metres(x0)/SI)*SI), m1=metres(x1);
+  for(let m=m0; m<=m1; m+=SI){
     const wx=m*PX_PER_M+120, sx=W2SX(wx); if(sx<-40||sx>W+40) continue;
-    const sy=W2SY(terrainY(wx)), big=(m%1000===0);
+    const sy=W2SY(terrainY(wx)), big=(m%500===0);
     ctx.strokeStyle='rgba(40,70,110,.5)'; ctx.lineWidth=2;
     ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx,sy-27*zoom); ctx.stroke();
-    const bw=(big?36:27)*zoom, bh=14*zoom, by=sy-27*zoom-bh;
+    const label = m>=1000 ? (m/1000).toFixed(m%1000?1:0)+'K' : m+'';
+    const bw=(big?38:30)*zoom, bh=14*zoom, by=sy-27*zoom-bh;
     ctx.fillStyle=big?'#ffc233':'#eaf6ff'; ctx.shadowColor=big?'#ffc233':'#9fd8ff'; ctx.shadowBlur=big?10:5;
     rr(sx-bw/2, by, bw, bh, 3*zoom); ctx.fill(); ctx.shadowBlur=0;
     ctx.fillStyle='#0c2036'; ctx.font='900 '+((big?11:9)*zoom)+'px Orbitron';
-    ctx.fillText(m>=1000?(m/1000)+'K':m+'', sx, by+bh/2+0.5);
+    ctx.fillText(label, sx, by+bh/2+0.5);
   }
   // "MEGA RAMP" warning just ahead of each ramp entry
   for(let idx=0;;idx++){
