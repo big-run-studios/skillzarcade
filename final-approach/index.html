@@ -18,7 +18,7 @@
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overflow:hidden;background:#20301c;font-family:var(--display);color:var(--txt);}
-  #app{position:fixed;top:0;left:50%;transform:translateX(-50%);height:100%;width:100%;max-width:520px;overflow:hidden;background:var(--bg);touch-action:none;}
+  #app{position:fixed;inset:0;height:100%;width:100%;overflow:hidden;background:var(--bg);touch-action:none;}
   canvas{display:block;position:absolute;inset:0;}
   .ui{position:absolute;inset:0;pointer-events:none;user-select:none;-webkit-user-select:none;}
   .ui button{pointer-events:auto;}
@@ -154,10 +154,12 @@ const W=480,H=800;
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const app=document.getElementById('app');
 let VS=1,VOX=0,VOY=0;
+let vx0=0,vy0=0,vx1=W,vy1=H;   // visible logical rect — design rect plus whatever the window shape adds
 function resize(){
   const aw=app.clientWidth,ah=app.clientHeight,dpr=Math.min(2,window.devicePixelRatio||1);
   cv.width=aw*dpr;cv.height=ah*dpr;cv.style.width=aw+'px';cv.style.height=ah+'px';
   VS=Math.min(aw/W,ah/H);VOX=(aw-W*VS)/2;VOY=(ah-H*VS)/2;
+  vx0=-VOX/VS;vy0=-VOY/VS;vx1=W+VOX/VS;vy1=H+VOY/VS;
   ctx.setTransform(dpr*VS,0,0,dpr*VS,dpr*VOX,dpr*VOY);
 }
 window.addEventListener('resize',resize);resize();
@@ -377,9 +379,9 @@ function previewRoute(){
 function pickEntry(){
   for(let tries=0;tries<10;tries++){
     const r=Math.random();let x,y;
-    if(r<.5){x=40+Math.random()*400;y=-18;}            // top
-    else if(r<.75){x=-18;y=50+Math.random()*370;}      // left upper
-    else{x=W+18;y=50+Math.random()*370;}               // right upper
+    if(r<.5){x=vx0+40+Math.random()*((vx1-vx0)-80);y=vy0-18;}   // top (visible edge, not design edge — no pop-in)
+    else if(r<.75){x=vx0-18;y=vy0+50+Math.random()*370;}        // left upper
+    else{x=vx1+18;y=vy0+50+Math.random()*370;}                  // right upper
     let ok=true;
     for(const p of planes)if(Math.hypot(p.x-x,p.y-y)<135){ok=false;break;}
     for(const q of pendings)if(Math.hypot(q.x-x,q.y-y)<135){ok=false;break;}
@@ -634,12 +636,13 @@ cashBtn.addEventListener('pointerleave',cashRelease);
 /* ================= drawing: field ================= */
 function drawField(){
   // grass with mow stripes
-  ctx.fillStyle='#7ba95a';ctx.fillRect(-40,-40,W+80,H+80);
+  ctx.fillStyle='#7ba95a';ctx.fillRect(vx0-40,vy0-40,(vx1-vx0)+80,(vy1-vy0)+80);
   ctx.fillStyle='rgba(255,255,255,.05)';
-  for(let y=-40;y<H+40;y+=64)ctx.fillRect(-40,y,W+80,32);
+  for(let y=Math.floor((vy0-40)/64)*64;y<vy1+40;y+=64)ctx.fillRect(vx0-40,y,(vx1-vx0)+80,32);
   // faint radar arcs from the tower — classic map flavor
   ctx.strokeStyle='rgba(255,255,255,.07)';ctx.lineWidth=1.5;
-  for(let r=90;r<620;r+=90){ctx.beginPath();ctx.arc(240,612,r,0,TAU);ctx.stroke();}
+  const rMax=Math.hypot(Math.max(vx1-240,240-vx0),Math.max(vy1-612,612-vy0));
+  for(let r=90;r<rMax;r+=90){ctx.beginPath();ctx.arc(240,612,r,0,TAU);ctx.stroke();}
   // apron + tower
   ctx.fillStyle='#b9b3a4';
   rr(196,706,88,44,10);ctx.fill();
@@ -797,7 +800,7 @@ function drawAlerts(){
 }
 function drawPendings(){
   for(const q of pendings){
-    const cx=clamp(q.x,26,W-26),cy=clamp(q.y,26,H-26);
+    const cx=clamp(q.x,vx0+26,vx1-26),cy=clamp(q.y,vy0+26,vy1-26);
     const pulse=Math.sin(runT*9)*.5+.5;
     ctx.save();
     ctx.translate(cx,cy);

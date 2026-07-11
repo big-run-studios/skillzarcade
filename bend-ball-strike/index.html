@@ -21,7 +21,7 @@
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overflow:hidden;background:#02030c;font-family:var(--display);color:var(--txt);}
-  #app{position:fixed;top:0;left:50%;transform:translateX(-50%);height:100%;width:100%;max-width:520px;overflow:hidden;background:var(--bg);touch-action:none;}
+  #app{position:fixed;inset:0;height:100%;width:100%;overflow:hidden;background:var(--bg);touch-action:none;}
   canvas{display:block;position:absolute;inset:0;}
   .ui{position:absolute;inset:0;pointer-events:none;user-select:none;-webkit-user-select:none;}
   .ui button{pointer-events:auto;}
@@ -159,11 +159,15 @@ function sset(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 const W=480,H=800;
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const app=document.getElementById('app');
-let VS=1,VOX=0,VOY=0; // view scale/offset (letterbox)
+let VS=1,VOX=0,VOY=0; // view scale/offset (design rect centred in the window)
+let vx0=0,vy0=0,vx1=W,vy1=H;  // visible logical rect — design rect plus whatever the window shape adds
+let stadiumDirty=false;       // window shape changed → re-bake the stadium at the new width
 function resize(){
   const aw=app.clientWidth,ah=app.clientHeight,dpr=Math.min(2,window.devicePixelRatio||1);
   cv.width=aw*dpr;cv.height=ah*dpr;cv.style.width=aw+'px';cv.style.height=ah+'px';
   VS=Math.min(aw/W,ah/H);VOX=(aw-W*VS)/2;VOY=(ah-H*VS)/2;
+  vx0=-VOX/VS;vy0=-VOY/VS;vx1=W+VOX/VS;vy1=H+VOY/VS;
+  stadiumDirty=true;
   ctx.setTransform(dpr*VS,0,0,dpr*VS,dpr*VOX,dpr*VOY);
 }
 window.addEventListener('resize',resize);resize();
@@ -795,7 +799,8 @@ const STAD_H=260;                    // baked backdrop covers y 0..260 (pitch ov
 const PYLONS=[64,168,312,416];       // floodlight rig x-positions
 const JT={x:CX-76,y:54,w:152,h:42};  // jumbotron
 const CROWD=[];
-(function(){
+function buildCrowd(bx0,bx1){
+  CROWD.length=0;
   const pal=['#7fa8e0','#9f88d8','#6fd0e0','#c2d2ff','#b98fd0','#5fb0d8'];
   const tiers=[
     {y0:150,y1:178,step:3.6,dot:2.8,amin:0.20,amax:0.50},  // front tier (closest, biggest, brightest)
@@ -807,7 +812,7 @@ const CROWD=[];
   for(const t of tiers){
     for(let y=t.y0;y<t.y1;y+=t.step){
       const rowJ=Math.random()*t.step*0.4;
-      for(let x=3;x<W-3;x+=4){                              // FULL width, denser rows
+      for(let x=bx0+3;x<bx1-3;x+=4){                        // FULL visible width, denser rows
         const bowl=Math.pow((x-CX)/CX,2)*11;                // stand curves up toward the edges (a bowl)
         CROWD.push({x:x+(Math.random()*2.6-1.3),y:y-bowl+rowJ+(Math.random()*1.4-0.7),
                     s:t.dot,a:t.amin+Math.random()*(t.amax-t.amin),
@@ -815,33 +820,35 @@ const CROWD=[];
       }
     }
   }
-})();
+}
 function buildStadium(){
-  const S=2,off=document.createElement('canvas');off.width=W*S;off.height=STAD_H*S;
-  const o=off.getContext('2d');o.scale(S,S);
+  const bx0=Math.floor(vx0)-8, bx1=Math.ceil(vx1)+8, bw=bx1-bx0;
+  buildCrowd(bx0,bx1);
+  const S=2,off=document.createElement('canvas');off.width=bw*S;off.height=STAD_H*S;
+  const o=off.getContext('2d');o.scale(S,S);o.translate(-bx0,0);
   let g=o.createLinearGradient(0,0,0,STAD_H);
   g.addColorStop(0,'#060820');g.addColorStop(0.5,'#0c1238');g.addColorStop(1,'#120a30');
-  o.fillStyle=g;o.fillRect(0,0,W,STAD_H);
+  o.fillStyle=g;o.fillRect(bx0,0,bw,STAD_H);
   g=o.createRadialGradient(CX,150,10,CX,150,250);        // glow behind the goal
   g.addColorStop(0,'rgba(95,224,255,.13)');g.addColorStop(0.5,'rgba(120,70,210,.09)');g.addColorStop(1,'rgba(0,0,0,0)');
-  o.fillStyle=g;o.fillRect(0,0,W,STAD_H);
+  o.fillStyle=g;o.fillRect(bx0,0,bw,STAD_H);
   o.fillStyle='#0f1a3a';                                 // ground surround (fills the corners / stand-to-pitch gap)
-  o.fillRect(0,176,W,STAD_H-176);
+  o.fillRect(bx0,176,bw,STAD_H-176);
   o.fillStyle='#0a0e28';                                 // stand structure — FULL width
-  o.fillRect(0,44,W,134);
+  o.fillRect(bx0,44,bw,134);
   o.strokeStyle='rgba(95,224,255,.16)';o.lineWidth=1.5;  // tier divider strips
-  for(const yy of [96,122,148]){o.beginPath();o.moveTo(0,yy);o.lineTo(W,yy);o.stroke();}
+  for(const yy of [96,122,148]){o.beginPath();o.moveTo(bx0,yy);o.lineTo(bx1,yy);o.stroke();}
   for(const c of CROWD){o.globalAlpha=c.a;o.fillStyle=c.col;o.fillRect(c.x,c.y,c.s,c.s);} // the crowd
   o.globalAlpha=1;
-  for(let x=0;x<W;x+=26){                                 // LED advertising boards along the stand front
-    o.fillStyle=['rgba(95,224,255,.5)','rgba(255,61,154,.42)','rgba(57,255,160,.42)','rgba(255,194,51,.42)'][(x/26|0)%4];
+  for(let x=Math.floor(bx0/26)*26;x<bx1;x+=26){           // LED advertising boards along the stand front
+    o.fillStyle=['rgba(95,224,255,.5)','rgba(255,61,154,.42)','rgba(57,255,160,.42)','rgba(255,194,51,.42)'][(((x/26)%4)+4)%4];
     o.fillRect(x+1,178,24,9);
   }
-  o.fillStyle='rgba(4,8,22,.55)';o.fillRect(0,187,W,3);   // board base shadow
-  o.fillStyle='#0b1030';o.fillRect(0,8,W,38);            // roof canopy (higher, fills top)
+  o.fillStyle='rgba(4,8,22,.55)';o.fillRect(bx0,187,bw,3);   // board base shadow
+  o.fillStyle='#0b1030';o.fillRect(bx0,8,bw,38);            // roof canopy (higher, fills top)
   o.strokeStyle='rgba(95,224,255,.55)';o.lineWidth=2;o.shadowColor='#5fe0ff';o.shadowBlur=8; // neon roof edge
-  o.beginPath();o.moveTo(0,46);o.lineTo(W,46);o.stroke();
-  o.strokeStyle='rgba(255,61,154,.4)';o.shadowColor='#ff3d9a';o.beginPath();o.moveTo(0,49);o.lineTo(W,49);o.stroke();
+  o.beginPath();o.moveTo(bx0,46);o.lineTo(bx1,46);o.stroke();
+  o.strokeStyle='rgba(255,61,154,.4)';o.shadowColor='#ff3d9a';o.beginPath();o.moveTo(bx0,49);o.lineTo(bx1,49);o.stroke();
   o.shadowBlur=0;
   for(const px of PYLONS){                               // floodlight halos + panels
     const rg=o.createRadialGradient(px,26,2,px,26,44);
@@ -853,9 +860,10 @@ function buildStadium(){
   o.beginPath();o.moveTo(JT.x+22,JT.y);o.lineTo(JT.x+30,46);o.moveTo(JT.x+JT.w-22,JT.y);o.lineTo(JT.x+JT.w-30,46);o.stroke();
   o.fillStyle='#04060f';o.fillRect(JT.x,JT.y,JT.w,JT.h); // jumbotron screen
   o.strokeStyle='rgba(95,224,255,.7)';o.lineWidth=2;o.shadowColor='#5fe0ff';o.shadowBlur=8;o.strokeRect(JT.x,JT.y,JT.w,JT.h);o.shadowBlur=0;
+  off.bx0=bx0;off.bw=bw;
   return off;
 }
-const stadiumBG=buildStadium();
+let stadiumBG=buildStadium();
 
 /* ================= character sprite sheets ================= */
 const SPRITES={hero:new Image(),def:new Image(),keep:new Image()};
@@ -902,7 +910,9 @@ function draw(){
   if(shake>0)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
 
   /* futuristic stadium backdrop (baked) + live crowd flashes & jumbotron */
-  ctx.drawImage(stadiumBG,0,0,W,STAD_H);
+  if(stadiumDirty){stadiumBG=buildStadium();stadiumDirty=false;}
+  if(vy0<0){ctx.fillStyle='#060820';ctx.fillRect(vx0,vy0,vx1-vx0,-vy0+1);} // sky above the roof on tall windows
+  ctx.drawImage(stadiumBG,stadiumBG.bx0,0,stadiumBG.bw,STAD_H);
   const now=animClock;                                  // frozen while deciding/paused
   const sceneFrozen=(state==='play'&&(paused||sub==='live'));
   if(!sceneFrozen)for(let i=0;i<9;i++){                 // occasional camera flashes (sparse); still while frozen
@@ -929,26 +939,27 @@ function draw(){
   ctx.restore();ctx.globalAlpha=1;
 
   /* pitch */
-  const pw0=hw(0)*1.5,pw1=hw(1)*1.5;                     // grass fill runs past the screen edges (no dark side triangles)
+  const sideExt=Math.max(vx1-CX,CX-vx0)+16;                       // half-width needed to reach the window edges
+  const pw0=Math.max(hw(0)*1.5,sideExt),pw1=Math.max(hw(1)*1.5,sideExt); // grass fill runs past the screen edges (no dark side triangles)
   let g=ctx.createLinearGradient(0,GOALY,0,NEARY);
   g.addColorStop(0,'#0d2a4a');g.addColorStop(1,'#071630');
   ctx.fillStyle=g;
   ctx.beginPath();ctx.moveTo(CX-pw1,GOALY);ctx.lineTo(CX+pw1,GOALY);
-  ctx.lineTo(CX+pw0,H);ctx.lineTo(CX-pw0,H);ctx.closePath();ctx.fill();
+  ctx.lineTo(CX+pw0,vy1);ctx.lineTo(CX-pw0,vy1);ctx.closePath();ctx.fill();
   // grass runs up BEHIND the goal to meet the stands, full width (no dark gap)
   const FYT=192;
   let ge=ctx.createLinearGradient(0,FYT,0,GOALY);
   ge.addColorStop(0,'#11365c');ge.addColorStop(1,'#0d2a4a');
   ctx.fillStyle=ge;
-  ctx.beginPath();ctx.moveTo(-16,FYT);ctx.lineTo(W+16,FYT);
+  ctx.beginPath();ctx.moveTo(vx0-16,FYT);ctx.lineTo(vx1+16,FYT);
   ctx.lineTo(CX+pw1,GOALY);ctx.lineTo(CX-pw1,GOALY);ctx.closePath();ctx.fill();
   for(let i=0;i<8;i++){ // mow stripes
     if(i%2)continue;
     const z0=i/8,z1=(i+1)/8;
     ctx.fillStyle='rgba(95,224,255,.035)';
     ctx.beginPath();
-    ctx.moveTo(CX-hw(z1)*1.5,gy(z1));ctx.lineTo(CX+hw(z1)*1.5,gy(z1));
-    ctx.lineTo(CX+hw(z0)*1.5,Math.min(H,gy(z0)));ctx.lineTo(CX-hw(z0)*1.5,Math.min(H,gy(z0)));
+    ctx.moveTo(CX-Math.max(hw(z1)*1.5,sideExt),gy(z1));ctx.lineTo(CX+Math.max(hw(z1)*1.5,sideExt),gy(z1));
+    ctx.lineTo(CX+Math.max(hw(z0)*1.5,sideExt),Math.min(vy1,gy(z0)));ctx.lineTo(CX-Math.max(hw(z0)*1.5,sideExt),Math.min(vy1,gy(z0)));
     ctx.closePath();ctx.fill();
   }
   /* markings */

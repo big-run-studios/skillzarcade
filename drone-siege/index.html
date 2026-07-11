@@ -22,18 +22,10 @@
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overflow:hidden;background:#02030c;font-family:var(--display);color:var(--txt);}
-  /* aspect-locked playfield: height/width clamped to [1.6, 2.16] so board length —
-     and therefore difficulty — is the same on any window. Tall desktop windows
-     letterbox to phone proportions; short windows shrink the column instead. */
-  #app{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-    /* vh = largest (URL-bar-hidden) viewport, so on mobile the fixed, centered board
-       is taller than the visible area and gets clipped top+bottom. dvh tracks the
-       CURRENTLY-visible viewport and updates as the browser chrome shows/hides.
-       vh line first as a fallback for browsers without dvh support. */
-    width:min(520px,100vw,calc(100vh/1.6));
-    width:min(520px,100vw,calc(100dvh/1.6));
-    height:min(100vh,calc(min(520px,100vw,100vh/1.6)*2.16));
-    height:min(100dvh,calc(min(520px,100vw,100dvh/1.6)*2.16));
+  /* full-bleed app; the LOGICAL playfield keeps its height/width clamp of [1.6, 2.16]
+     inside resize() so board length — and therefore difficulty — is the same on any
+     window. The canvas paints backdrop past the board bounds to fill the screen. */
+  #app{position:fixed;inset:0;width:100%;height:100%;
     overflow:hidden;background:var(--bg);touch-action:none;user-select:none;-webkit-user-select:none;}
   #cv{position:absolute;inset:0;width:100%;height:100%;display:block;}
 
@@ -166,7 +158,8 @@
    Magenta is the hero's signature; gold is score payoff only.
    ============================================================ */
 const W=520;                       // logical width; height derives from aspect
-let H=900, scale=1;
+let H=900, scale=1, offX=0, offY=0;
+let vx0=0, vy0=0, vx1=520, vy1=900;   // visible logical rect — the board plus whatever the window shape adds
 const app=document.getElementById('app');
 const cvs=document.getElementById('cv'), ctx=cvs.getContext('2d');
 
@@ -287,11 +280,13 @@ const input={left:false,right:false,fire:false,pointer:false};
 let stars=[], mesas=[], bldFar=[], bldNear=[], skyGrad=null;
 function rr(a,b){return a+Math.random()*(b-a);}
 function buildBackdrop(){
-  stars=[]; const n=Math.round(H/12);
-  for(let i=0;i<n;i++) stars.push({x:rr(0,W),y:rr(0,H*0.62),r:rr(.5,1.4),p:rr(0,6.28),s:rr(.5,2)});
+  stars=[]; const n=Math.round(H/12*(vx1-vx0)/W);
+  for(let i=0;i<n;i++) stars.push({x:rr(vx0,vx1),y:rr(vy0,H*0.62),r:rr(.5,1.4),p:rr(0,6.28),s:rr(.5,2)});
   mesas=[]; // flat-top desert silhouettes flanking the skyline
   mesas.push({x:-30,w:170,h:rr(40,55)},{x:W-150,w:190,h:rr(35,50)},{x:rr(120,200),w:110,h:rr(22,32)});
-  const mk=(count,hMin,hMax,wMin,wMax)=>{const a=[];let x=-10;while(x<W+10){const w=rr(wMin,wMax),h=rr(hMin,hMax);
+  if(vx0<-40) mesas.push({x:vx0-30,w:rr(140,190),h:rr(35,55)});
+  if(vx1>W+40) mesas.push({x:vx1-150,w:rr(150,200),h:rr(30,50)});
+  const mk=(count,hMin,hMax,wMin,wMax)=>{const a=[];let x=vx0-60;while(x<vx1+10){const w=rr(wMin,wMax),h=rr(hMin,hMax);
     const win=[];for(let i=0;i<w*h/220;i++)win.push({x:rr(3,w-5),y:rr(4,h-6)});
     a.push({x,w,h,win});x+=w+rr(2,10);}return a;};
   bldFar=mk(99,28,64,22,44); bldNear=mk(99,52,108,30,60);
@@ -300,7 +295,7 @@ function buildBackdrop(){
   skyGrad.addColorStop(.68,C.skyMid2);skyGrad.addColorStop(.86,C.skyGlow);skyGrad.addColorStop(1,C.skyBase);
 }
 function drawBackdrop(){
-  ctx.fillStyle=skyGrad; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=skyGrad; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0);
   // stars twinkle
   for(const s of stars){ ctx.globalAlpha=.35+.35*Math.sin(T*s.s+s.p); ctx.fillStyle='#cfd8ff'; ctx.fillRect(s.x,s.y,s.r,s.r); }
   ctx.globalAlpha=1;
@@ -320,8 +315,16 @@ function drawBackdrop(){
     ctx.fillStyle='rgba(134,216,255,.34)'; for(const w of b.win) ctx.fillRect(b.x+px+w.x,y+w.y,2,2.6);
     ctx.fillStyle='rgba(255,210,138,.22)'; for(const w of b.win) if(w.x>b.w*.55) ctx.fillRect(b.x+px+w.x-1,y+w.y+3,2,2.6); }
   // rooftop base band the turret patrols
-  ctx.fillStyle='#05040f'; ctx.fillRect(0,H-56,W,56);
-  ctx.fillStyle='rgba(134,216,255,.14)'; ctx.fillRect(0,H-56,W,2);
+  ctx.fillStyle='#05040f'; ctx.fillRect(vx0,H-56,vx1-vx0,56+Math.max(0,vy1-H));
+  ctx.fillStyle='rgba(134,216,255,.14)'; ctx.fillRect(vx0,H-56,vx1-vx0,2);
+  // board edge markers — the turret patrols between these on wide windows
+  if(vx0<-14||vx1>W+14){
+    for(const ex of [0,W]){
+      const eg=ctx.createLinearGradient(0,H-56,0,H-220);
+      eg.addColorStop(0,'rgba(134,216,255,.35)'); eg.addColorStop(1,'rgba(134,216,255,0)');
+      ctx.fillStyle=eg; ctx.fillRect(ex-1,H-220,2,164);
+    }
+  }
 }
 
 /* ============================================================
@@ -1068,7 +1071,7 @@ function update(dt){
 }
 
 function draw(){
-  ctx.setTransform(scale,0,0,scale,0,0);
+  ctx.setTransform(scale,0,0,scale,offX,offY);
   if(shakeT>0){ const m=shakeMag*(shakeT/.4); ctx.translate(rr(-m,m),rr(-m,m)); }
   drawBackdrop();
   if(state===STATE.PLAY||state===STATE.OVER){
@@ -1111,9 +1114,9 @@ function draw(){
   if(beamOn&&player.alive){
     const px=player.x, yb=playerY()-36, flick=1+0.18*Math.sin(T*47);
     ctx.shadowBlur=18; ctx.shadowColor=WEAP.laser.col;
-    ctx.globalAlpha=.25; ctx.fillStyle=WEAP.laser.col; ctx.fillRect(px-BEAM_W*1.9*flick,0,BEAM_W*3.8*flick,yb);
-    ctx.globalAlpha=.8;  ctx.fillRect(px-BEAM_W*.75*flick,0,BEAM_W*1.5*flick,yb);
-    ctx.globalAlpha=1; ctx.fillStyle='#fff'; ctx.fillRect(px-2.2,0,4.4,yb);
+    ctx.globalAlpha=.25; ctx.fillStyle=WEAP.laser.col; ctx.fillRect(px-BEAM_W*1.9*flick,vy0,BEAM_W*3.8*flick,yb-vy0);
+    ctx.globalAlpha=.8;  ctx.fillRect(px-BEAM_W*.75*flick,vy0,BEAM_W*1.5*flick,yb-vy0);
+    ctx.globalAlpha=1; ctx.fillStyle='#fff'; ctx.fillRect(px-2.2,vy0,4.4,yb-vy0);
     ctx.shadowBlur=0;
   }
   drawPlayer();
@@ -1199,10 +1202,16 @@ function resize(){
   const r=app.getBoundingClientRect();
   cvs.width=Math.round(r.width*devicePixelRatio);
   cvs.height=Math.round(r.height*devicePixelRatio);
-  scale=cvs.width/W; H=cvs.height/scale;
+  // logical board height stays clamped to [1.6, 2.16]×W so board length — and
+  // therefore difficulty — is the same on any window; the extra window space
+  // around the board is backdrop only.
+  H=Math.min(Math.max(W*(cvs.height/cvs.width),W*1.6),W*2.16);
+  scale=Math.min(cvs.width/W,cvs.height/H);
+  offX=(cvs.width-W*scale)/2; offY=(cvs.height-H*scale)/2;   // device px
+  vx0=-offX/scale; vy0=-offY/scale; vx1=W+offX/scale; vy1=H+offY/scale;
   // drop the formation below the notch/HUD band (CSS px -> logical px)
   const sat=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat'))||0;
-  FORM_TOP=104+Math.max(0,sat)*(W/r.width);
+  FORM_TOP=104+Math.max(0,sat)*devicePixelRatio/scale;
   buildBackdrop();
 }
 addEventListener('resize',resize);

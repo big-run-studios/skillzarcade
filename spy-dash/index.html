@@ -21,7 +21,7 @@
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overflow:hidden;background:#02030c;font-family:var(--display);color:var(--txt);}
-  #app{position:fixed;top:0;left:50%;transform:translateX(-50%);height:100%;width:100%;max-width:520px;overflow:hidden;background:var(--bg);touch-action:none;}
+  #app{position:fixed;inset:0;height:100%;width:100%;overflow:hidden;background:var(--bg);touch-action:none;}
   canvas{display:block;position:absolute;inset:0;}
   .ui{position:absolute;inset:0;pointer-events:none;user-select:none;-webkit-user-select:none;}
   .ui *{pointer-events:auto;}
@@ -147,6 +147,7 @@
 'use strict';
 /* ================= constants ================= */
 const W=480, H=720;
+let vx0=0, vy0=0, vx1=W, vy1=H;   // visible logical rect — design rect plus whatever the window shape adds
 const FH=250, SLAB=26, FLOORS=3;
 const FY=f=>650-FH*f;
 const STREET=690;
@@ -282,7 +283,7 @@ function addEvent(){
   lastPathX=genX;
 }
 function generate(){
-  while(genX<px+W+1300) addEvent();
+  while(genX<px+Math.max(W,vx1)+1300) addEvent();
   const cut=px-600;
   events=events.filter(e=>e.x+STW>cut);
   pathSegs=pathSegs.filter(s=>s.x1>cut-400);
@@ -628,7 +629,7 @@ function render(t){
     SKYGRAD=ctx.createLinearGradient(0,0,0,H);
     SKYGRAD.addColorStop(0,'#05082a'); SKYGRAD.addColorStop(.6,'#0a0f36'); SKYGRAD.addColorStop(1,'#04061a');
   }
-  ctx.fillStyle=SKYGRAD; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=SKYGRAD; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0);
 
   const shx=shake>0?R(-shake,shake):0, shy=shake>0?R(-shake,shake):0;
   ctx.save(); ctx.translate(shx-camX,shy-camY);
@@ -650,24 +651,24 @@ function render(t){
 
   // below the bottom floor: dead black — nothing fights the gameplay
   ctx.fillStyle='#02030c';
-  ctx.fillRect(camX-20,FY(0)+SLAB,W+40,1200);
+  ctx.fillRect(camX+vx0-20,FY(0)+SLAB,(vx1-vx0)+40,1200);
 
   ctx.restore();
 }
 function drawSkyLayer(img,par,baseY){
   const off=((camX*par)%img.width+img.width)%img.width;
-  for(let xw=camX-off; xw<camX+W; xw+=img.width)
+  for(let xw=camX+vx0-off-img.width; xw<camX+vx1; xw+=img.width)
     ctx.drawImage(img,xw,baseY-img.height);
 }
 
-function bEnd(b){ return b.w?b.x+b.w:camX+W+200; }
+function bEnd(b){ return b.w?b.x+b.w:camX+vx1+200; }
 
 function drawGaps(t){
   for(let i=0;i<bldgs.length-1;i++){
     const a=bldgs[i], b=bldgs[i+1];
     if(!a.w) continue;
     const gx=a.x+a.w, gw=b.x-gx;
-    if(gw<=0||gx>camX+W||gx+gw<camX) continue;
+    if(gw<=0||gx>camX+vx1||gx+gw<camX+vx0) continue;
     ctx.fillStyle='#0a0e28'; ctx.fillRect(gx-6,STREET,gw+12,400);
     ctx.fillStyle='rgba(95,224,255,.15)'; ctx.fillRect(gx-6,STREET,gw+12,3);
     const cx=gx+gw/2, ang=Math.sin(t*0.9+gx*0.01)*0.45;
@@ -680,7 +681,7 @@ function drawGaps(t){
 
 function drawBuilding(b,t){
   const end=bEnd(b);
-  const x0=Math.max(b.x,camX-20), x1=Math.min(end,camX+W+20);
+  const x0=Math.max(b.x,camX+vx0-20), x1=Math.min(end,camX+vx1+20);
   if(x1<=x0) return;
   const roofY=FY(FLOORS-1)-FH;
   ctx.fillStyle='#0d1132';
@@ -749,8 +750,8 @@ function drawBuilding(b,t){
   }
   // broken facade edges
   ctx.fillStyle='#0d1132';
-  if(b.x>camX-40) jaggedEdge(b.x,roofY,FY(0)+30,-1);
-  if(b.w&&end<camX+W+40) jaggedEdge(end,roofY,FY(0)+30,1);
+  if(b.x>camX+vx0-40) jaggedEdge(b.x,roofY,FY(0)+30,-1);
+  if(b.w&&end<camX+vx1+40) jaggedEdge(end,roofY,FY(0)+30,1);
 }
 function jaggedEdge(x,y0,y1,dir){
   ctx.beginPath(); ctx.moveTo(x,y0);
@@ -764,12 +765,12 @@ const VCOL={up:'#ffc233',down:'#5fe0ff',shoot:'#ff3d9a'};
 function drawMarkers(t){
   for(const ev of events){
     const verb=VERB[ev.t];
-    if(!verb||ev.done||ev.x<camX-40||ev.x-660>camX+W) continue;
+    if(!verb||ev.done||ev.x<camX+vx0-40||ev.x-660>camX+vx1) continue;
     const spr=verb==='up'?FX.mUp:verb==='down'?FX.mDown:FX.mShoot;
     const wy=FY(ev.f)-118;                     // eye height on the back wall
     for(let i=0;i<3;i++){
       const mx=ev.x-520+i*150;
-      if(mx<camX-30||mx>camX+W+30) continue;
+      if(mx<camX+vx0-30||mx>camX+vx1+30) continue;
       ctx.globalAlpha=0.62+0.18*Math.sin(t*2.6-i*1.1);   // slow drift, never near-off
       ctx.drawImage(spr,mx-48,wy-40);
     }
@@ -777,11 +778,11 @@ function drawMarkers(t){
   }
   // rubble hops get their own (smaller, closer) gold up-arrows
   for(const d of debris){
-    if(d.x<camX-40||d.x-420>camX+W) continue;
+    if(d.x<camX+vx0-40||d.x-420>camX+vx1) continue;
     const wy=FY(d.f)-112;
     for(let i=0;i<2;i++){
       const mx=d.x-300+i*140;
-      if(mx<camX-30||mx>camX+W+30) continue;
+      if(mx<camX+vx0-30||mx>camX+vx1+30) continue;
       ctx.globalAlpha=0.52+0.16*Math.sin(t*2.6-i*1.1);
       ctx.drawImage(FX.mUp,mx-38,wy-32,77,64);
     }
@@ -791,7 +792,7 @@ function drawMarkers(t){
 
 function drawEvents(t){
   for(const ev of events){
-    if(ev.x+STW+80<camX||ev.x-60>camX+W) continue;
+    if(ev.x+STW+80<camX+vx0||ev.x-60>camX+vx1) continue;
     const fy=FY(ev.f), ceil=fy-FH+SLAB, hgt=fy-ceil;
     if(ev.t==='door'){
       if(ev.dead){
@@ -968,7 +969,7 @@ function drawFlame(fx,fy2,t,seed){
 }
 function drawDebris(t){
   for(const d of debris){
-    if(d.x+d.w<camX-40||d.x>camX+W+40) continue;
+    if(d.x+d.w<camX+vx0-40||d.x>camX+vx1+40) continue;
     const fy=FY(d.f);
     // steady warm glow — baked sprite, no per-frame gradient
     ctx.drawImage(FX.fireGlow,d.x+d.w/2-110,fy-d.h-110,220,220);
@@ -991,7 +992,7 @@ function drawDebris(t){
 
 function drawChips(t){
   for(const c of chipsArr){
-    if(c.got||c.x+20<camX||c.x>camX+W+20) continue;
+    if(c.got||c.x+20<camX+vx0||c.x>camX+vx1+20) continue;
     const sq=Math.sin(t*5+c.x*0.02);
     ctx.save();
     ctx.translate(c.x,c.y+Math.sin(t*3+c.x*0.05)*4);
@@ -1458,6 +1459,7 @@ function resize(){
   cv.style.width=cw+'px'; cv.style.height=ch+'px';
   scale=Math.min(cw/W,ch/H);
   offX=(cw-W*scale)/2; offY=(ch-H*scale)/2;
+  vx0=-offX/scale; vy0=-offY/scale; vx1=W+offX/scale; vy1=H+offY/scale;
 }
 window.addEventListener('resize',resize); resize();
 

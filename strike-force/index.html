@@ -22,7 +22,7 @@
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
     -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
   html,body{height:100%;overflow:hidden;background:#03030b;font-family:var(--display);color:var(--txt);}
-  #app{position:fixed;top:0;left:50%;transform:translateX(-50%);height:100%;width:100%;max-width:520px;overflow:hidden;background:var(--bg);touch-action:none;}
+  #app{position:fixed;inset:0;height:100%;width:100%;overflow:hidden;background:var(--bg);touch-action:none;}
   canvas{display:block;position:absolute;inset:0;}
   .ui{position:absolute;inset:0;pointer-events:none;user-select:none;-webkit-user-select:none;}
   .ui *{pointer-events:auto;}
@@ -262,8 +262,8 @@ function genGround(){
   lastGroundX=nx;
 }
 function generate(){
-  while(lastGroundX<camX+W+900) genGround();
-  const cut=camX-420;
+  while(lastGroundX<camX+vx1+900) genGround();
+  const cut=camX+vx0-420;
   ground=ground.filter(s=>s.x1>cut);
   plats=plats.filter(s=>s.x1>cut);
   orbs=orbs.filter(o=>o.wx>cut&&!o.got);
@@ -337,15 +337,15 @@ const ETYPE={
 };
 function spawnEnemy(type){
   const d=ETYPE[type]; if(!d) return;
-  const sx=camX+W+50;
+  const sx=camX+vx1+50;   // just past the VISIBLE right edge — no pop-in on wide screens
   const e={type,wx:sx,wy:GY,vx:0,vy:0,hp:d.hp,fireCd:R(0.5,d.fire||2),telT:0,onGround:true,pl:null,ph:R(0,6.28),dead:false};
   if(type==='drone'){
-    e.wy=R(150,300); e.baseY=e.wy; e.onGround=false; e.wx=camX+W+R(20,90);
+    e.wy=R(150,300); e.baseY=e.wy; e.onGround=false; e.wx=camX+vx1+R(20,90);
   } else if(type==='gunner'||type==='gren'){
     // often on an upper platform (sniper) — uses the vertical space, forces diagonal aim
     if(Math.random()<0.6){
       let best=null;
-      for(const p of plats){ if(p.x1>camX+W-40 && p.x0<camX+W+260){ if(!best||p.x0<best.x0) best=p; } }
+      for(const p of plats){ if(p.x1>camX+vx1-40 && p.x0<camX+vx1+260){ if(!best||p.x0<best.x0) best=p; } }
       if(best){ e.wx=clamp(sx,best.x0+30,best.x1-30); e.wy=best.y; e.pl=best; }
     }
     const gs=groundSegAt(e.wx); if(!e.pl && !gs){ const ns=ground.find(s=>s.x0>e.wx); if(ns) e.wx=ns.x0+40; }
@@ -451,7 +451,7 @@ function updatePB(dt){
   for(const b of pB){
     b.wx+=b.vx*dt; b.wy+=b.vy*dt; b.t-=dt;
     const sx=b.wx-camX;
-    if(sx<-30||sx>W+40||b.wy<-40||b.wy>H+40||b.t<=0){ b.dead=true; continue; }
+    if(sx<vx0-30||sx>vx1+40||b.wy<vy0-40||b.wy>vy1+40||b.t<=0){ b.dead=true; continue; }
     // vs enemies
     for(const e of enemies){
       const d=ETYPE[e.type]; const top=e.wy-d.h;
@@ -658,7 +658,7 @@ function updateBB(dt){
   for(const b of bB){
     if(b.seek){ const dy=b.laneY-b.y; if(Math.abs(dy)<10){ b.y=b.laneY; b.seek=0; } else b.y+=Math.sign(dy)*Math.min(Math.abs(dy),1400*dt); }
     b.x+=b.vx*dt; b.y+=b.vy*dt;
-    if(b.x<-40||b.x>W+60||b.y>H+40||b.y<-60){ b.dead=true; continue; }
+    if(b.x<vx0-40||b.x>vx1+60||b.y>vy1+40||b.y<vy0-60){ b.dead=true; continue; }
     if(invulnT<=0 && hitPlayer(b.x,b.y,b.r)){ b.dead=true; hurt(false); }
     if(b.missile||b.cannon){ if(Math.random()<0.6) parts.push({wx:b.x,wy:b.y,vx:R(-10,30),vy:R(-20,20),r:R(2,4),c:'#ff9a5a',t:.22,scr:true}); }
   }
@@ -868,37 +868,37 @@ buildSky();
 function sc(wx){ return wx-camX; }
 
 function drawBg(){
-  ctx.fillStyle=skyGrad; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=skyGrad; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0);
   // distant glow horizon
   ctx.save(); ctx.globalAlpha=.5;
   const gg=ctx.createRadialGradient(W*0.7,H*0.72,20,W*0.7,H*0.72,320);
   gg.addColorStop(0,'rgba(255,90,60,.30)'); gg.addColorStop(1,'rgba(255,90,60,0)');
-  ctx.fillStyle=gg; ctx.fillRect(0,0,W,H); ctx.restore();
+  ctx.fillStyle=gg; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0); ctx.restore();
   // far skyline (parallax .16)
-  const off1=(camX*0.16)%140;
+  const off1=(camX*0.16)%140, botExt=Math.max(0,vy1-H);
   ctx.fillStyle='#120a24';
-  for(let i=-1;i<W/140+2;i++){ const x=i*140-off1; const seed=Math.floor((camX*0.16+i*140)/140);
-    const bh=110+((seed*53)%70); ctx.fillRect(x,H-150-bh,96,bh+150); }
+  for(let i=Math.floor(vx0/140)-1;i<vx1/140+2;i++){ const x=i*140-off1; const seed=Math.floor((camX*0.16+i*140)/140);
+    const bh=110+((seed*53)%70); ctx.fillRect(x,H-150-bh,96,bh+150+botExt); }
   // window speckle far
   ctx.fillStyle='rgba(255,150,90,.10)';
-  const off1b=(camX*0.16)%28;
-  for(let x=-28;x<W+28;x+=28) for(let y=H-330;y<H-160;y+=26){ if(((x+off1b+y)|0)%3===0) ctx.fillRect(x-off1b+6,y,4,6); }
+  const off1b=(camX*0.16)%28, sx0=Math.floor((vx0-28)/28)*28;
+  for(let x=sx0;x<vx1+28;x+=28) for(let y=H-330;y<H-160;y+=26){ if(((x+off1b+y)|0)%3===0) ctx.fillRect(x-off1b+6,y,4,6); }
   // mid buildings (parallax .42)
   const off2=(camX*0.42)%180;
   ctx.fillStyle='#1c0f2c';
-  for(let i=-1;i<W/180+2;i++){ const x=i*180-off2; const seed=Math.floor((camX*0.42+i*180)/180);
-    const bh=150+((seed*97)%120); ctx.fillRect(x,H-140-bh,120,bh+140);
+  for(let i=Math.floor(vx0/180)-1;i<vx1/180+2;i++){ const x=i*180-off2; const seed=Math.floor((camX*0.42+i*180)/180);
+    const bh=150+((seed*97)%120); ctx.fillRect(x,H-140-bh,120,bh+140+botExt);
     ctx.fillStyle='rgba(255,90,120,.12)'; ctx.fillRect(x+10,H-140-bh+8,3,bh);
     ctx.fillStyle='#1c0f2c'; }
 }
 function drawGround(){
   // pits are dark; segments drawn as slabs with a neon top edge
   for(const s of ground){
-    const x0=sc(s.x0), x1=sc(s.x1); if(x1<-20||x0>W+20) continue;
+    const x0=sc(s.x0), x1=sc(s.x1); if(x1<vx0-20||x0>vx1+20) continue;
     const w=x1-x0;
     // body
     const g=ctx.createLinearGradient(0,GY,0,H); g.addColorStop(0,'#241436'); g.addColorStop(1,'#120a1e');
-    ctx.fillStyle=g; ctx.fillRect(x0,GY,w,H-GY);
+    ctx.fillStyle=g; ctx.fillRect(x0,GY,w,vy1-GY);
     // neon top edge
     ctx.fillStyle='#ff6a3d'; ctx.fillRect(x0,GY-3,w,3);
     ctx.fillStyle='rgba(255,120,70,.35)'; ctx.fillRect(x0,GY-6,w,3);
@@ -908,7 +908,7 @@ function drawGround(){
   }
   // upper platforms
   for(const p of plats){
-    const x0=sc(p.x0), x1=sc(p.x1); if(x1<-20||x0>W+20) continue;
+    const x0=sc(p.x0), x1=sc(p.x1); if(x1<vx0-20||x0>vx1+20) continue;
     const w=x1-x0;
     ctx.fillStyle='#2a1840'; ctx.fillRect(x0,p.y,w,12);
     ctx.fillStyle='#5fe0ff'; ctx.fillRect(x0,p.y-2,w,2);
@@ -919,13 +919,13 @@ function drawGround(){
   }
 }
 function drawOrbs(){
-  for(const o of orbs){ if(o.got) continue; const x=sc(o.wx); if(x<-20||x>W+20) continue;
+  for(const o of orbs){ if(o.got) continue; const x=sc(o.wx); if(x<vx0-20||x>vx1+20) continue;
     const pz=1+Math.sin((camX*0.02+o.wx*0.05))*0.15;
     ctx.fillStyle='rgba(255,194,51,.3)'; ctx.beginPath(); ctx.arc(x,o.wy,11*pz,0,6.28); ctx.fill();
     ctx.fillStyle='#ffb01f'; ctx.beginPath(); ctx.arc(x,o.wy,6.5*pz,0,6.28); ctx.fill();
     ctx.fillStyle='#ffe07a'; ctx.beginPath(); ctx.arc(x-1.2,o.wy-1.2,2.4,0,6.28); ctx.fill();
   }
-  for(const c of caps){ const x=sc(c.wx); if(x<-20||x>W+20) continue;
+  for(const c of caps){ const x=sc(c.wx); if(x<vx0-20||x>vx1+20) continue;
     const s=1+Math.sin(c.ph)*0.08;
     ctx.save(); ctx.translate(x,c.wy); ctx.scale(s,s);
     ctx.fillStyle='rgba(57,255,160,.35)'; rr(-13,-13,26,26,7); ctx.fill();
@@ -937,7 +937,7 @@ function drawOrbs(){
 }
 function drawEnemies(){
   for(const e of enemies){
-    const d=ETYPE[e.type]; const x=sc(e.wx); if(x<-40||x>W+40) continue;
+    const d=ETYPE[e.type]; const x=sc(e.wx); if(x<vx0-40||x>vx1+40) continue;
     const y=e.wy;                       // feet
     const tel = e.telT>0 ? (1-e.telT/(d.tel||1)) : 0;
     ctx.save(); ctx.translate(x,y);
@@ -981,7 +981,7 @@ function drawEnemies(){
   }
 }
 function drawGrenades(){
-  for(const g of grenades){ const x=sc(g.wx); if(x<-20||x>W+20) continue;
+  for(const g of grenades){ const x=sc(g.wx); if(x<vx0-20||x>vx1+20) continue;
     ctx.fillStyle='rgba(255,210,77,.3)'; ctx.beginPath(); ctx.arc(x,g.wy,11,0,6.28); ctx.fill();
     ctx.fillStyle='#ffd24d'; ctx.beginPath(); ctx.arc(x,g.wy,6,0,6.28); ctx.fill();
     ctx.fillStyle='#3a2a06'; ctx.fillRect(x-2,g.wy-9,4,4);
@@ -1025,7 +1025,7 @@ function drawTelegraphs(){
   if(boss.pat==='missiles' && !boss.mFired && boss.patPh>0.2){
     const a=0.3+Math.sin(boss.patPh*12)*0.25;
     ctx.strokeStyle=`rgba(255,61,110,${a})`; ctx.lineWidth=3; ctx.setLineDash([12,10]);
-    for(const ly of boss.lanes){ ctx.beginPath(); ctx.moveTo(0,ly); ctx.lineTo(boss.x-40,ly); ctx.stroke(); }
+    for(const ly of boss.lanes){ ctx.beginPath(); ctx.moveTo(vx0,ly); ctx.lineTo(boss.x-40,ly); ctx.stroke(); }
     ctx.setLineDash([]);
   }
   if(boss.pat==='cannon' && !boss.cFired && boss.patPh>0.15){
@@ -1210,16 +1210,18 @@ function render(){
 
   if(state==='play'||state==='dead') drawHUD();
 
-  if(flashT>0){ ctx.globalAlpha=Math.min(0.6,flashT*3.5); ctx.fillStyle=flashCol; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
+  if(flashT>0){ ctx.globalAlpha=Math.min(0.6,flashT*3.5); ctx.fillStyle=flashCol; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0); ctx.globalAlpha=1; }
 }
 
 /* ================================================================= sizing / loop */
 let dpr=1, scale=1, offX=0, offY=0;
+let vx0=0, vy0=0, vx1=W, vy1=H;   // visible logical rect — design rect plus whatever the window shape adds
 function resize(){
   dpr=Math.min(window.devicePixelRatio||1,2);
   const cw=app.clientWidth, ch=app.clientHeight;
   cv.width=cw*dpr; cv.height=ch*dpr; cv.style.width=cw+'px'; cv.style.height=ch+'px';
   scale=Math.min(cw/W,ch/H); offX=(cw-W*scale)/2; offY=(ch-H*scale)/2;
+  vx0=-offX/scale; vy0=-offY/scale; vx1=W+offX/scale; vy1=H+offY/scale;
   buildSky();
 }
 window.addEventListener('resize',resize); resize();
@@ -1234,7 +1236,6 @@ function frame(nw){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.fillStyle='#03030b'; ctx.fillRect(0,0,cv.width,cv.height);
   ctx.setTransform(scale*dpr,0,0,scale*dpr,offX*dpr,offY*dpr);
-  ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
   try{ render(); }catch(err){ console.error('render',err); }
 }
 requestAnimationFrame(frame);

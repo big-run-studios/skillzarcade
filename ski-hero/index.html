@@ -22,7 +22,7 @@
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
     -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
   html,body{height:100%;overflow:hidden;background:#7fcff0;font-family:var(--display);color:var(--txt);}
-  #app{position:fixed;top:0;left:50%;transform:translateX(-50%);height:100%;width:100%;max-width:520px;overflow:hidden;background:var(--bg);touch-action:none;}
+  #app{position:fixed;inset:0;height:100%;width:100%;overflow:hidden;background:var(--bg);touch-action:none;}
   canvas{display:block;position:absolute;inset:0;}
   .ui{position:absolute;inset:0;pointer-events:none;user-select:none;-webkit-user-select:none;}
   .ui *{pointer-events:auto;}
@@ -809,7 +809,7 @@ function buildSky(){ skyGrad=ctx.createLinearGradient(0,0,0,H);
 buildSky();
 
 function drawSky(){
-  ctx.fillStyle=skyGrad; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=skyGrad; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0);
   // sun
   const sx=W*0.74, sy=H*0.17;
   let g=ctx.createRadialGradient(sx,sy,4,sx,sy,190);
@@ -826,14 +826,14 @@ function drawMountains(){
 function drawRidge(par, baseY, wl, amp, fill, rim, alpha){
   const ox=camX*par;
   ctx.save(); ctx.globalAlpha=alpha;
-  ctx.beginPath(); ctx.moveTo(0,H);
+  ctx.beginPath(); ctx.moveTo(vx0-40,vy1);
   const pts=[];
-  for(let sx=-40; sx<=W+40; sx+=14){
+  for(let sx=vx0-40; sx<=vx1+40; sx+=14){
     const wx=sx+ox;
     const y=baseY + Math.sin(wx/wl)*amp*0.5 + Math.sin(wx/(wl*0.37)+2)*amp*0.28 + Math.sin(wx/(wl*2.3))*amp*0.22;
     pts.push([sx,y]); ctx.lineTo(sx,y);
   }
-  ctx.lineTo(W+40,H); ctx.closePath();
+  ctx.lineTo(vx1+40,vy1); ctx.closePath();
   ctx.fillStyle=fill; ctx.fill();
   // neon rim light on the crest
   ctx.beginPath();
@@ -844,7 +844,7 @@ function drawRidge(par, baseY, wl, amp, fill, rim, alpha){
 
 function drawTerrain(){
   const step=6;
-  const x0=camX-20, x1=camX+W/zoom+30;
+  const x0=camX+vx0/zoom-20, x1=camX+vx1/zoom+30;
   // build the surface polyline
   const pts=[];
   for(let wx=x0; wx<=x1; wx+=step) pts.push([W2SX(wx), W2SY(terrainY(wx))]);
@@ -852,7 +852,7 @@ function drawTerrain(){
   ctx.beginPath();
   ctx.moveTo(pts[0][0], pts[0][1]);
   for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
-  ctx.lineTo(pts[pts.length-1][0], H+40); ctx.lineTo(pts[0][0], H+40); ctx.closePath();
+  ctx.lineTo(pts[pts.length-1][0], vy1+40); ctx.lineTo(pts[0][0], vy1+40); ctx.closePath();
   const g=ctx.createLinearGradient(0,W2SY(terrainY(px))-40,0,H);
   g.addColorStop(0,'#ffffff'); g.addColorStop(0.32,'#e6f4ff'); g.addColorStop(1,'#b8d8f4');
   ctx.fillStyle=g; ctx.fill();
@@ -879,7 +879,7 @@ function drawSigns(x0,x1){
   // distance markers every 250 m (every 1000 m is a bigger gold sign)
   const SI=100, m0=Math.max(SI, Math.ceil(metres(x0)/SI)*SI), m1=metres(x1);
   for(let m=m0; m<=m1; m+=SI){
-    const wx=m*PX_PER_M+120, sx=W2SX(wx); if(sx<-40||sx>W+40) continue;
+    const wx=m*PX_PER_M+120, sx=W2SX(wx); if(sx<vx0-40||sx>vx1+40) continue;
     const sy=W2SY(terrainY(wx)), big=(m%500===0);
     ctx.strokeStyle='rgba(40,70,110,.5)'; ctx.lineWidth=4*zoom;
     ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx,sy-54*zoom); ctx.stroke();
@@ -893,7 +893,7 @@ function drawSigns(x0,x1){
   // "MEGA RAMP" warning just ahead of each ramp entry
   for(let idx=0;;idx++){
     const rx=RAMP0+idx*RAMP_RI; if(rx>x1+300) break; if(rx<x0-300) continue;
-    const sx=W2SX(rx-300), sy=W2SY(terrainY(rx-300)); if(sx<-80||sx>W+80) continue;
+    const sx=W2SX(rx-300), sy=W2SY(terrainY(rx-300)); if(sx<vx0-80||sx>vx1+80) continue;
     ctx.fillStyle='#ff4fd8'; ctx.shadowColor='#ff4fd8'; ctx.shadowBlur=12;
     ctx.font='900 '+(12*zoom)+'px Orbitron';
     ctx.fillText('▼ MEGA RAMP ▼', sx, sy-46*zoom); ctx.shadowBlur=0;
@@ -915,7 +915,7 @@ function drawTrail(){
 }
 
 function drawParts(){
-  for(const p of parts){ const x=W2SX(p.wx), y=W2SY(p.wy); if(x<-30||x>W+30) continue;
+  for(const p of parts){ const x=W2SX(p.wx), y=W2SY(p.wy); if(x<vx0-30||x>vx1+30) continue;
     ctx.globalAlpha=clamp(p.t*2.2,0,1); ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(x,y,p.r*zoom,0,TAU); ctx.fill(); }
   ctx.globalAlpha=1;
 }
@@ -1047,12 +1047,12 @@ function drawSpeedLines(){
   const intensity = trickMode?1: clamp((spd-360)/300,0,1);
   if(intensity<=0.02 && !trickMode) return;
   ctx.save(); ctx.strokeStyle=trickMode?'rgba(255,79,216,.4)':'rgba(255,255,255,.5)'; ctx.lineWidth=2; ctx.lineCap='round';
-  const n=trickMode?9:5;
+  const n=trickMode?9:5, vw=vx1-vx0, vh=vy1-vy0;
   for(let i=0;i<n;i++){
     const seed=i*97.3;
-    const yy=((seed*7 + speedPh*90*(0.6+((i%3)*0.3)))%(H+60))-30;
+    const yy=vy0+((seed*7 + speedPh*90*(0.6+((i%3)*0.3)))%(vh+60))-30;
     const len=40+((i*53)%60);
-    const xx=((seed*13 - speedPh*160)%(W+120))-60;
+    const xx=vx0+((seed*13 - speedPh*160)%(vw+120))-60;
     ctx.globalAlpha=(trickMode?0.5:0.4)*(0.5+((i%2)*0.5));
     ctx.beginPath(); ctx.moveTo(xx+len,yy); ctx.lineTo(xx,yy+6); ctx.stroke();
   }
@@ -1162,7 +1162,7 @@ function render(){
   ctx.restore();
 
   // flash
-  if(flashT>0){ ctx.globalAlpha=clamp(flashT*2.2,0,0.5); ctx.fillStyle=flashCol; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
+  if(flashT>0){ ctx.globalAlpha=clamp(flashT*2.2,0,0.5); ctx.fillStyle=flashCol; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0); ctx.globalAlpha=1; }
 
   // DOM-free canvas HUD (score, mult, timer, distance, callouts all live in the canvas)
   if(state==='play'){ drawHudCanvas(); }
@@ -1170,11 +1170,13 @@ function render(){
 
 /* ================================================================= sizing / loop */
 let dpr=1, scale=1, offX=0, offY=0;
+let vx0=0, vy0=0, vx1=W, vy1=H;   // visible logical rect — the design rect W×H plus whatever the window shape adds
 function resize(){
   dpr=Math.min(window.devicePixelRatio||1,2);
   const cw=app.clientWidth, ch=app.clientHeight;
   cv.width=cw*dpr; cv.height=ch*dpr; cv.style.width=cw+'px'; cv.style.height=ch+'px';
   scale=Math.min(cw/W,ch/H); offX=(cw-W*scale)/2; offY=(ch-H*scale)/2;
+  vx0=-offX/scale; vy0=-offY/scale; vx1=W+offX/scale; vy1=H+offY/scale;
   buildSky();
 }
 window.addEventListener('resize',resize); resize();
@@ -1189,7 +1191,6 @@ function frame(nw){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.fillStyle='#7fcff0'; ctx.fillRect(0,0,cv.width,cv.height);
   ctx.setTransform(scale*dpr,0,0,scale*dpr,offX*dpr,offY*dpr);
-  ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
   try{ animDbg.on ? renderAnimDbg(dt) : render(); }catch(err){ console.error('render',err); }
 }
 requestAnimationFrame(frame);

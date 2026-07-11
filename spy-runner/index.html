@@ -57,8 +57,8 @@
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overflow:hidden;background:#02030c;font-family:var(--display);color:var(--txt);}
-  /* Locked portrait play column — keeps the 3D view & UI from stretching/overflowing in landscape & on desktop */
-  #app{position:fixed;top:0;left:50%;transform:translateX(-50%);height:100%;width:100%;max-width:520px;overflow:hidden;background:var(--bg);}
+  /* Full-bleed play area — the 3D camera adapts its aspect to the window */
+  #app{position:fixed;inset:0;height:100%;width:100%;overflow:hidden;background:var(--bg);}
   #game{position:absolute;inset:0;}
   canvas{display:block;}
   .ui{position:absolute;inset:0;pointer-events:none;user-select:none;}
