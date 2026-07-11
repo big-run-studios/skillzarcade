@@ -45,7 +45,9 @@
     #msgSub{font-size:15px;}
     #actions{gap:12px;padding-left:16px;padding-right:16px;}
     .btn{font-size:18px;padding:18px 8px;border-radius:16px;}
-    .btn.ghost{flex:0 0 110px;}
+    #rackBar{margin-bottom:18px;}
+    #rackHint{font-size:12px;}
+    .rbtn{font-size:15px;padding:12px 20px;border-radius:12px;}
     .rules{font-size:17px;max-width:430px;}
     .warnbox{font-size:14px;max-width:460px;}
     .bigbtn{font-size:21px;padding:20px 60px;}
@@ -113,6 +115,13 @@
 
   /* ---------- rack ---------- */
   #rackZone{padding:6px 12px 2px;}
+  #rackBar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 auto 14px;}
+  #rackHint{font-family:var(--display);font-weight:700;font-size:9px;letter-spacing:1.2px;color:var(--dim);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;flex:1;}
+  .rbtn{font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:.8px;padding:9px 12px;border-radius:10px;
+    border:1.5px solid rgba(255,194,51,.55);background:rgba(14,58,40,.95);color:var(--gold);cursor:pointer;flex:none;
+    box-shadow:0 3px 0 rgba(0,0,0,.35);transition:transform .08s;}
+  .rbtn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.35);}
   #rack{position:relative;margin:0 auto;touch-action:none;}
   #rack::before{content:"";position:absolute;inset:-8px -8px -6px;border-radius:14px;
     background:linear-gradient(180deg,#1a4733,#0d2c1e);border:1.5px solid rgba(255,194,51,.25);
@@ -239,13 +248,18 @@
 
   <div id="msg"><div><div id="msgTxt"></div><div id="msgSub"></div></div></div>
 
-  <div id="rackZone"><div id="rack"></div></div>
+  <div id="rackZone">
+    <div id="rackBar">
+      <button class="rbtn" id="sortBtn">⇅ SORT</button>
+      <span id="rackHint">DRAG TO ARRANGE</span>
+      <button class="rbtn" id="cardBtn">🀄 CARD</button>
+    </div>
+    <div id="rack"></div>
+  </div>
 
   <div id="actions">
     <div class="arow">
-      <button class="btn ghost" id="sortBtn">SORT</button>
       <button class="btn" id="mainBtn" disabled>PASS 3 TILES</button>
-      <button class="btn ghost" id="cardBtn">CARD</button>
     </div>
     <div class="arow" id="crashRow" style="display:none;">
       <button class="btn gold" id="cashBtn">CASH OUT $100</button>
@@ -745,6 +759,7 @@ function sizeRack(){
   rackW=7*TW+6*GAP;
   rackEl.style.width=rackW+'px';
   rackEl.style.height=(2*TH+GAP)+'px';
+  $('rackBar').style.width=Math.min(rackW+16, de.clientWidth-24)+'px';
   for(const t of S.rack){
     t.el.style.width=TW+'px'; t.el.style.height=TH+'px';
     t.el.querySelector('.tbig').style.fontSize=Math.round(TW*.52)+'px';
