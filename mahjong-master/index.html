@@ -253,6 +253,8 @@
   <div id="toast"></div>
 </div>
 
+<audio id="music" src="music.mp3" loop preload="auto"></audio>
+
 <script>
 'use strict';
 /* =====================================================================
@@ -585,6 +587,7 @@ function deal(){
   $('cdots').style.display='flex';
   $('cands').style.display='block';
   updatePhaseUI(); recompute(); sDeal();
+  try{music.currentTime=0;}catch(e){} musicSet(true);   // restart the track each run
   setMsg('Study your rack, then pass 3 tiles.','Tap tiles to select · drag to rearrange · no clock yet');
 }
 function doPass(){
@@ -701,6 +704,7 @@ function endRun(kind){
       +(near?('<br>Closest: <span class="pat">'+patternHTML(near)+'</span>'+near._dist+' tile'+(near._dist>1?'s':'')+' away'):'');
     sFail();
   }
+  if(kind==='timeout'||kind==='invalid') musicSet(false);   // music rides win/cash-out, dies on a crash
   $('bankChip').textContent='BANK $'+S.bank;
   setTimeout(()=>$('resOv').classList.add('show'),400);
 }
@@ -810,6 +814,14 @@ function toastMsg(m){
 }
 
 /* ================= sound ================= */
+// music track — starts on deal, loops, rides the win/cash-out card; stops on a crash
+const music=document.getElementById('music');
+let musicOn=false;
+function musicSet(on){
+  musicOn=on;
+  if(on){ music.volume=0.45; music.muted=S.muted; music.play().catch(()=>{}); }
+  else music.pause();
+}
 let AC=null;
 function ac(){ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); return AC; }
 function tone(f,dur,type,gain,delay){
@@ -846,6 +858,8 @@ $('muteBtn').addEventListener('click',()=>{
   S.muted=!S.muted;
   localStorage.setItem('mm_mute',S.muted?'1':'0');
   $('muteBtn').textContent=S.muted?'🔇':'🔊';
+  music.muted=S.muted;
+  if(!S.muted && musicOn) music.play().catch(()=>{});
 });
 window.addEventListener('resize',sizeRack);
 
