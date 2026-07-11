@@ -304,7 +304,7 @@
       never in pairs or singles.<br>
       Then <b>120 seconds</b>: your score starts at <b>10,000</b><br>
       and falls 10/sec, −100 per tile swap.<br>
-      <b>MAHJONG</b> pays your score <b>×1000</b>.<br>
+      <b>MAHJONG</b> pays the hand's point value <b>×1000</b>.<br>
       <b>CASH OUT</b> bonus: 1 away <b>+10,000</b> ·<br>
       2 away <b>+5,000</b> · 3 away <b>+1,000</b>.<br>
       4+ away, invalid hand or time up = <b>ZERO</b>.
@@ -967,15 +967,16 @@ function tick(){
   $('timerWrap').classList.toggle('low',S.remain<=30);
   const sc=score(), b=cashBonus(bestDist());
   $('cashBtn').textContent = b===null ? 'CASH OUT — 4+ AWAY' : 'CASH OUT '+fmt(sc+b);
-  if(S.match) $('submitBtn').textContent='MAHJ! ✓ '+fmt(sc*1000);
+  if(S.match) $('submitBtn').textContent='MAHJ! ✓ '+fmt(S.match.val*1000);
   if(S.remain<=10 && Math.ceil(S.remain)!==S._lastTickS){ S._lastTickS=Math.ceil(S.remain); sTick(); }
   if(S.remain<=0) endRun('timeout');
 }
 /* ---- scoring ----
    Score starts at 10,000 when the clock starts, falls 10/sec and 100
-   per swap. Mahjong pays score x1000. Cash out pays score + closeness
-   bonus (1 away +10k, 2 away +5k, 3 away +1k); 4+ away pays ZERO, as
-   do invalid submits and timeouts. */
+   per swap. Mahjong pays the HAND's point value x1000 (25pt hand =
+   25,000 ... 75pt = 75,000). Cash out pays score + closeness bonus
+   (1 away +10k, 2 away +5k, 3 away +1k); 4+ away pays ZERO, as do
+   invalid submits and timeouts. */
 const scoreAt=(remain,draws)=> Math.max(0, 10000 - Math.floor(120-remain)*10 - draws*100);
 const score=()=> S.phase==='timed' ? scoreAt(S.remain,S.draws) : 0;
 const bestDist=()=> S.ranked.length ? S.ranked[0]._dist : 99;
@@ -1025,14 +1026,13 @@ function endRun(kind){
   T.classList.remove('crash');
   if(kind==='win'){
     const h=S.match;
-    const base=scoreAt(wasRemain,wasDraws);
-    const total=base*1000;
+    const total=h.val*1000;
     S.bank+=total;
     T.textContent='MAHJONG!';
     SC.textContent='+'+fmt(total);
     D.innerHTML='<span class="pat">'+patternHTML(h)+'</span>'
-      +h.cat+' · '+h.val+' point hand'+(h.con?' · concealed':'')
-      +'<br>score '+fmt(base)+' × <b style="color:var(--gold)">1000</b>'
+      +h.cat+(h.con?' · concealed':'')
+      +'<br>'+h.val+' point hand × <b style="color:var(--gold)">1000</b>'
       +' · '+wasRemain.toFixed(1)+'s left · '+wasDraws+' swap'+(wasDraws===1?'':'s');
     sWin();
   }else if(kind==='cash'){
@@ -1049,7 +1049,8 @@ function endRun(kind){
       T.textContent='CASHED OUT';
       SC.textContent='+'+fmt(p);
       D.innerHTML='score '+fmt(base)+' + <b style="color:var(--gold)">'+fmt(b)+'</b> for being '
-        +(d===0?'ready':d+' away')+'<br>with '+wasRemain.toFixed(1)+'s left. Mahjong would have paid '+fmt(base*1000)+'…';
+        +(d===0?'ready':d+' away')+'<br>with '+wasRemain.toFixed(1)+'s left. That hand would have paid '
+        +fmt((S.ranked[0]?S.ranked[0].val:25)*1000)+'…';
       sCash();
     }
   }else if(kind==='timeout'){
@@ -1092,7 +1093,7 @@ function updateButtons(){
   else if(S.phase==='timed') mb.disabled = S.sel.size!==1;
   else mb.disabled=true;
   const sb=$('submitBtn');
-  if(S.match){ sb.classList.add('match'); sb.textContent='MAHJ! ✓ '+fmt(score()*1000); }
+  if(S.match){ sb.classList.add('match'); sb.textContent='MAHJ! ✓ '+fmt(S.match.val*1000); }
   else{ sb.classList.remove('match'); sb.textContent='SUBMIT HAND'; }
 }
 function patternHTML(h){
