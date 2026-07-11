@@ -1057,16 +1057,20 @@ function endRun(kind){
       sCash();
     }
   }else if(kind==='timeout'){
+    const near=S.ranked[0], b2=near?cashBonus(near._dist):null;
     T.textContent='CRASHED'; T.classList.add('crash');
     SC.textContent='0';
-    D.innerHTML='Time expired before you submitted or cashed out.';
+    D.innerHTML='Time expired before you submitted or cashed out.'
+      +(b2!==null?'<br><b>You were '+(near._dist===0?'ready':near._dist+' away')+' — CASH OUT would have banked '
+        +fmt(scoreAt(0,wasDraws)+b2)+'.</b>':'');
     sFail();
   }else{
-    const near=S.ranked[0];
+    const near=S.ranked[0], b2=near?cashBonus(near._dist):null;
     T.textContent='CRASHED'; T.classList.add('crash');
     SC.textContent='0';
-    D.innerHTML='Your rack did not match any official 2026 hand.'
+    D.innerHTML='Your rack did not match any official 2026 hand — SUBMIT pays only with a complete hand.'
       +(near?('<br>Closest: <span class="pat">'+patternHTML(near)+'</span>'+near._dist+' tile'+(near._dist>1?'s':'')+' away'):'')
+      +(b2!==null?'<br><b>CASH OUT would have banked '+fmt(scoreAt(wasRemain,wasDraws)+b2)+' instead of 0.</b>':'')
       +(near&&near._jlock?'<br><b>Your joker was stuck in a pair/single slot — jokers only fill groups of 3+.</b>':'');
     sFail();
   }
