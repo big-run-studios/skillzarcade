@@ -35,6 +35,9 @@
   #scoreLbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--dim);}
   #scoreVal{font-size:32px;font-weight:800;letter-spacing:2px;color:var(--score);line-height:1.05;text-shadow:var(--score-glow);}
   #multRow{margin-top:2px;font-size:14px;font-weight:800;letter-spacing:1px;color:var(--gold);text-shadow:0 0 8px rgba(255,194,51,.6);transition:font-size .25s;}
+  #multWrap{width:96px;height:5px;border-radius:3px;background:rgba(255,255,255,.13);margin:4px auto 0;overflow:hidden;}
+  #multFill{height:100%;width:0%;background:linear-gradient(90deg,#ffc233,#ff8ad2);border-radius:3px;}
+  #multWrap.maxed #multFill{width:100%;background:linear-gradient(90deg,#ffe14d,#ff3d9a,#5fe0ff);}
   #scoreBox.shatter{animation:shatter .9s forwards;}
   @keyframes shatter{
     15%{transform:translateX(-50%) rotate(3deg);}
@@ -49,13 +52,6 @@
   #weapLv{font-size:11px;font-weight:800;color:var(--gold);margin-left:6px;}
   #mastWrap{margin-top:5px;height:6px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden;}
   #mastFill{height:100%;width:0%;background:linear-gradient(90deg,#5fe0ff,#b06cff);border-radius:4px;transition:width .15s;}
-
-  /* combo pill (bottom-right, above cash) */
-  #comboPill{position:absolute;right:12px;bottom:calc(max(16px,env(safe-area-inset-bottom)) + 84px);
-    background:var(--panel);border:2px solid var(--gold);border-radius:14px;padding:9px 13px;text-align:center;
-    font-size:13px;font-weight:900;color:var(--gold);text-shadow:0 0 8px rgba(255,194,51,.6);opacity:0;transition:opacity .2s;}
-  #comboPill.on{opacity:1;}
-  #comboPill small{display:block;font-size:8.5px;letter-spacing:2px;color:var(--dim);margin-top:2px;}
 
   #backArcade{position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;z-index:25;width:44px;height:44px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:27px;font-weight:800;line-height:1;padding-bottom:4px;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
   #muteBtn{position:absolute;top:max(14px,env(safe-area-inset-top));right:14px;z-index:25;width:44px;height:44px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:19px;line-height:1;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
@@ -129,10 +125,10 @@
       <div id="scoreBox">
         <div id="scoreLbl">LIVE SCORE · AT RISK</div>
         <div id="scoreVal">0</div>
-        <div id="multRow">×1.0</div>
+        <div id="multRow">×1</div>
+        <div id="multWrap"><div id="multFill"></div></div>
       </div>
       <div id="weapPill"><span id="weapName">PRISM BOW</span><span id="weapLv">LV 1</span><div id="mastWrap"><div id="mastFill"></div></div></div>
-      <div id="comboPill"><span id="comboVal">×1.25</span><small id="comboSub">12 COMBO</small></div>
     </div>
 
     <div id="lvlBanner" class="banner"></div>
@@ -174,7 +170,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.4.0</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.5.0</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -195,37 +191,42 @@ const CFG={
   pickupR:34, lemonStand:230,
   cashUnlock:15, cashHold:0.6,
   gateFirst:30, gateEvery:26, gateDur:6, gateBonus:0.10,
-  multCurve:[[0,1],[20,1.5],[40,2.5],[60,4],[90,7],[120,12]], multLateGrow:1.022,
-  combo:[[0,1],[10,1.25],[25,1.5],[50,2],[100,2.5]], comboWindow:3.0,
+  multBar:[15,25,35,50], multMax:5,   // kills to climb ×1→×2→…→×5; any hit resets to ×1
   maxEnemies:120,
-  hpScaleStart:35, hpScaleRate:0.016,
+  hpScaleStart:25, hpScaleRate:0.018,
   spdScaleStart:90, spdScaleRate:0.0045,
   eliteStart:55, eliteBase:0.08, eliteGrow:0.002, eliteHp:2.5, eliteSpd:1.15, eliteScore:3,
   wpFirst:12, wpEvery:14, wpLife:14, wpMax:2,
   slamStart:40, slamMinGap:26, slamLife:14, slamDmg:60,
-  budgetBase:3, budgetRate:0.12, budgetLate:0.08,
-  waveIntMax:6.2, waveIntMin:3.2, waveIntRate:0.022,
+  budgetBase:3, budgetRate:0.15, budgetLate:0.09,
+  waveIntMax:5.2, waveIntMin:2.6, waveIntRate:0.03,
   waveScaleCap:3.2,
   spawnMinDist:430,
 };
 
 /* weapons — 3 fully built; the table shape supports all 10 later */
-/* steep mastery curve: L2 is an investment, L3 is a journey — dupe pickups (+60% of the bar) matter */
+/* 9 levels per weapon, evolutions at 3/6/9 (four states; L9 = multi-attack, 3× projectiles).
+   Mastery is a logarithmic-feel curve: dirt-cheap early (L3 arrives fast), then each step
+   costs ~1.6× the last — L9 is the run-defining journey. mast[i] = xp for level i+1 → i+2. */
 const WEAP={
-  bow:  {name:'PRISM BOW',       lvName:['BRIGHT ARROW','SPLIT SHOT','RAINBOW VOLLEY'],   mast:[90,220], cd:[0.42,0.40,0.38]},
-  gat:  {name:'GLITTER GATLING', lvName:['GLITTER STREAM','SPARK BARRAGE','DISCO INFERNO'],mast:[100,240],cd:[0.085,0.068,0.055]},
-  bomb: {name:'SPARKLE BOMBS',   lvName:['GLITTER BOMB','CLUSTER BOMB','CELEBRATION CANNON'],mast:[80,200],cd:[0.9,0.85,0.8]},
+  bow:  {name:'PRISM BOW',       lvName:['BRIGHT ARROW','SPLIT SHOT','RAINBOW VOLLEY','PRISM STORM'],
+         mast:[6,10,16,26,42,68,110,180],  cd:[0.42,0.40,0.38,0.36]},
+  gat:  {name:'GLITTER GATLING', lvName:['GLITTER STREAM','SPARK BARRAGE','DISCO INFERNO','GALAXY BARRAGE'],
+         mast:[7,11,18,29,46,75,120,195],  cd:[0.085,0.07,0.058,0.052]},
+  bomb: {name:'SPARKLE BOMBS',   lvName:['GLITTER BOMB','CLUSTER BOMB','CELEBRATION CANNON','GRAND FINALE'],
+         mast:[5,9,15,24,39,63,100,165],   cd:[0.9,0.85,0.8,0.75]},
 };
+const weapState=lv=>lv>=9?3:lv>=6?2:lv>=3?1:0;
 const WKEYS=Object.keys(WEAP);
 
 /* fruit roster — prototype five (+ melon slices) */
 const FRUIT={
-  grape: {r:9, hp:2.4, spd:52, dmg:5, cd:0.9, score:15, xp:1,  threat:1,  col:'#b06cff', dark:'#5a2a9a'},
-  straw: {r:11,hp:3.4, spd:96, dmg:7, cd:0.9, score:25, xp:2,  threat:2,  col:'#ff4d6e', dark:'#a01f3a'},
-  lemon: {r:13,hp:7,   spd:60, dmg:0, cd:0,   score:40, xp:3,  threat:4,  col:'#ffe14d', dark:'#b8930f'},
-  orange:{r:19,hp:30,  spd:30, dmg:14,cd:1.1, score:80, xp:6,  threat:6,  col:'#ff9a2e', dark:'#b05e10', kbRes:0.85},
-  melon: {r:31,hp:110, spd:16, dmg:20,cd:1.2, score:300,xp:14, threat:15, col:'#3ddc74', dark:'#1b7a42', kbRes:0.9, big:1},
-  slice: {r:12,hp:9,   spd:74, dmg:9, cd:0.9, score:40, xp:3,  threat:3,  col:'#ff5a7a', dark:'#2a9a52'},
+  grape: {r:9, hp:2.4, spd:70, dmg:5, cd:0.9, score:15, xp:1,  threat:1,  col:'#b06cff', dark:'#5a2a9a'},
+  straw: {r:11,hp:3.4, spd:120,dmg:7, cd:0.9, score:25, xp:2,  threat:2,  col:'#ff4d6e', dark:'#a01f3a'},
+  lemon: {r:13,hp:7,   spd:78, dmg:0, cd:0,   score:40, xp:3,  threat:4,  col:'#ffe14d', dark:'#b8930f'},
+  orange:{r:19,hp:30,  spd:46, dmg:14,cd:1.1, score:80, xp:6,  threat:6,  col:'#ff9a2e', dark:'#b05e10', kbRes:0.85},
+  melon: {r:31,hp:110, spd:26, dmg:20,cd:1.2, score:300,xp:14, threat:15, col:'#3ddc74', dark:'#1b7a42', kbRes:0.9, big:1},
+  slice: {r:12,hp:9,   spd:95, dmg:9, cd:0.9, score:40, xp:3,  threat:3,  col:'#ff5a7a', dark:'#2a9a52'},
 };
 
 /* structures — curated plaza layout for the 3000×2300 grounds; rect footprints, iso-extruded boxes */
@@ -275,9 +276,9 @@ function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h
 
 /* ================================================================= state */
 let state='menu';           // menu | play | cashing | dying | over | cashed
-let time=0, runT=0, mult=1, score=0, best=+(store.get('uni_best')||0);
+let time=0, runT=0, score=0, best=+(store.get('uni_best')||0);
+let mult=1, multProg=0;      // kill-combo multiplier: fill the bar to step ×1→×5, any hit resets
 let hp=CFG.maxHp, invulnT=0, hurtFx=0;
-let combo=0, comboT=0;
 let shake=0, flashT=0, flashCol='#fff';
 let slowT=0, slowF=1, paused=false, dbg=false, fps=60;
 let seqT=0, shattered=false, secured=0, gateWin=false;
@@ -304,7 +305,7 @@ let slamState=null, slamT=0;
 let cashHeld=false, cashT=0, cashTick=0;
 
 // stats
-let kills=0, eliteKills=0, maxCombo=0, weaponsUsed=null;
+let kills=0, eliteKills=0, maxMult=1, weaponsUsed=null;
 
 /* ================================================================= audio (synth sfx) */
 let muted=store.get('uni_mute')==='1';
@@ -326,6 +327,7 @@ function sfx(k){
   else if(k==='seed') tone('triangle',520,240,0,.12,.035);
   else if(k==='lvl'){ tone('sine',520,0,0,.09,.06); tone('sine',780,0,.09,.09,.06); tone('sine',1170,0,.18,.16,.07);}
   else if(k==='equip'){tone('sine',660,0,0,.08,.06); tone('sine',990,0,.08,.14,.06);}
+  else if(k==='multup'){tone('sine',620,0,0,.08,.05); tone('sine',930,0,.08,.09,.05); tone('sine',1240,0,.16,.14,.06);}
   else if(k==='slamUp'){tone('sine',200,900,0,.4,.07);}
   else if(k==='slam'){ tone('sawtooth',120,30,0,.5,.14); tone('sine',60,28,0,.45,.12);}
   else if(k==='thud'){ tone('sawtooth',110,40,0,.2,.09);}
@@ -349,13 +351,6 @@ applyMute();
 /* ================================================================= scaling helpers */
 const hpMul =()=>1+Math.max(0,runT-CFG.hpScaleStart)*CFG.hpScaleRate;
 const spdMul=()=>1+Math.max(0,runT-CFG.spdScaleStart)*CFG.spdScaleRate;
-function multAt(t){
-  const c=CFG.multCurve, last=c[c.length-1];
-  if(t>=last[0]) return last[1]*Math.pow(CFG.multLateGrow,t-last[0]);
-  for(let i=1;i<c.length;i++){ if(t<c[i][0]){ const a=c[i-1],b=c[i]; return a[1]+(b[1]-a[1])*(t-a[0])/(b[0]-a[0]); } }
-  return 1;
-}
-function comboMult(){ let m=1; for(const [k,v] of CFG.combo){ if(combo>=k) m=v; } return m; }
 function phaseName(){ return runT<20?'FRESH FRUIT':runT<45?'FRUIT SALAD':runT<75?'RIPE & DANGEROUS':runT<110?'OVERRIPE':'THE BLENDER'; }
 function slowmo(t,f){ slowT=Math.max(slowT,t); slowF=f; }
 function flash(c,d){ flashCol=c; flashT=d||0.12; }
@@ -410,6 +405,7 @@ function spawnAt(type,x,y,forceElite){
   if(!elite && type!=='grape' && type!=='slice' && type!=='melon' && runT>CFG.eliteStart)
     elite=Math.random()<CFG.eliteBase+(runT-CFG.eliteStart)*CFG.eliteGrow;
   const e={type,x,y,hp:d.hp*hpMul()*(elite?CFG.eliteHp:1),maxhp:0,elite,r:d.r,
+    sv:R(0.85,1.2),   // per-unit speed personality — no two fruit run alike
     kx:0,ky:0,atkCd:R(0.1,0.5),ph:R(0,6.28),hitF:0,lunge:0,stun:0,slamHit:false,dead:false,
     leapT:0,leapCd:R(0.6,1.6), telT:0,fireCd:R(1,2.2),shots:0,strafe:Math.random()<.5?-1:1,repoT:0,
     chargeCd:R(3.5,5),chargeT:0,cdx:0,cdy:0};
@@ -506,7 +502,7 @@ function updateEnemies(dt){
       e.x+=e.kx*dt; e.y+=e.ky*dt; e.kx*=Math.max(0,1-6*dt); e.ky*=Math.max(0,1-6*dt);
       resolveCircle(e); continue; }
     let dx=px-e.x, dy=py-e.y; const dist=Math.hypot(dx,dy)||1; dx/=dist; dy/=dist;
-    const sp=d.spd*spdMul()*(e.elite?CFG.eliteSpd:1);
+    const sp=d.spd*e.sv*spdMul()*(e.elite?CFG.eliteSpd:1);
     let vx=dx*sp, vy=dy*sp;
     if(e.type==='grape'){ const w=Math.sin(e.ph)*14; vx+=-dy*w; vy+=dx*w; }
     else if(e.type==='straw'||e.type==='slice'){
@@ -528,7 +524,7 @@ function updateEnemies(dt){
       }
     }
     else if(e.type==='melon'){
-      if(e.chargeT>0){ e.chargeT-=dt; vx=e.cdx*175; vy=e.cdy*175; }
+      if(e.chargeT>0){ e.chargeT-=dt; vx=e.cdx*205; vy=e.cdy*205; }
       else if(e.telT>0){ e.telT-=dt; vx=0; vy=0; if(e.telT<=0){ e.chargeT=0.8; e.cdx=dx; e.cdy=dy; sfx('charge'); } }
       else{ e.chargeCd-=dt; if(e.chargeCd<=0 && dist<430){ e.telT=0.6; e.chargeCd=6.5; } }
     }
@@ -547,7 +543,7 @@ function updateEnemies(dt){
     }
     // juggernaut slams into a wall/structure → dazed stop
     if(e.chargeT>0){
-      if(movedD<175*dt*0.35){ e.chargeT=0; e.stun=0.7; shake=Math.max(shake,8); sfx('thud');
+      if(movedD<205*dt*0.35){ e.chargeT=0; e.stun=0.7; shake=Math.max(shake,8); sfx('thud');
         for(let i=0;i<8;i++){ const a=R(0,6.28),v=R(40,140);
           parts.push({x:e.x,y:e.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:R(2,4),c:'#9fe8ff',t:R(.2,.45)}); } }
     }
@@ -574,7 +570,7 @@ function updateEnemies(dt){
 }
 function fireSeed(e){
   const a=Math.atan2(py-e.y,px-e.x);
-  seeds.push({x:e.x,y:e.y,vx:Math.cos(a)*185,vy:Math.sin(a)*185,t:4});
+  seeds.push({x:e.x,y:e.y,vx:Math.cos(a)*215,vy:Math.sin(a)*215,t:4});
   sfx('seed');
 }
 function updateSeeds(dt){
@@ -598,9 +594,16 @@ function damageEnemy(e,dmg,kbx,kby,w){
 function killEnemy(e,w){
   if(e.dead) return; e.dead=true;
   const d=FRUIT[e.type];
-  combo++; comboT=CFG.comboWindow; if(combo>maxCombo) maxCombo=combo;
-  const pts=Math.max(1,Math.round(d.score*(e.elite?CFG.eliteScore:1)*mult*comboMult()));
+  const pts=Math.max(1,Math.round(d.score*(e.elite?CFG.eliteScore:1)*mult));
   score+=pts; kills++;
+  // kill-combo multiplier: every kill fills the bar; a full bar steps the multiplier up (max ×5)
+  if(mult<CFG.multMax){
+    multProg++;
+    if(multProg>=CFG.multBar[mult-1]){
+      multProg=0; mult++; maxMult=Math.max(maxMult,mult);
+      popTxt(px,py-58,'MULTIPLIER ×'+mult,'#ffc233'); sfx('multup'); flash('#ffc233',0.08);
+    }
+  }
   if(e.elite||e.type==='melon') eliteKills++;
   popTxt(e.x,e.y-d.r-8,'+'+pts.toLocaleString(), e.elite?'#ffe14d':(e.type==='melon'?'#7dffb0':'#fff'));
   for(let i=0;i<(d.big?16:8);i++){ const a=R(0,6.28),v=R(40,d.big?220:150);
@@ -614,7 +617,8 @@ function hurtPlayer(dmg){
   if(invulnT>0) return;
   hp=Math.max(0,hp-dmg);
   invulnT=CFG.invuln; hurtFx=0.32;
-  combo=0; comboT=0;                                // damage breaks the combo
+  if(mult>1||multProg>0){ popTxt(px,py-58,'×1','#ff3d6e'); }
+  mult=1; multProg=0;                               // one hit resets the whole multiplier climb
   flash('#ff3d6e',0.15); shake=Math.max(shake,10); sfx('hurt');
   for(let i=0;i<10;i++){ const a=R(0,6.28),v=R(60,200);
     parts.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:R(2,4.5),c:Math.random()<.5?'#ff3d6e':'#fff',t:R(.25,.5)}); }
@@ -625,15 +629,22 @@ function hurtPlayer(dmg){
 function newWeap(){ return {cur:'bow', bow:{lv:1,xp:0}, gat:{lv:1,xp:0}, bomb:{lv:1,xp:0}}; }
 function checkLevel(w){
   const wr=weap[w];
-  while(wr.lv<3 && wr.xp>=WEAP[w].mast[wr.lv-1]){
+  while(wr.lv<9 && wr.xp>=WEAP[w].mast[wr.lv-1]){
     wr.xp-=WEAP[w].mast[wr.lv-1]; wr.lv++;
-    if(w===weap.cur) levelUpFx(w);
+    if(w===weap.cur) levelUpFx(w, wr.lv===3||wr.lv===6||wr.lv===9);
   }
 }
-function levelUpFx(w){
+function levelUpFx(w,evolved){
   const wr=weap[w];
+  if(!evolved){   // ordinary level: quick, non-blocking feedback
+    popTxt(px,py-52,WEAP[w].name+' LV '+wr.lv,'#9fe8ff'); sfx('equip');
+    for(let i=0;i<7;i++){ const a=R(0,6.28),v=R(50,150);
+      parts.push({x:px,y:py-20,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:R(1.6,3),c:'#9fe8ff',t:R(.2,.45)}); }
+    return;
+  }
+  // evolution (L3 / L6 / L9): the big moment
   slowmo(0.55,0.25);
-  lvlBanner.innerHTML=WEAP[w].name+'<small>LEVEL '+wr.lv+' — '+WEAP[w].lvName[wr.lv-1]+'</small>';
+  lvlBanner.innerHTML=WEAP[w].name+'<small>LV '+wr.lv+' EVOLVED — '+WEAP[w].lvName[weapState(wr.lv)]+'</small>';
   lvlBanner.classList.add('show');
   setTimeout(()=>lvlBanner.classList.remove('show'),950);
   sfx('lvl'); flash('#b06cff',0.12); shake=Math.max(shake,5);
@@ -648,25 +659,33 @@ function acquireTarget(){
   return (b&&bd<=CFG.aimRange[weap.cur])?b:null;
 }
 function fireWeapon(){
-  const w=weap.cur, lv=weap[w].lv;
+  const w=weap.cur, lv=weap[w].lv, st=weapState(lv);
+  const dmgMul=1+0.07*(lv-1);              // smooth per-level growth between evolutions
   const mx=px+Math.cos(aimAng)*24, my=py-24+Math.sin(aimAng)*24;
   if(w==='bow'){
-    const n=lv===1?1:lv===2?3:5;
-    const spread=lv===1?0:lv===2?0.15:0.115;
-    const dmg=[3.2,2.3,2.5][lv-1], pierce=lv===3?3:1;
+    const n=(st===0?1:st===1?3:5)*(st===3?3:1);          // L9 PRISM STORM: 3× the volley
+    const spread=st===0?0:st===1?0.15:st===2?0.115:0.078;
+    const dmg=(st===0?3.2:st===1?2.3:2.5)*dmgMul, pierce=st>=2?3:1;
     for(let i=0;i<n;i++){ const a=aimAng+(i-(n-1)/2)*spread;
       proj.push({x:mx,y:my,vx:Math.cos(a)*640,vy:Math.sin(a)*640,dmg,pierce,r:5,kind:'arrow',w,
-        hue:(i*60+time*140)%360,trail:lv===3,t:0.95,kb:60}); }
+        hue:(i*24+time*140)%360,trail:st>=2,t:0.95,kb:60}); }
     sfx('bow');
   }else if(w==='gat'){
-    const dmg=[0.9,1.05,1.2][lv-1], jit=[0.055,0.1,0.1][lv-1];
-    const a=aimAng+R(-jit,jit);
-    proj.push({x:mx,y:my,vx:Math.cos(a)*720,vy:Math.sin(a)*720,dmg,pierce:0,r:2.2+lv*0.7,kind:'glit',w,
-      hue:R(0,360),trail:false,t:0.75,kb:14});
+    const dmg=(0.9+st*0.12)*dmgMul, jit=st===0?0.055:0.1;
+    const shots=st===3?3:1;                              // L9 GALAXY BARRAGE: triple stream
+    for(let k=0;k<shots;k++){
+      const a=aimAng+R(-jit,jit)+(k-(shots-1)/2)*0.14;
+      proj.push({x:mx,y:my,vx:Math.cos(a)*720,vy:Math.sin(a)*720,dmg,pierce:0,r:2.2+st*0.8,kind:'glit',w,
+        hue:R(0,360),trail:false,t:0.75,kb:14}); }
     sfx('gat');
   }else{ // bomb — lobbed onto the target (flies over cover)
     const tx=target?target.x:px+Math.cos(aimAng)*180, ty=target?target.y:py+Math.sin(aimAng)*180;
-    bombs.push({sx:mx,sy:my,tx,ty,t:0,T:0.55,lv,dx:Math.cos(aimAng),dy:Math.sin(aimAng)});
+    const shots=st===3?3:1;                              // L9 GRAND FINALE: triple barrage
+    const pa=aimAng+Math.PI/2;
+    for(let k=0;k<shots;k++){
+      const off=(k-(shots-1)/2)*80;
+      bombs.push({sx:mx,sy:my,tx:tx+Math.cos(pa)*off,ty:ty+Math.sin(pa)*off,t:0,T:0.55,st,dmgMul,
+        dx:Math.cos(aimAng),dy:Math.sin(aimAng)}); }
     sfx('lob');
   }
 }
@@ -684,7 +703,7 @@ function updateProj(dt){
         const L=Math.hypot(p.vx,p.vy)||1;
         damageEnemy(e,p.dmg,p.vx/L*p.kb,p.vy/L*p.kb,p.w);
         parts.push({x:p.x,y:p.y,vx:R(-40,40),vy:R(-40,40),r:2.2,c:'#fff',t:.16});
-        if(p.w==='gat' && weap.gat.lv===3){ gatHits++; if(gatHits%20===0) explode(p.x,p.y,55,5,120,'gat'); } // disco inferno
+        if(p.w==='gat' && weap.gat.lv>=6){ gatHits++; if(gatHits%20===0) explode(p.x,p.y,55,5,120,'gat'); } // disco inferno
         if(p.pierce>0){ p.pierce--; } else { p.dead=true; }
         break;
       }
@@ -710,13 +729,14 @@ function updateBombs(dt){
   pend=pend.filter(q=>!q.dead);
 }
 function bombLand(b){
-  if(b.lv===1) explode(b.tx,b.ty,56,7,170,'bomb');
-  else if(b.lv===2){
-    explode(b.tx,b.ty,44,5,150,'bomb');
-    for(let i=0;i<3;i++) pend.push({x:b.tx+R(-48,48),y:b.ty+R(-48,48),t:0.14+i*0.07,r:38,dmg:4,kb:130});
-  }else{
-    explode(b.tx,b.ty,50,6,200,'bomb');
-    for(let i=1;i<=4;i++) pend.push({x:b.tx+b.dx*i*42,y:b.ty+b.dy*i*42,t:i*0.08,r:46,dmg:6,kb:200});
+  const m=b.dmgMul||1;
+  if(b.st===0) explode(b.tx,b.ty,56,7*m,170,'bomb');
+  else if(b.st===1){
+    explode(b.tx,b.ty,44,5*m,150,'bomb');
+    for(let i=0;i<3;i++) pend.push({x:b.tx+R(-48,48),y:b.ty+R(-48,48),t:0.14+i*0.07,r:38,dmg:4*m,kb:130});
+  }else{   // st 2 & 3: celebration chain (st3 throws three of these)
+    explode(b.tx,b.ty,50,6*m,200,'bomb');
+    for(let i=1;i<=4;i++) pend.push({x:b.tx+b.dx*i*42,y:b.ty+b.dy*i*42,t:i*0.08,r:46,dmg:6*m,kb:200});
   }
 }
 function explode(x,y,r,dmg,kb,w){
@@ -774,7 +794,7 @@ function collectPickup(p){
   if(p.kind==='slam'){ startSlam(); return; }
   if(p.wtype===weap.cur){ // same weapon → big mastery jolt
     const wr=weap[p.wtype];
-    if(wr.lv<3){ wr.xp+=WEAP[p.wtype].mast[wr.lv-1]*0.6; checkLevel(p.wtype); }
+    if(wr.lv<9){ wr.xp+=WEAP[p.wtype].mast[wr.lv-1]*0.6; checkLevel(p.wtype); }
     popTxt(p.x,p.y-20,'MASTERY +','#5fe0ff');
   }else{
     weap.cur=p.wtype; weaponsUsed.add(p.wtype);
@@ -822,7 +842,7 @@ function updateGates(dt){
     gateNext+=CFG.gateEvery; gateT=CFG.gateDur;
     slowmo(0.5,0.55); sfx('gate');
     const nxt=runT<42?'LEMON SPITTERS INCOMING':runT<58?'ORANGE BRUISERS INCOMING':runT<72?'JUGGERNAUT INCOMING':'ELITE WAVE INCOMING';
-    gateBanner.innerHTML='🌈 RAINBOW GATE — CASH OUT NOW FOR +'+Math.round(CFG.gateBonus*100)+'%<small>'+nxt+' · multiplier climbing to ×'+multAt(runT+20).toFixed(1)+'</small>';
+    gateBanner.innerHTML='🌈 RAINBOW GATE — CASH OUT NOW FOR +'+Math.round(CFG.gateBonus*100)+'%<small>'+nxt+'</small>';
     gateBanner.classList.add('show');
     cashBtn.classList.add('gate');
   }
@@ -886,11 +906,11 @@ const cashedEl=document.getElementById('cashed'), cashBtn=document.getElementByI
 const cashFill=document.getElementById('cashFill'), cashTxt=document.getElementById('cashTxt');
 const scoreBox=document.getElementById('scoreBox'), scoreEl=document.getElementById('scoreVal'), multEl=document.getElementById('multRow');
 const weapNameEl=document.getElementById('weapName'), weapLvEl=document.getElementById('weapLv'), mastFill=document.getElementById('mastFill');
-const comboPill=document.getElementById('comboPill'), comboVal=document.getElementById('comboVal'), comboSub=document.getElementById('comboSub');
+const multWrap=document.getElementById('multWrap'), multFill=document.getElementById('multFill');
 const lvlBanner=document.getElementById('lvlBanner'), gateBanner=document.getElementById('gateBanner');
 
 function statLine(){
-  return Math.floor(runT)+'s · '+phaseName()+'<br>'+kills+' fruit ('+eliteKills+' big) · best combo '+maxCombo+' · ×'+mult.toFixed(1);
+  return Math.floor(runT)+'s · '+phaseName()+'<br>'+kills+' fruit ('+eliteKills+' big) · best mult ×'+maxMult;
 }
 function showCashed(){
   state='cashed';
@@ -912,15 +932,15 @@ function showOver(){
   overEl.classList.remove('hide');
 }
 function reset(){
-  runT=0; mult=1; score=0; hp=CFG.maxHp; invulnT=1.0; hurtFx=0;
-  combo=0; comboT=0; shake=0; flashT=0; slowT=0; seqT=0; shattered=false; secured=0; gateWin=false;
+  runT=0; mult=1; multProg=0; score=0; hp=CFG.maxHp; invulnT=1.0; hurtFx=0;
+  shake=0; flashT=0; slowT=0; seqT=0; shattered=false; secured=0; gateWin=false;
   weap=newWeap(); fireCd=0.4; gatHits=0; aimAng=-Math.PI/2; target=null;
   px=WW/2; py=WH/2+180; face=1; moving=0; walkPh=0;
   budget=8; spawnT=0.8; waveN=0; baseAng=R(0,6.283); melonSeen=false; melonCd=0;
   wpNext=CFG.wpFirst; slamLast=0; gateNext=CFG.gateFirst; gateT=0;
   enemies=[]; proj=[]; seeds=[]; bombs=[]; pend=[]; trails=[]; expl=[]; parts=[]; pops=[]; pickups=[];
   slamState=null; slamT=0; cashHeld=false; cashT=0;
-  kills=0; eliteKills=0; maxCombo=0; weaponsUsed=new Set(['bow']);
+  kills=0; eliteKills=0; maxMult=1; weaponsUsed=new Set(['bow']);
   buildStructs(); resolveCircle({get x(){return px;},set x(v){px=v;},get y(){return py;},set y(v){py=v;},r:CFG.playerR});
   scoreBox.classList.remove('shatter');
   gateBanner.classList.remove('show'); lvlBanner.classList.remove('show');
@@ -1065,8 +1085,6 @@ function update(rdt){
   const dt=rdt*(slowT>0?slowF:1);
   slowT-=rdt;
   runT+=dt;
-  mult=multAt(runT);
-  if(combo>0){ comboT-=dt; if(comboT<=0) combo=0; }
   invulnT-=dt; hurtFx-=dt; if(flashT>0) flashT-=rdt;
   if(shake>0) shake=Math.max(0,shake-rdt*26);
 
@@ -1089,7 +1107,7 @@ function update(rdt){
   updateSeeds(dt);
 
   fireCd-=dt;
-  if(fireCd<=0 && target && !slamState){ fireWeapon(); fireCd=WEAP[weap.cur].cd[weap[weap.cur].lv-1]; }
+  if(fireCd<=0 && target && !slamState){ fireWeapon(); fireCd=WEAP[weap.cur].cd[weapState(weap[weap.cur].lv)]; }
 
   updateProj(dt);
   updateBombs(dt);
@@ -1496,24 +1514,25 @@ function drawUnicorn(){
   ctx.fillStyle='#5fe0ff'; ctx.fillRect(-6,-10,12,3);
   ctx.fillStyle='#ffd9b8'; ctx.beginPath(); ctx.arc(0,-24,6,0,6.283); ctx.fill();
   ctx.fillStyle='#b06cff'; ctx.beginPath(); ctx.arc(-1,-27,6,Math.PI*0.9,Math.PI*2.05); ctx.fill();
-  // aim arm + weapon (auto-aim)
+  // aim arm + weapon (auto-aim) — the weapon grows and glows at each evolution state
   ctx.save(); ctx.translate(2,-14); ctx.rotate(la);
-  const lv=weap?weap[weap.cur].lv:1, wsc=1+(lv-1)*0.18;
+  const st=weap?weapState(weap[weap.cur].lv):0, wsc=1+st*0.22;
   ctx.fillStyle='#eafcff'; ctx.fillRect(0,-2.5,15,5);
   ctx.scale(wsc,wsc);
+  if(st===3){ ctx.fillStyle='hsla('+(time*260%360)+',95%,70%,.28)'; ctx.beginPath(); ctx.arc(17,0,15,0,6.283); ctx.fill(); }
   if(!weap||weap.cur==='bow'){
-    ctx.strokeStyle=lv===3?'hsl('+(time*160%360)+',95%,70%)':'#9fe8ff'; ctx.lineWidth=2.6;
+    ctx.strokeStyle=st>=2?'hsl('+(time*160%360)+',95%,70%)':'#9fe8ff'; ctx.lineWidth=2.6;
     ctx.beginPath(); ctx.arc(15,0,10,-1.25,1.25); ctx.stroke();
     ctx.strokeStyle='rgba(255,255,255,.8)'; ctx.lineWidth=1.2;
     ctx.beginPath(); ctx.moveTo(18,-9.5); ctx.lineTo(18,9.5); ctx.stroke();
   }else if(weap.cur==='gat'){
     ctx.fillStyle='#3a2a5a'; rr(10,-5,14,10,3); ctx.fill();
     ctx.fillStyle='#9fe8ff'; ctx.fillRect(24,-4,7,2.4); ctx.fillRect(24,-0.8,7,2.4); ctx.fillRect(24,2.4,7,2.4);
-    if(lv===3){ ctx.fillStyle='hsl('+(time*220%360)+',95%,70%)'; ctx.beginPath(); ctx.arc(17,-7,2.6,0,6.283); ctx.fill(); }
+    if(st>=2){ ctx.fillStyle='hsl('+(time*220%360)+',95%,70%)'; ctx.beginPath(); ctx.arc(17,-7,2.6,0,6.283); ctx.fill(); }
   }else{
     ctx.fillStyle='#3a2a5a'; rr(10,-6,12,12,4); ctx.fill();
     ctx.fillStyle='#ff5ab8'; ctx.beginPath(); ctx.arc(24,0,5,0,6.283); ctx.fill();
-    if(lv===3){ ctx.fillStyle='#ffe14d'; ctx.beginPath(); ctx.arc(24,-8,2.2,0,6.283); ctx.fill(); }
+    if(st>=2){ ctx.fillStyle='#ffe14d'; ctx.beginPath(); ctx.arc(24,-8,2.2,0,6.283); ctx.fill(); }
   }
   ctx.restore();
   ctx.restore();
@@ -1602,9 +1621,9 @@ function drawDebug(){
   const lines=[
     'fps '+fps.toFixed(0)+' · '+state+(paused?' (paused)':''),
     't '+runT.toFixed(1)+'s · '+phaseName(),
-    'score '+score+' · mult ×'+mult.toFixed(2)+' · combo '+combo+' (×'+comboMult()+')',
+    'score '+score+' · mult ×'+mult+' bar '+multProg+'/'+(mult<CFG.multMax?CFG.multBar[mult-1]:'MAX'),
     'hp '+hp.toFixed(0)+' · pos '+px.toFixed(0)+','+py.toFixed(0)+' · cam '+camX.toFixed(0)+','+camY.toFixed(0),
-    'weapon '+ (weap?weap.cur+' lv'+wr.lv+' xp '+wr.xp.toFixed(1)+'/'+(wr.lv<3?WEAP[weap.cur].mast[wr.lv-1]:'MAX'):'-')+' tgt '+(target?target.type:'-'),
+    'weapon '+ (weap?weap.cur+' lv'+wr.lv+' xp '+wr.xp.toFixed(1)+'/'+(wr.lv<9?WEAP[weap.cur].mast[wr.lv-1]:'MAX'):'-')+' tgt '+(target?target.type:'-'),
     'enemies '+enemies.length+' · proj '+proj.length+' · seeds '+seeds.length,
     'budget '+budget.toFixed(1)+' · spawnT '+spawnT.toFixed(2)+' · hpMul '+hpMul().toFixed(2),
     'pickups '+pickups.map(p=>p.kind).join(',')+' · slam '+(slamState||'-')+' · gate '+(gateT>0?gateT.toFixed(1):'-'),
@@ -1616,22 +1635,19 @@ function drawDebug(){
 }
 
 /* HUD DOM sync (cached to avoid layout churn) */
-let lastScore=-1,lastMult=-1,lastWeapTxt='',lastMast=-1,lastCombo=-1,lastCash='';
+let lastScore=-1,lastMult=-1,lastMultP=-1,lastWeapTxt='',lastMast=-1,lastCash='';
 function render(){
   if(lastScore!==score){ scoreEl.textContent=score.toLocaleString(); lastScore=score; }
-  const mr=Math.round(mult*10)/10;
-  if(lastMult!==mr){ multEl.textContent='×'+mr.toFixed(1); multEl.style.fontSize=(14+Math.min(15,mr*0.9))+'px'; lastMult=mr; }
+  if(lastMult!==mult){ multEl.textContent='×'+mult; multEl.style.fontSize=(14+mult*2.2)+'px';
+    multWrap.classList.toggle('maxed',mult>=CFG.multMax); lastMult=mult; }
+  const mp=mult>=CFG.multMax?100:Math.round(multProg/CFG.multBar[mult-1]*100);
+  if(lastMultP!==mp){ multFill.style.width=mp+'%'; lastMultP=mp; }
   if(weap){
     const wt=WEAP[weap.cur].name+'|'+weap[weap.cur].lv;
     if(lastWeapTxt!==wt){ weapNameEl.textContent=WEAP[weap.cur].name; weapLvEl.textContent='LV '+weap[weap.cur].lv; lastWeapTxt=wt; }
     const wr=weap[weap.cur];
-    const m=wr.lv>=3?100:Math.min(100,wr.xp/WEAP[weap.cur].mast[wr.lv-1]*100);
+    const m=wr.lv>=9?100:Math.min(100,wr.xp/WEAP[weap.cur].mast[wr.lv-1]*100);
     if(Math.abs(m-lastMast)>0.5){ mastFill.style.width=m+'%'; lastMast=m; }
-  }
-  if(lastCombo!==combo){
-    comboPill.classList.toggle('on',combo>=5&&state==='play');
-    if(combo>=5){ comboVal.textContent='×'+comboMult().toFixed(2).replace(/\.?0+$/,''); comboSub.textContent=combo+' COMBO'; }
-    lastCombo=combo;
   }
   if(state==='play'){
     let txt;
@@ -1710,7 +1726,7 @@ reset(); state='menu';
 
 /* ================================================================= debug hook */
 window.__game={
-  get s(){ return {state,runT:+runT.toFixed(1),score,mult:+mult.toFixed(2),combo,hp,phase:phaseName(),
+  get s(){ return {state,runT:+runT.toFixed(1),score,mult,multProg,hp,phase:phaseName(),
     weapon:weap?weap.cur:null,lv:weap?weap[weap.cur].lv:0,xp:weap?+weap[weap.cur].xp.toFixed(1):0,
     x:+px.toFixed(0),y:+py.toFixed(0),cam:[+camX.toFixed(0),+camY.toFixed(0)],target:target?target.type:null,
     enemies:enemies.length,proj:proj.length,pickups:pickups.map(p=>p.kind),slam:slamState,gate:+gateT.toFixed(1),
@@ -1727,7 +1743,7 @@ window.__game={
   hpSet:v=>{ hp=v; },
   invuln:(v=1e9)=>{ invulnT=v; },
   give:w=>{ weap.cur=w; weaponsUsed.add(w); },
-  lvl:()=>{ const wr=weap[weap.cur]; if(wr.lv<3){ wr.xp=WEAP[weap.cur].mast[wr.lv-1]; checkLevel(weap.cur); } },
+  lvl:()=>{ const wr=weap[weap.cur]; if(wr.lv<9){ wr.xp=WEAP[weap.cur].mast[wr.lv-1]; checkLevel(weap.cur); } },
   pickW:t=>spawnPickup('weapon',t||rand(WKEYS.filter(k=>k!==weap.cur))),
   pickS:()=>spawnPickup('slam'),
   slamNow:startSlam,
