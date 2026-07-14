@@ -170,7 +170,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.6.2</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.6.3</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -544,6 +544,7 @@ function updateEnemies(dt){
     e.kx*=Math.max(0,1-6*dt); e.ky*=Math.max(0,1-6*dt);
     resolveCircle(e);
     const movedD=Math.hypot(e.x-ix,e.y-iy), wantD=Math.hypot(vx+e.kx,vy+e.ky)*dt;
+    if(dt>1e-4){ e.vx=(e.x-ix)/dt; e.vy=(e.y-iy)/dt; }   // actual velocity — bombs lead their targets with this
     if(!charging && wantD>1e-4){
       if(movedD<wantD*0.45){ e.blockT=(e.blockT||0)+dt;
         if(e.blockT>1.1){ e.strafe*=-1; e.blockT=0.4; } }   // that side is a dead end — try the other way
@@ -709,13 +710,16 @@ function fireWeapon(){
       proj.push({x:mx,y:my,vx:Math.cos(a)*720,vy:Math.sin(a)*720,dmg,pierce:0,r:2.2+st*0.8,kind:'glit',w,
         hue:R(0,360),trail:false,t:0.75,kb:14}); }
     sfx('gat');
-  }else{ // bomb — lobbed onto the target (flies over cover)
-    const tx=target?target.x:px+Math.cos(aimAng)*180, ty=target?target.y:py+Math.sin(aimAng)*180;
+  }else{ // bomb — lobbed onto the target (flies over cover), LEADING its movement so rushers can't outrun it
+    let tx=target?target.x:px+Math.cos(aimAng)*180, ty=target?target.y:py+Math.sin(aimAng)*180;
+    const T=clamp(Math.hypot(tx-mx,ty-my)/420,0.3,0.6);  // closer targets → faster impact
+    if(target){ tx+=(target.vx||0)*T; ty+=(target.vy||0)*T;
+      tx=clamp(tx,WALL+20,WW-WALL-20); ty=clamp(ty,WALL+20,WH-WALL-20); }
     const shots=st===3?3:1;                              // L9 GRAND FINALE: triple barrage
     const pa=aimAng+Math.PI/2;
     for(let k=0;k<shots;k++){
       const off=(k-(shots-1)/2)*80;
-      bombs.push({sx:mx,sy:my,tx:tx+Math.cos(pa)*off,ty:ty+Math.sin(pa)*off,t:0,T:0.55,st,dmgMul,
+      bombs.push({sx:mx,sy:my,tx:tx+Math.cos(pa)*off,ty:ty+Math.sin(pa)*off,t:0,T,st,dmgMul,
         dx:Math.cos(aimAng),dy:Math.sin(aimAng)}); }
     sfx('lob');
   }
