@@ -414,13 +414,16 @@ function setDegraded(on){
 }
 
 /* ================================================================ playback controller (audio clock = truth) */
-let srcs=[], playing=false, playRate=1, startCtx=0, startSong=0, lastSongT=null;
-function songTime(){ return playing? startSong+(ac().currentTime-startCtx)*playRate : startSong; }
+let srcs=[], playing=false, playRate=1, startCtx=0, startSong=0, lastSongT=null, outLat=0;
+// ctx.currentTime runs AHEAD of the speakers by the output latency — without correcting,
+// notes visually cross the line before the audible downbeat. Snapshot it per play start.
+function songTime(){ return playing? startSong+(ac().currentTime-outLat-startCtx)*playRate : startSong; }
 function playFrom(t,rate){
   if(!songReady) return;
   stopSrc(); const c=ac();
   playRate=rate||playRate||1;
   startSong=clamp(t,-8,SONG_DUR); startCtx=c.currentTime;
+  outLat=c.outputLatency||c.baseLatency||0;
   for(const st of song.stems){
     const sc=c.createBufferSource(); sc.buffer=st.buf; sc.playbackRate.value=playRate; sc.connect(st.gain);
     if(startSong<0) sc.start(c.currentTime+(-startSong)/playRate,0);   // lead-in: audio starts when songTime reaches 0
@@ -958,6 +961,8 @@ function frame(tms){
   requestAnimationFrame(frame);
   const t=tms/1000, dt=Math.min(t-lastFrame,.05); lastFrame=t;
   fps=lerp(fps,1/Math.max(dt,.0001),.05);
+  // keep the output-latency estimate fresh (Chrome reports 0 until rendering starts), smoothed to avoid clock wobble
+  if(playing&&AC){ const l=AC.outputLatency||AC.baseLatency||0; outLat+=(l-outLat)*Math.min(1,dt*4); }
   // clock-jump guard: frames stalled (app switch / OS jank) while the audio clock ran on —
   // rewind to where rendering stopped and pause, instead of mass-missing the backlog.
   if(state==='play'&&playing){
