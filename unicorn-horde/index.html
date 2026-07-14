@@ -167,7 +167,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.5.2</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.5.3</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -216,13 +216,14 @@ const weapState=lv=>lv>=9?3:lv>=6?2:lv>=3?1:0;
 const WKEYS=Object.keys(WEAP);
 
 /* fruit roster — prototype five (+ melon slices) */
+/* juice = the fruit's INSIDE color (melon is red inside, not green) — used for death stains */
 const FRUIT={
-  grape: {r:9, hp:2.4, spd:70, dmg:5, cd:0.9, score:15, xp:1,  threat:1,  col:'#b06cff', dark:'#5a2a9a'},
-  straw: {r:11,hp:3.4, spd:120,dmg:7, cd:0.9, score:25, xp:2,  threat:2,  col:'#ff4d6e', dark:'#a01f3a'},
-  lemon: {r:13,hp:7,   spd:78, dmg:0, cd:0,   score:40, xp:3,  threat:4,  col:'#ffe14d', dark:'#b8930f'},
-  orange:{r:19,hp:30,  spd:46, dmg:14,cd:1.1, score:80, xp:6,  threat:6,  col:'#ff9a2e', dark:'#b05e10', kbRes:0.85},
-  melon: {r:31,hp:110, spd:26, dmg:20,cd:1.2, score:300,xp:14, threat:15, col:'#3ddc74', dark:'#1b7a42', kbRes:0.9, big:1},
-  slice: {r:12,hp:9,   spd:95, dmg:9, cd:0.9, score:40, xp:3,  threat:3,  col:'#ff5a7a', dark:'#2a9a52'},
+  grape: {r:9, hp:2.4, spd:70, dmg:5, cd:0.9, score:15, xp:1,  threat:1,  col:'#b06cff', dark:'#5a2a9a', juice:'#8a4de0'},
+  straw: {r:11,hp:3.4, spd:120,dmg:7, cd:0.9, score:25, xp:2,  threat:2,  col:'#ff4d6e', dark:'#a01f3a', juice:'#ff4d6e'},
+  lemon: {r:13,hp:7,   spd:78, dmg:0, cd:0,   score:40, xp:3,  threat:4,  col:'#ffe14d', dark:'#b8930f', juice:'#ffe98a'},
+  orange:{r:19,hp:30,  spd:46, dmg:14,cd:1.1, score:80, xp:6,  threat:6,  col:'#ff9a2e', dark:'#b05e10', juice:'#ffb14d', kbRes:0.85},
+  melon: {r:31,hp:110, spd:26, dmg:20,cd:1.2, score:300,xp:14, threat:15, col:'#3ddc74', dark:'#1b7a42', juice:'#ff4d5e', kbRes:0.9, big:1},
+  slice: {r:12,hp:9,   spd:95, dmg:9, cd:0.9, score:40, xp:3,  threat:3,  col:'#ff5a7a', dark:'#2a9a52', juice:'#ff4d5e'},
 };
 
 /* structures — curated plaza layout for the 3000×2300 grounds; rect footprints, iso-extruded boxes */
@@ -294,6 +295,7 @@ let wpNext=0, slamLast=-99, gateNext=0, gateT=0;
 
 // entities
 let enemies=[], proj=[], seeds=[], bombs=[], pend=[], trails=[], expl=[], parts=[], pops=[], pickups=[];
+let stains=[];   // juice splats left by defeated fruit (inside-of-the-fruit colors)
 let trailTick=0;
 
 // slam
@@ -502,7 +504,8 @@ function updateEnemies(dt){
       e.x+=e.kx*dt; e.y+=e.ky*dt; e.kx*=Math.max(0,1-6*dt); e.ky*=Math.max(0,1-6*dt);
       resolveCircle(e); continue; }
     let dx=px-e.x, dy=py-e.y; const dist=Math.hypot(dx,dy)||1; dx/=dist; dy/=dist;
-    const sp=d.spd*e.sv*spdMul()*(e.elite?CFG.eliteSpd:1);
+    e.stagT=(e.stagT||0)-dt;
+    const sp=d.spd*e.sv*spdMul()*(e.elite?CFG.eliteSpd:1)*(e.stagT>0?0.6:1);   // fresh hits slow them a touch
     let vx=dx*sp, vy=dy*sp;
     if(e.type==='grape'){ const w=Math.sin(e.ph)*14; vx+=-dy*w; vy+=dx*w; }
     else if(e.type==='straw'||e.type==='slice'){
@@ -588,6 +591,10 @@ function damageEnemy(e,dmg,kbx,kby,w){
   e.hp-=dmg; e.hitF=0.09;
   const res=FRUIT[e.type].kbRes||0;
   e.kx+=(kbx||0)*(1-res); e.ky+=(kby||0)*(1-res);
+  // hit reaction: an ever-so-slight shove back + brief stagger (tanky fruit shrug most of it off)
+  const kl=Math.hypot(kbx||0,kby||0);
+  if(kl>1){ e.x+=(kbx/kl)*2.5*(1-res); e.y+=(kby/kl)*2.5*(1-res); }
+  e.stagT=Math.max(e.stagT||0, 0.22*(1-res*0.6));
   if(e.hp<=0){ killEnemy(e,w); return true; }
   return false;
 }
@@ -607,7 +614,13 @@ function killEnemy(e,w){
   if(e.elite||e.type==='melon') eliteKills++;
   popTxt(e.x,e.y-d.r-8,'+'+pts.toLocaleString(), e.elite?'#ffe14d':(e.type==='melon'?'#7dffb0':'#fff'));
   for(let i=0;i<(d.big?16:8);i++){ const a=R(0,6.28),v=R(40,d.big?220:150);
-    parts.push({x:e.x,y:e.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:R(2,d.big?6:4),c:Math.random()<.6?d.col:'#fff',t:R(.25,.5)}); }
+    parts.push({x:e.x,y:e.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:R(2,d.big?6:4),c:Math.random()<.6?d.juice:'#fff',t:R(.25,.5)}); }
+  // juice stain where it popped — inside-of-the-fruit color, slowly drying away
+  { const main=d.r*(d.big?1.25:1.05), blobs=[{dx:0,dy:0,r:main}];
+    for(let i=0;i<(d.big?5:3);i++){ const a=R(0,6.283), dd=R(0.6,1.6)*main;
+      blobs.push({dx:Math.cos(a)*dd,dy:Math.sin(a)*dd,r:R(0.22,0.45)*main}); }
+    stains.push({x:e.x,y:e.y,col:d.juice,blobs,t:0,life:14});
+    if(stains.length>150) stains.shift(); }
   if(w && weap.lv<9){ weap.xp+=d.xp; checkLevel(); }   // all weapon kills feed the rider's one mastery pool
   if(e.type==='melon'){ for(let i=0;i<3;i++){ const a=R(0,6.28); spawnAt('slice',e.x+Math.cos(a)*24,e.y+Math.sin(a)*24); } }
   sfx(d.big?'splat':'pop');
@@ -934,6 +947,7 @@ function reset(){
   budget=8; spawnT=0.8; waveN=0; baseAng=R(0,6.283); melonSeen=false; melonCd=0;
   wpNext=CFG.wpFirst; slamLast=0; gateNext=CFG.gateFirst; gateT=0;
   enemies=[]; proj=[]; seeds=[]; bombs=[]; pend=[]; trails=[]; expl=[]; parts=[]; pops=[]; pickups=[];
+  stains=[];
   slamState=null; slamT=0; cashHeld=false; cashT=0;
   kills=0; eliteKills=0; maxMult=1; weaponsUsed=new Set(['bow']);
   buildStructs(); resolveCircle({get x(){return px;},set x(v){px=v;},get y(){return py;},set y(v){py=v;},r:CFG.playerR});
@@ -1077,6 +1091,8 @@ function update(rdt){
   beamFx=beamFx.filter(b=>b.t<b.life);
   for(const c of callouts) c.t+=rdt;
   callouts=callouts.filter(c=>c.t<c.life);
+  for(const s of stains) s.t+=rdt;
+  stains=stains.filter(s=>s.t<s.life);
   if(state==='menu'){ updateCam(); return; }
   if(state==='cashing'){ seqT+=rdt; updCashing(rdt); updateCam(); return; }
   if(state==='dying'){ seqT+=rdt; updDying(rdt); updateCam(); return; }
@@ -1243,6 +1259,17 @@ function drawStruct(s){
     ctx.fillStyle='rgba(255,194,51,.25)'; ctx.fillRect(x,y+h-hh+2.5,w,3);
   }
   ctx.restore();
+}
+function drawStains(){
+  const x0=camX+vx0-60, x1=camX+vx1+60, y0=camY+vy0-60, y1=camY+vy1+60;
+  for(const s of stains){
+    if(s.x<x0||s.x>x1||s.y<y0||s.y>y1) continue;
+    const dry=s.t>s.life-4?(s.life-s.t)/4:1;          // dries away over the last seconds
+    ctx.globalAlpha=0.26*dry;
+    ctx.fillStyle=s.col;
+    for(const b of s.blobs){ ctx.beginPath(); ctx.ellipse(s.x+b.dx,s.y+b.dy*0.5,b.r,b.r*0.45,0,0,6.283); ctx.fill(); }
+  }
+  ctx.globalAlpha=1;
 }
 function drawTrails(){
   for(const t of trails){ ctx.globalAlpha=t.t*2;
@@ -1697,6 +1724,7 @@ function render(){
   ctx.translate(-camX,-camY);                       // world space
   drawGround();
   drawWallsBack();
+  drawStains();
   drawMoveMarker();
   drawTrails();
   // depth-sorted world: structures by footprint base, entities by feet
