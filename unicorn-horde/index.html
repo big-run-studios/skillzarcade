@@ -152,7 +152,7 @@
       <div class="title">UNICORN <span>HORDE</span></div>
       <div class="sub">RUN · BLAST · CASH OUT</div>
       <div class="htp">
-        <div class="row"><div class="ic">🕹️</div><div class="tx"><b>Drag to run</b> around the plaza — your hero <b>auto-aims</b></div></div>
+        <div class="row"><div class="ic">👆</div><div class="tx"><b>Hold anywhere</b> — your unicorn <b>runs to your finger</b> · the hero auto-aims</div></div>
         <div class="row"><div class="ic">🍇</div><div class="tx">Angry fruit floods in from <i>everywhere</i> — dodge, kite, use the <b>stalls as cover</b></div></div>
         <div class="row"><div class="ic">✨</div><div class="tx"><b>Run over pickups</b>: weapons, hearts · <u>RAINBOW SLAM</u> clears the screen</div></div>
         <div class="row"><div class="ic">💰</div><div class="tx"><u>Hold CASH OUT</u> to bank the pot · crash and it's <i>all gone</i></div></div>
@@ -184,7 +184,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.2.0</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.2.1</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -921,30 +921,25 @@ cashBtn.addEventListener('pointercancel',()=>cancelCashHold());
 cashBtn.addEventListener('pointerleave',()=>cancelCashHold());
 cashBtn.addEventListener('click',e=>e.stopPropagation());
 
-/* ================================================================= input — floating joystick */
-const stick={on:false,id:null,bx:0,by:0,x:0,y:0,dx:0,dy:0};
-const STICK_R=56, STICK_DEAD=10;
+/* ================================================================= input — hold to run there */
+// while the pointer is held, the unicorn runs toward the point under the finger/cursor
+const ptr={on:false,id:null,sx:0,sy:0};   // screen (design-space) coords, re-projected to world every frame
+let goTarget=null;                        // debug/headless destination (world coords)
 const keys=new Set();
 function localPt(cx,cy){ const r=app.getBoundingClientRect(); return {x:(cx-r.left-offX)/scale, y:(cy-r.top-offY)/scale}; }
 app.addEventListener('pointerdown',e=>{
   if(e.target.closest('button')) return;
-  if(stick.on) return;
+  if(ptr.on) return;
   const L=localPt(e.clientX,e.clientY);
-  stick.on=true; stick.id=e.pointerId;
-  stick.bx=L.x; stick.by=L.y; stick.x=L.x; stick.y=L.y; stick.dx=0; stick.dy=0;
+  ptr.on=true; ptr.id=e.pointerId; ptr.sx=L.x; ptr.sy=L.y; goTarget=null;
   if(app.setPointerCapture) try{app.setPointerCapture(e.pointerId);}catch(_){}
 });
 app.addEventListener('pointermove',e=>{
-  if(!stick.on||e.pointerId!==stick.id) return;
+  if(!ptr.on||e.pointerId!==ptr.id) return;
   const L=localPt(e.clientX,e.clientY);
-  stick.x=L.x; stick.y=L.y;
-  let dx=stick.x-stick.bx, dy=stick.y-stick.by; const d=Math.hypot(dx,dy);
-  if(d>STICK_R){ stick.bx=stick.x-dx/d*STICK_R; stick.by=stick.y-dy/d*STICK_R; dx=stick.x-stick.bx; dy=stick.y-stick.by; }
-  if(d<STICK_DEAD){ stick.dx=0; stick.dy=0; }
-  else{ const m=Math.min(1,Math.hypot(dx,dy)/STICK_R); const a=Math.atan2(dy,dx);
-    stick.dx=Math.cos(a)*m; stick.dy=Math.sin(a)*m; }
+  ptr.sx=L.x; ptr.sy=L.y;
 });
-function endPointer(e){ if(e.pointerId===stick.id){ stick.on=false; stick.id=null; stick.dx=0; stick.dy=0; } }
+function endPointer(e){ if(e.pointerId===ptr.id){ ptr.on=false; ptr.id=null; } }
 app.addEventListener('pointerup',endPointer);
 app.addEventListener('pointercancel',endPointer);
 app.addEventListener('touchstart',e=>{ if(!e.target.closest('button')) e.preventDefault(); },{passive:false});
@@ -967,23 +962,52 @@ window.addEventListener('keydown',e=>{
 window.addEventListener('keyup',e=>{ if(e.code==='Space') cancelCashHold(); keys.delete(e.code); });
 
 /* ================================================================= player movement + camera */
-function moveInput(){
-  let mx=stick.dx, my=stick.dy;
+let moveTgt=null;   // current destination (world coords) — drawn as a ground marker
+let pBlockT=0, pSide=1;   // wall-slide assist: when the straight line to the finger is blocked, sidestep
+function keyVec(){
+  let mx=0,my=0;
   if(keys.has('KeyA')||keys.has('ArrowLeft')) mx-=1;
   if(keys.has('KeyD')||keys.has('ArrowRight')) mx+=1;
   if(keys.has('KeyW')||keys.has('ArrowUp')) my-=1;
   if(keys.has('KeyS')||keys.has('ArrowDown')) my+=1;
   const L=Math.hypot(mx,my);
   if(L>1){ mx/=L; my/=L; }
-  return {mx,my,m:Math.min(1,L)};
+  return {mx,my};
 }
 function movePlayer(dt){
-  if(slamState) { moving=0; return; }   // locked in the slam animation
-  const {mx,my}=moveInput();
+  moveTgt=null;
+  if(slamState){ moving=0; return; }   // locked in the slam animation
+  let tx=null,ty=null;
+  if(ptr.on){ tx=ptr.sx+camX; ty=ptr.sy+camY; }   // held finger/cursor, re-projected as the camera moves
+  else if(goTarget){ tx=goTarget.x; ty=goTarget.y; }
+  let mx=0,my=0;
+  if(tx!==null){
+    tx=clamp(tx,WALL+CFG.playerR,WW-WALL-CFG.playerR);
+    ty=clamp(ty,WALL+CFG.playerR,WH-WALL-CFG.playerR);
+    moveTgt={x:tx,y:ty};
+    const dx=tx-px, dy=ty-py, d=Math.hypot(dx,dy);
+    if(d>6){ const ease=Math.min(1,d/46); mx=dx/d*ease; my=dy/d*ease; }  // ease in the last stretch, no jitter on arrival
+    else if(goTarget) goTarget=null;
+    // slide assist only when the destination itself is reachable — a finger held OVER a
+    // structure should just press against it, not orbit it
+    if(pBlockT>0 && d>6 && !inStruct(tx,ty,CFG.playerR-2)){
+      const ux=dx/d, uy=dy/d;
+      mx=ux*0.3-uy*pSide; my=uy*0.3+ux*pSide;
+      const L=Math.hypot(mx,my)||1; mx/=L; my/=L;
+    }
+  }else{
+    const k=keyVec(); mx=k.mx; my=k.my;
+  }
   moving=Math.hypot(mx,my);
   if(moving>0.01){
+    const ix=px, iy=py;
     px+=mx*CFG.moveSpd*dt; py+=my*CFG.moveSpd*dt;
     resolveCircle({get x(){return px;},set x(v){px=v;},get y(){return py;},set y(v){py=v;},r:CFG.playerR});
+    const movedD=Math.hypot(px-ix,py-iy), wantD=moving*CFG.moveSpd*dt;
+    if(tx!==null && wantD>1e-4){
+      if(movedD<wantD*0.45){ pBlockT+=dt*4; if(pBlockT>=1.2){ pSide*=-1; pBlockT=0.5; } }  // that side is a dead end
+      else pBlockT=Math.max(0,pBlockT-dt*3);
+    }else pBlockT=0;
     walkPh+=dt*9*moving;
     if(!target && Math.abs(mx)>0.05) face=mx>0?1:-1;
   }
@@ -1481,15 +1505,16 @@ function drawParticles(){
   for(const p of pops){ ctx.globalAlpha=Math.min(1,p.t*2.4); ctx.fillStyle=p.col; ctx.fillText(p.txt,p.x,p.y); }
   ctx.globalAlpha=1;
 }
-/* screen-space layers */
-function drawStickUI(){
-  if(!stick.on||state!=='play') return;
-  ctx.strokeStyle='rgba(190,230,255,.4)'; ctx.lineWidth=2.5;
-  ctx.beginPath(); ctx.arc(stick.bx,stick.by,STICK_R*0.72,0,6.283); ctx.stroke();
-  ctx.fillStyle='rgba(190,230,255,.12)';
-  ctx.beginPath(); ctx.arc(stick.bx,stick.by,STICK_R*0.72,0,6.283); ctx.fill();
-  ctx.fillStyle='rgba(220,245,255,.55)';
-  ctx.beginPath(); ctx.arc(stick.bx+stick.dx*STICK_R*0.6,stick.by+stick.dy*STICK_R*0.6,15,0,6.283); ctx.fill();
+/* destination marker (world-space ground decal) */
+function drawMoveMarker(){
+  if(state!=='play'||!moveTgt) return;
+  const d=Math.hypot(moveTgt.x-px,moveTgt.y-py);
+  if(d<16) return;
+  const pu=0.72+0.28*Math.sin(time*7);
+  ctx.strokeStyle='rgba(120,235,255,'+(0.55*pu)+')'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.ellipse(moveTgt.x,moveTgt.y,12*pu+5,6*pu+2.5,0,0,6.283); ctx.stroke();
+  ctx.fillStyle='rgba(120,235,255,.45)';
+  ctx.beginPath(); ctx.ellipse(moveTgt.x,moveTgt.y,4,2.2,0,0,6.283); ctx.fill();
 }
 function drawOffscreenArrows(){
   if(state!=='play') return;
@@ -1570,6 +1595,7 @@ function render(){
   ctx.translate(-camX,-camY);                       // world space
   drawGround();
   drawWallsBack();
+  drawMoveMarker();
   drawTrails();
   // depth-sorted world: structures by footprint base, entities by feet
   const order=[];
@@ -1594,7 +1620,6 @@ function render(){
   drawWallFront();
   ctx.restore();                                    // back to screen space
 
-  drawStickUI();
   drawOffscreenArrows();
   drawVignette();
   if(flashT>0){ ctx.globalAlpha=Math.min(0.6,flashT*3.5); ctx.fillStyle=flashCol; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0); ctx.globalAlpha=1; }
@@ -1656,7 +1681,8 @@ window.__game={
   pickH:()=>spawnPickup('heart'),
   slamNow:startSlam,
   gateNow:()=>{ gateNext=runT; },
-  move:(dx,dy)=>{ stick.dx=dx; stick.dy=dy; },   // headless joystick
+  goto:(x,y)=>{ goTarget={x,y}; },               // headless "hold finger at world point"
+  stop:()=>{ goTarget=null; },
   tp:(x,y)=>{ px=x; py=y; },
   holdCash:v=>{ if(v===false) cancelCashHold(); else startCashHold(); },
   ents:()=>({enemies,proj,seeds,bombs,pickups,structs}),
