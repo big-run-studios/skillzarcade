@@ -170,7 +170,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.6.1</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.6.2</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -210,7 +210,7 @@ const CFG={
    Mastery belongs to the RIDER, not the weapon: one global level/xp pool shared by all
    weapons, so picking up a new weapon keeps your level — switching is never a downgrade.
    Log-feel curve: dirt-cheap early (L3 fast), each step ~1.6× the last; L9 is the journey. */
-const MAST=[12,20,32,52,84,136,220,360];   // MAST[i] = xp for level i+1 → i+2
+const MAST=[18,30,48,78,126,204,330,540];   // MAST[i] = xp for level i+1 → i+2
 const WEAP={
   bow:  {name:'PRISM BOW',       lvName:['BRIGHT ARROW','SPLIT SHOT','RAINBOW VOLLEY','PRISM STORM'],   cd:[0.42,0.40,0.38,0.36]},
   gat:  {name:'GLITTER GATLING', lvName:['GLITTER STREAM','SPARK BARRAGE','DISCO INFERNO','GALAXY BARRAGE'],cd:[0.085,0.07,0.058,0.052]},
@@ -660,7 +660,7 @@ function hurtPlayer(dmg){
 }
 
 /* ================================================================= weapons (auto-aim) */
-function newWeap(){ return {cur:'bow', lv:1, xp:0}; }
+function newWeap(){ return {cur:rand(WKEYS), lv:1, xp:0}; }   // random start (will come from the run seed later)
 function checkLevel(){
   while(weap.lv<9 && weap.xp>=MAST[weap.lv-1]){
     weap.xp-=MAST[weap.lv-1]; weap.lv++;
@@ -973,7 +973,7 @@ function reset(){
   enemies=[]; proj=[]; seeds=[]; bombs=[]; pend=[]; trails=[]; expl=[]; parts=[]; pops=[]; pickups=[];
   stains=[]; paint=[];
   slamState=null; slamT=0; cashHeld=false; cashT=0;
-  kills=0; eliteKills=0; maxMult=1; weaponsUsed=new Set(['bow']);
+  kills=0; eliteKills=0; maxMult=1; weaponsUsed=new Set([weap.cur]);
   buildStructs(); resolveCircle({get x(){return px;},set x(v){px=v;},get y(){return py;},set y(v){py=v;},r:CFG.playerR});
   beamFx=[]; callouts=[];
   scoreBox.classList.remove('shatter');
