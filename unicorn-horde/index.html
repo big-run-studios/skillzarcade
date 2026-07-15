@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.12.0</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.12.1</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -661,7 +661,7 @@ function fireWeapon(){
         hue:(i*24+time*140)%360,trail:st>=2,t:0.95,kb:60}); }
     sfx('bow');
   }else if(w==='gat'){
-    const dmg=(0.9+st*0.12)*dmgMul, jit=st===0?0.055:0.1;
+    const dmg=(1.17+st*0.16)*dmgMul, jit=st===0?0.055:0.1;   // +30% — the gatling should shred
     const shots=st===3?3:1;
     for(let k=0;k<shots;k++){
       const a=aimAng+R(-jit,jit)+(k-(shots-1)/2)*0.14;
@@ -1396,12 +1396,13 @@ function rebuildStructMeshes(){
 
 /* ---- extraction platform (walkable, world centre) ---- */
 const padGrp=new THREE.Group();
+let padDisc,padRing,padLight;
 {
-  const disc=new THREE.Mesh(new THREE.CylinderGeometry(CFG.extractR,CFG.extractR+8,6,40),toon(0x123a5a,0x0e5f8a,0.5));
-  disc.position.y=3; padGrp.add(disc);
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(CFG.extractR,2.5,8,48),basic(0x5fe0ff));
-  ring.rotation.x=Math.PI/2; ring.position.y=7; padGrp.add(ring);
-  const gl=new THREE.PointLight(0x5fe0ff,35,380); gl.position.y=40; padGrp.add(gl);
+  padDisc=new THREE.Mesh(new THREE.CylinderGeometry(CFG.extractR,CFG.extractR+8,6,40),toon(0x123a5a,0x0e5f8a,0.5));
+  padDisc.position.y=3; padGrp.add(padDisc);
+  padRing=new THREE.Mesh(new THREE.TorusGeometry(CFG.extractR,2.5,8,48),basic(0x5fe0ff));
+  padRing.rotation.x=Math.PI/2; padRing.position.y=7; padGrp.add(padRing);
+  padLight=new THREE.PointLight(0x5fe0ff,35,380); padLight.position.y=40; padGrp.add(padLight);
   padGrp.position.set(PADX,0,PADY);
   scene.add(padGrp);
 }
@@ -1993,6 +1994,20 @@ function syncScene(dt){
   cashSign.material.color.set(unlocked?0xffffff:0x555566);
   const pulse=extractT>0?1+0.14*Math.sin(time*10):1;
   cashSign.scale.set(84*pulse,105*pulse,1);
+  // rainbow gate open → the platform itself changes state: ring cycles rainbow, brighter, hungrier
+  if(gateT>0&&state==='play'){
+    padRing.material.color.setHSL((time*0.6)%1,0.95,0.62);
+    padDisc.material.emissiveIntensity=0.9+0.35*Math.sin(time*8);
+    padLight.color.setHSL((time*0.6)%1,0.95,0.6);
+    padLight.intensity=70+30*Math.sin(time*8);
+    padRing.scale.setScalar(1+0.05*Math.sin(time*8));
+  }else{
+    padRing.material.color.set(0x5fe0ff);
+    padDisc.material.emissiveIntensity=0.5;
+    padLight.color.set(0x5fe0ff);
+    padLight.intensity=35;
+    padRing.scale.setScalar(1);
+  }
   // chests (headbutt shake + lid pop)
   syncSet(chests,()=>'chest',makeChest,(c,m)=>{
     m.position.set(c.x,0,c.y);
