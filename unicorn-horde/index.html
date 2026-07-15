@@ -47,8 +47,8 @@
     100%{transform:translateX(-50%) translateY(110px) rotate(-14deg);opacity:0;}
   }
 
-  /* weapon pill (bottom-left, above cash) */
-  #weapPill{position:absolute;left:12px;bottom:calc(max(16px,env(safe-area-inset-bottom)) + 84px);
+  /* weapon pill (top-left, under the back button — the bottom band belongs to the stick) */
+  #weapPill{position:absolute;left:12px;top:calc(max(14px,env(safe-area-inset-top)) + 66px);
     background:var(--panel);border:var(--panel-bd);border-radius:14px;padding:8px 12px;min-width:150px;backdrop-filter:blur(4px);}
   #weapName{font-size:11px;font-weight:800;letter-spacing:1px;color:var(--cyan);}
   #weapLv{font-size:11px;font-weight:800;color:var(--gold);margin-left:6px;}
@@ -138,7 +138,7 @@
       <div class="title">UNICORN <span>HORDE</span></div>
       <div class="sub">RUN · BLAST · CASH OUT</div>
       <div class="htp">
-        <div class="row"><div class="ic">👆</div><div class="tx"><b>Hold anywhere</b> — your unicorn <b>runs to your finger</b> · the hero auto-aims</div></div>
+        <div class="row"><div class="ic">👆</div><div class="tx"><b>Hold anywhere</b> to run to your finger · or grab the <b>stick</b> at the bottom edge · the hero auto-aims</div></div>
         <div class="row"><div class="ic">🍇</div><div class="tx">Angry fruit floods in from <i>everywhere</i> — dodge, kite, use the <b>stalls as cover</b></div></div>
         <div class="row"><div class="ic">✨</div><div class="tx"><b>Run over pickups</b>: new weapons · <u>RAINBOW SLAM</u> clears the screen</div></div>
         <div class="row"><div class="ic">💰</div><div class="tx">Your <b>shadow ring is your life</b> — no refills · <u>hold CASH OUT</u> to bank it · outlive the <i>whole song</i> for +25%</div></div>
@@ -170,7 +170,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.6.3</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.7.0</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -1013,25 +1013,46 @@ cashBtn.addEventListener('pointercancel',()=>cancelCashHold());
 cashBtn.addEventListener('pointerleave',()=>cancelCashHold());
 cashBtn.addEventListener('click',e=>e.stopPropagation());
 
-/* ================================================================= input — hold to run there */
-// while the pointer is held, the unicorn runs toward the point under the finger/cursor
-const ptr={on:false,id:null,sx:0,sy:0};   // screen (design-space) coords, re-projected to world every frame
+/* ================================================================= input — two ways to drive
+   1) hold anywhere in the field: the unicorn runs to the point under your finger
+   2) touch the bottom band: a floating analog stick, so your thumb never covers the action */
+const ptr={on:false,id:null,sx:0,sy:0};   // hold-to-move pointer (design-space coords)
+const stick={on:false,id:null,bx:0,by:0,dx:0,dy:0};
+const STICK_R=58, STICK_DEAD=10, STICK_BAND=235;   // band height above the visible bottom edge
 let goTarget=null;                        // debug/headless destination (world coords)
 const keys=new Set();
 function localPt(cx,cy){ const r=app.getBoundingClientRect(); return {x:(cx-r.left-offX)/scale, y:(cy-r.top-offY)/scale}; }
 app.addEventListener('pointerdown',e=>{
   if(e.target.closest('button')) return;
-  if(ptr.on) return;
   const L=localPt(e.clientX,e.clientY);
+  if(state==='play' && !stick.on && L.y>vy1-STICK_BAND){   // bottom band → analog stick
+    stick.on=true; stick.id=e.pointerId;
+    stick.bx=clamp(L.x,vx0+70,vx1-70); stick.by=clamp(L.y,vy1-STICK_BAND+40,vy1-46);
+    stick.dx=0; stick.dy=0;
+    if(app.setPointerCapture) try{app.setPointerCapture(e.pointerId);}catch(_){}
+    return;
+  }
+  if(ptr.on) return;
   ptr.on=true; ptr.id=e.pointerId; ptr.sx=L.x; ptr.sy=L.y; goTarget=null;
   if(app.setPointerCapture) try{app.setPointerCapture(e.pointerId);}catch(_){}
 });
 app.addEventListener('pointermove',e=>{
-  if(!ptr.on||e.pointerId!==ptr.id) return;
   const L=localPt(e.clientX,e.clientY);
+  if(stick.on && e.pointerId===stick.id){
+    // floating base: pulled past the throw, the base follows the thumb (never feels pinned)
+    let dx=L.x-stick.bx, dy=L.y-stick.by; const d=Math.hypot(dx,dy);
+    if(d>STICK_R){ stick.bx=L.x-dx/d*STICK_R; stick.by=L.y-dy/d*STICK_R; dx=L.x-stick.bx; dy=L.y-stick.by; }
+    if(d<STICK_DEAD){ stick.dx=0; stick.dy=0; }
+    else{ const m=Math.min(1,d/STICK_R), a=Math.atan2(dy,dx); stick.dx=Math.cos(a)*m; stick.dy=Math.sin(a)*m; }
+    return;
+  }
+  if(!ptr.on||e.pointerId!==ptr.id) return;
   ptr.sx=L.x; ptr.sy=L.y;
 });
-function endPointer(e){ if(e.pointerId===ptr.id){ ptr.on=false; ptr.id=null; } }
+function endPointer(e){
+  if(e.pointerId===stick.id){ stick.on=false; stick.id=null; stick.dx=0; stick.dy=0; }
+  if(e.pointerId===ptr.id){ ptr.on=false; ptr.id=null; }
+}
 app.addEventListener('pointerup',endPointer);
 app.addEventListener('pointercancel',endPointer);
 app.addEventListener('touchstart',e=>{ if(!e.target.closest('button')) e.preventDefault(); },{passive:false});
@@ -1070,10 +1091,13 @@ function movePlayer(dt){
   moveTgt=null;
   if(slamState){ moving=0; return; }   // locked in the slam animation
   let tx=null,ty=null;
-  if(ptr.on){ tx=ptr.sx+camX; ty=ptr.sy+camY; }   // held finger/cursor, re-projected as the camera moves
-  else if(goTarget){ tx=goTarget.x; ty=goTarget.y; }
+  if(!stick.on){
+    if(ptr.on){ tx=ptr.sx+camX; ty=ptr.sy+camY; }   // held finger/cursor, re-projected as the camera moves
+    else if(goTarget){ tx=goTarget.x; ty=goTarget.y; }
+  }
   let mx=0,my=0;
-  if(tx!==null){
+  if(stick.on){ mx=stick.dx; my=stick.dy; }
+  else if(tx!==null){
     tx=clamp(tx,WALL+CFG.playerR,WW-WALL-CFG.playerR);
     ty=clamp(ty,WALL+CFG.playerR,WH-WALL-CFG.playerR);
     moveTgt={x:tx,y:ty};
@@ -1692,6 +1716,27 @@ function drawParticles(){
   for(const p of pops){ ctx.globalAlpha=Math.min(1,p.t*2.4); ctx.fillStyle=p.col; ctx.fillText(p.txt,p.x,p.y); }
   ctx.globalAlpha=1;
 }
+/* analog stick (screen-space) — live stick while touched, faint corner hints otherwise */
+function drawStickUI(){
+  if(state!=='play') return;
+  if(stick.on){
+    ctx.strokeStyle='rgba(190,230,255,.45)'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(stick.bx,stick.by,STICK_R*0.78,0,6.283); ctx.stroke();
+    ctx.fillStyle='rgba(190,230,255,.10)';
+    ctx.beginPath(); ctx.arc(stick.bx,stick.by,STICK_R*0.78,0,6.283); ctx.fill();
+    ctx.fillStyle='rgba(225,245,255,.6)';
+    ctx.beginPath(); ctx.arc(stick.bx+stick.dx*STICK_R*0.62,stick.by+stick.dy*STICK_R*0.62,16,0,6.283); ctx.fill();
+  }else{
+    const a=Math.max(0.06,0.26-runT*0.008);   // teaches early, then gets out of the way
+    ctx.globalAlpha=a; ctx.strokeStyle='#bfeaff'; ctx.lineWidth=2; ctx.setLineDash([5,7]);
+    for(const hx of [vx0+84, vx1-84]){
+      ctx.beginPath(); ctx.arc(hx,vy1-118,34,0,6.283); ctx.stroke();
+      ctx.fillStyle='#bfeaff'; ctx.font='800 9px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('STICK',hx,vy1-118);
+    }
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+  }
+}
 /* destination marker (world-space ground decal) */
 function drawMoveMarker(){
   if(state!=='play'||!moveTgt) return;
@@ -1809,6 +1854,7 @@ function render(){
   drawWallFront();
   ctx.restore();                                    // back to screen space
 
+  drawStickUI();
   drawOffscreenArrows();
   drawVignette();
   if(paused&&state==='play'){ ctx.fillStyle='rgba(5,3,15,.6)'; ctx.fillRect(vx0,vy0,vx1-vx0,vy1-vy0);
@@ -1871,6 +1917,7 @@ window.__game={
   gateNow:()=>{ gateNext=runT; },
   goto:(x,y)=>{ goTarget={x,y}; },               // headless "hold finger at world point"
   stop:()=>{ goTarget=null; },
+  stickSet:(dx,dy)=>{ if(dx===null){ stick.on=false; stick.dx=0; stick.dy=0; } else { stick.on=true; stick.dx=dx; stick.dy=dy; } },
   tp:(x,y)=>{ px=x; py=y; },
   holdCash:v=>{ if(v===false) cancelCashHold(); else startCashHold(); },
   ents:()=>({enemies,proj,seeds,bombs,pickups,structs}),
