@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.13.0</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.13.1</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -185,6 +185,7 @@ const CFG={
   eliteStart:55, eliteBase:0.08, eliteGrow:0.002, eliteHp:2.5, eliteSpd:1.15, eliteScore:3,
   wpFirst:12, wpEvery:14, wpLife:14, wpMax:2,
   slamStart:40, slamMinGap:26, slamLife:14, slamDmg:60,
+  trampleDmg:3, trampleReach:9, trampleCd:0.3, trampleKb:55,   // hooves crush the weakest fruit underfoot while galloping (scales with hpMul)
   spawnSafe:400,              // nothing may materialize closer than this to the player — no bad-luck deaths
   budgetBase:3, budgetRate:0.15, budgetLate:0.09,
   waveIntMax:5.2, waveIntMin:2.6, waveIntRate:0.03,
@@ -537,6 +538,15 @@ function updateEnemies(dt){
       if(cd2<min){
         e.x=px+ex/cd2*min; e.y=py+ey/cd2*min;
         if(e.atkCd<=0){ e.atkCd=d.cd; e.lunge=0.22; hurtPlayer(d.dmg); }
+      }
+    }
+    // trample: while galloping, hooves crush anything underfoot — one-shots the weakest fruit, chips the rest
+    if(moving>0.05){
+      const tx=e.x-px, ty=e.y-py, td=Math.hypot(tx,ty)||1;
+      if(td<CFG.playerR+d.r+CFG.trampleReach){
+        e.tramCd=(e.tramCd||0)-dt;
+        if(e.tramCd<=0){ e.tramCd=CFG.trampleCd;
+          damageEnemy(e, CFG.trampleDmg*hpMul(), tx/td*CFG.trampleKb, ty/td*CFG.trampleKb, null); }
       }
     }
   }
@@ -1739,15 +1749,18 @@ let maneMats=[], tailMats=[], tailNodes=[], tailPrev=[], tailSegs=[], wings=[], 
     const seg=new THREE.Mesh(new THREE.BoxGeometry(7.4,1.6,5.4-i*0.4),mat);
     scene.add(seg); tailSegs.push(seg);
   }
-  // wings — grow out when a clear move fires (slam / clear bomb)
+  // wings — grow out when a clear move fires (slam / clear bomb); each ~as long as the body,
+  // rooted at the shoulder just below the neck/body join and sweeping OUT to the sides
   for(const side of [-1,1]){
     const w=new THREE.Group();
     for(let k=0;k<3;k++){
-      const f=new THREE.Mesh(new THREE.BoxGeometry(26-k*7,1.6,7-k*1.4),basic(0xffd76a));
-      f.position.set((26-k*7)/2, k*2.4, 0); f.rotation.y=k*0.22*side; w.add(f);
+      const len=48-k*10, wid=12-k*3;
+      const f=new THREE.Mesh(new THREE.BoxGeometry(len,2,wid),basic(0xffd76a));
+      f.position.set(len/2, k*2.6, 0); f.rotation.y=k*0.18*side; w.add(f);
     }
-    w.position.set(-4,42,side*10);
-    w.rotation.y=side*2.35; w.rotation.z=0.55;
+    w.position.set(10,36,side*7);           // shoulder, just below where the neck meets the body
+    w.rotation.y=-side*(Math.PI/2+0.3);     // fan straight OUT to that side, swept slightly back
+    w.rotation.z=0.45;                      // (flap overrides this per-frame)
     w.scale.setScalar(0.001); w.visible=false;
     uni.add(w); wings.push(w);
   }
@@ -1948,7 +1961,7 @@ function syncScene(dt){
     for(const w of wings){
       w.visible=gold&&uni.visible;
       w.scale.setScalar(ws);
-      w.rotation.z=0.55+Math.sin(time*9)*0.35*ws;   // flap
+      w.rotation.z=0.4+Math.sin(time*9)*0.32*ws;   // flap (base kept low so the wings read OUT, not up)
     }
   }
 
