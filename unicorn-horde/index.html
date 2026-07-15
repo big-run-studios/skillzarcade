@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.13.8</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.13.9</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -169,7 +169,7 @@ import * as THREE from './lib/three.module.js';
 const WW=3000, WH=2300, WALL=40, WALLH=60;
 const RAINBOW=['#ff4d6e','#ff9a2e','#ffe14d','#3ddc74','#4dc3ff','#b06cff'];
 const CFG={
-  maxHp:50, invuln:0.25, playerR:15, moveSpd:182, walkBoost:1.25,   // invuln = post-hit iframe (0.25s: rate-limits a swarm but stays punishing)
+  maxHp:50, invuln:1.0, playerR:15, moveSpd:182, walkBoost:1.25,   // invuln = post-hit iframe: one hit grants a full second of immunity from all enemies
   dmgHold:0.45, dmgDrain:0.5,   // damage telegraph: red segment holds, then drains (fraction of maxHp/s)
   aimRange:{bow:360,gat:330,bomb:300},
   pickupR:34, lemonStand:230,
