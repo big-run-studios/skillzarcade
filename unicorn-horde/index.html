@@ -32,13 +32,13 @@
   #hud *{pointer-events:none;}
   #hud.on{opacity:1;}
   #scoreBox{position:absolute;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);text-align:center;}
-  #scoreLbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--dim);}
-  #scoreVal{font-size:32px;font-weight:800;letter-spacing:2px;color:var(--score);line-height:1.05;text-shadow:var(--score-glow);}
-  #multRow{margin-top:2px;font-size:14px;font-weight:800;letter-spacing:1px;color:var(--gold);text-shadow:0 0 8px rgba(255,194,51,.6);transition:font-size .25s;}
-  #multWrap{width:96px;height:5px;border-radius:3px;background:rgba(255,255,255,.13);margin:4px auto 0;overflow:hidden;}
+  #scoreLbl{font-size:8px;font-weight:700;letter-spacing:2px;color:var(--dim);}
+  #scoreVal{font-size:26px;font-weight:800;letter-spacing:2px;color:var(--score);line-height:1.05;text-shadow:var(--score-glow);}
+  #multRow{margin-top:1px;font-size:12px;font-weight:800;letter-spacing:1px;color:var(--gold);text-shadow:0 0 8px rgba(255,194,51,.6);transition:font-size .25s;}
+  #multWrap{width:78px;height:4px;border-radius:3px;background:rgba(255,255,255,.13);margin:3px auto 0;overflow:hidden;}
   #multFill{height:100%;width:0%;background:linear-gradient(90deg,#ffc233,#ff8ad2);border-radius:3px;}
   #multWrap.maxed #multFill{width:100%;background:linear-gradient(90deg,#ffe14d,#ff3d9a,#5fe0ff);}
-  #timeRow{margin-top:4px;font-size:11px;font-weight:800;letter-spacing:2px;color:var(--dim);}
+  #timeRow{margin-top:3px;font-size:10px;font-weight:800;letter-spacing:2px;color:var(--dim);}
   #timeRow.hot{color:#ff5a7a;text-shadow:0 0 8px rgba(255,61,110,.7);}
   #scoreBox.shatter{animation:shatter .9s forwards;}
   @keyframes shatter{
@@ -48,23 +48,23 @@
   }
 
   /* weapon pill (top-left, under the back button — the bottom band belongs to the stick) */
-  #weapPill{position:absolute;left:12px;top:calc(max(14px,env(safe-area-inset-top)) + 66px);
-    background:var(--panel);border:var(--panel-bd);border-radius:14px;padding:8px 12px;min-width:150px;backdrop-filter:blur(4px);}
-  #weapName{font-size:11px;font-weight:800;letter-spacing:1px;color:var(--cyan);}
-  #weapLv{font-size:11px;font-weight:800;color:var(--gold);margin-left:6px;}
-  #mastWrap{margin-top:5px;height:6px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden;}
+  #weapPill{position:absolute;left:10px;top:calc(max(14px,env(safe-area-inset-top)) + 56px);
+    background:var(--panel);border:1.5px solid #b06cff;border-radius:10px;padding:5px 8px;min-width:106px;backdrop-filter:blur(4px);}
+  #weapName{font-size:8.5px;font-weight:800;letter-spacing:.7px;color:var(--cyan);}
+  #weapLv{font-size:8.5px;font-weight:800;color:var(--gold);margin-left:4px;}
+  #mastWrap{margin-top:4px;height:4px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;}
   #mastFill{height:100%;width:0%;background:linear-gradient(90deg,#5fe0ff,#b06cff);border-radius:4px;transition:width .15s;}
 
-  #backArcade{position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;z-index:25;width:44px;height:44px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:27px;font-weight:800;line-height:1;padding-bottom:4px;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
-  #muteBtn{position:absolute;top:max(14px,env(safe-area-inset-top));right:14px;z-index:25;width:44px;height:44px;border-radius:50%;border:var(--panel-bd);background:var(--panel);color:#fff;font-size:19px;line-height:1;cursor:pointer;backdrop-filter:blur(6px);box-shadow:var(--panel-glow);display:flex;align-items:center;justify-content:center;}
+  #backArcade{position:absolute;top:max(12px,env(safe-area-inset-top));left:12px;z-index:25;width:37px;height:37px;border-radius:50%;border:1.5px solid #b06cff;background:var(--panel);color:#fff;font-size:22px;font-weight:800;line-height:1;padding-bottom:3px;cursor:pointer;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;}
+  #muteBtn{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;z-index:25;width:37px;height:37px;border-radius:50%;border:1.5px solid #b06cff;background:var(--panel);color:#fff;font-size:15px;line-height:1;cursor:pointer;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;}
 
   /* hold-to-cash-out */
-  #cashBtn{position:absolute;left:50%;transform:translateX(-50%);bottom:max(16px,env(safe-area-inset-bottom));z-index:24;
-    width:min(74%,300px);height:60px;border-radius:999px;cursor:pointer;border:2px solid rgba(255,255,255,.55);
+  #cashBtn{position:absolute;left:50%;transform:translateX(-50%);bottom:max(14px,env(safe-area-inset-bottom));z-index:24;
+    width:min(44%,190px);height:44px;border-radius:999px;cursor:pointer;border:1.5px solid rgba(255,255,255,.55);
     display:none;align-items:center;justify-content:center;overflow:hidden;
-    font-family:var(--display);font-weight:900;letter-spacing:1px;font-size:14px;color:#2a1c04;
+    font-family:var(--display);font-weight:900;letter-spacing:.7px;font-size:10.5px;color:#2a1c04;
     background:radial-gradient(120% 160% at 50% 20%, #ffe9a8, #ffc233 55%, #d9941e);
-    box-shadow:0 0 16px rgba(255,194,51,.55), 0 4px 12px rgba(0,0,0,.5), inset 0 0 0 2px rgba(255,255,255,.25);}
+    box-shadow:0 0 12px rgba(255,194,51,.5), 0 3px 9px rgba(0,0,0,.5), inset 0 0 0 1.5px rgba(255,255,255,.25);}
   #cashBtn.on{display:flex;}
   #cashBtn.locked{filter:grayscale(.75) brightness(.72);cursor:default;}
   #cashBtn.gate{animation:gatepulse .8s ease-in-out infinite;border-color:#9ffff0;}
@@ -72,7 +72,7 @@
     50%{box-shadow:0 0 34px rgba(57,255,160,.95),0 4px 12px rgba(0,0,0,.5);}}
   #cashFill{position:absolute;inset:0;width:0%;background:linear-gradient(180deg,rgba(57,255,160,.95),rgba(20,190,110,.95));pointer-events:none;}
   #cashTxt{position:relative;z-index:2;pointer-events:none;text-align:center;line-height:1.2;}
-  #cashTxt small{display:block;font-size:10px;font-weight:800;letter-spacing:2px;opacity:.75;}
+  #cashTxt small{display:block;font-size:8.5px;font-weight:800;letter-spacing:1.5px;opacity:.75;}
 
   /* banners */
   .banner{position:absolute;left:50%;transform:translateX(-50%) scale(.8);text-align:center;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:22;}
@@ -170,7 +170,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.7.0</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.7.1</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -1729,10 +1729,10 @@ function drawStickUI(){
   }else{
     const a=Math.max(0.06,0.26-runT*0.008);   // teaches early, then gets out of the way
     ctx.globalAlpha=a; ctx.strokeStyle='#bfeaff'; ctx.lineWidth=2; ctx.setLineDash([5,7]);
-    for(const hx of [vx0+84, vx1-84]){
-      ctx.beginPath(); ctx.arc(hx,vy1-118,34,0,6.283); ctx.stroke();
-      ctx.fillStyle='#bfeaff'; ctx.font='800 9px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('STICK',hx,vy1-118);
+    for(const hx of [vx0+62, vx1-62]){
+      ctx.beginPath(); ctx.arc(hx,vy1-96,28,0,6.283); ctx.stroke();
+      ctx.fillStyle='#bfeaff'; ctx.font='800 8px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('STICK',hx,vy1-96);
     }
     ctx.setLineDash([]); ctx.globalAlpha=1;
   }
@@ -1800,7 +1800,7 @@ function drawDebug(){
 let lastScore=-1,lastMult=-1,lastMultP=-1,lastWeapTxt='',lastMast=-1,lastCash='',lastTime='';
 function render(){
   if(lastScore!==score){ scoreEl.textContent=score.toLocaleString(); lastScore=score; }
-  if(lastMult!==mult){ multEl.textContent='×'+mult; multEl.style.fontSize=(14+mult*2.2)+'px';
+  if(lastMult!==mult){ multEl.textContent='×'+mult; multEl.style.fontSize=(11+mult*1.6)+'px';
     multWrap.classList.toggle('maxed',mult>=CFG.multMax); lastMult=mult; }
   const mp=mult>=CFG.multMax?100:Math.round(multProg/CFG.multBar[mult-1]*100);
   if(lastMultP!==mp){ multFill.style.width=mp+'%'; lastMultP=mp; }
