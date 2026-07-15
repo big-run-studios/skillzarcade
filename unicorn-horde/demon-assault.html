@@ -12,7 +12,7 @@
     --bg:#0b0605;
     --panel:rgba(30,12,10,.85); --panel-bd:2px solid #c0392b;
     --txt:#f3e3da; --dim:#c39a8a;
-    --cyan:#e8b24a; --gold:#f2b13a; --magenta:#c0392b; --green:#39ffa0; --red:#ff4a35; --violet:#8a2f6a;
+    --cyan:#4de3ff; --gold:#f2b13a; --magenta:#c0392b; --green:#39ffa0; --red:#ff4a35; --violet:#8a2f6a;
     --score:#fff; --score-glow:0 0 8px #ff7a3a,0 0 20px rgba(255,90,40,.7);
     --btn:linear-gradient(180deg,#e0574a,#a01810); --btn-ink:#1a0603; --btn-glow:0 0 24px rgba(200,57,43,.6),inset 0 0 0 2px rgba(255,180,120,.35);
     --title:#f6d8c2; --title-glow:0 0 10px #ff5a2a,0 0 28px rgba(255,90,42,.8);
@@ -52,7 +52,7 @@
   #weapName{font-size:8.5px;font-weight:800;letter-spacing:.7px;color:var(--cyan);}
   #weapLv{font-size:8.5px;font-weight:800;color:var(--gold);margin-left:4px;}
   #mastWrap{margin-top:4px;height:4px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;}
-  #mastFill{height:100%;width:0%;background:linear-gradient(90deg,#e8b24a,#c0392b);border-radius:4px;transition:width .15s;}
+  #mastFill{height:100%;width:0%;background:linear-gradient(90deg,#4de3ff,#2a7fd0);border-radius:4px;transition:width .15s;}
 
   #backArcade{position:absolute;top:max(12px,env(safe-area-inset-top));left:12px;z-index:40;width:37px;height:37px;border-radius:50%;border:1.5px solid #c0392b;background:var(--panel);color:#fff;font-size:22px;font-weight:800;line-height:1;padding-bottom:3px;cursor:pointer;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;}
   #muteBtn{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;z-index:40;width:37px;height:37px;border-radius:50%;border:1.5px solid #c0392b;background:var(--panel);color:#fff;font-size:15px;line-height:1;cursor:pointer;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;}
@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.1.1</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.2.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1367,26 +1367,32 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
 (function buildGround(){
   const cvt=document.createElement('canvas'); cvt.width=1500; cvt.height=1150;
   const g=cvt.getContext('2d'), sc=0.5;
-  // hellstone ground — charred rock with a warm ember core, glowing lava fissures, dark cracks
+  // hellstone ground — near-black COOL stone with a molten core; bright lava veins + pools = high contrast
   const grd=g.createRadialGradient(750,575,60,750,575,900);
-  grd.addColorStop(0,'#3a1408'); grd.addColorStop(0.55,'#1c0b06'); grd.addColorStop(1,'#0b0503');
+  grd.addColorStop(0,'#3a1608'); grd.addColorStop(0.42,'#161a22'); grd.addColorStop(1,'#090b0f');
   g.fillStyle=grd; g.fillRect(0,0,1500,1150);
   g.globalAlpha=0.06; g.fillStyle='#000000';                        // subtle flagstone banding
   for(let i=0;i<12;i++){ if(i%2) g.fillRect(0,i*96,1500,96); }
   g.globalAlpha=1;
-  for(let i=0;i<520;i++){                                           // dark stone cracks / soot flecks
+  for(let i=0;i<520;i++){                                           // stone cracks / soot flecks (some cool)
     const x=R(0,1500), y=R(0,1150);
-    g.strokeStyle=Math.random()<0.5?'rgba(120,60,30,.14)':'rgba(0,0,0,.38)';
+    g.strokeStyle=Math.random()<0.5?'rgba(90,110,140,.10)':'rgba(0,0,0,.42)';
     g.lineWidth=1.2;
     g.beginPath(); g.moveTo(x,y); g.lineTo(x+R(-4,4),y+R(-4,4)); g.stroke();
   }
-  for(let i=0;i<26;i++){                                            // glowing lava fissures
-    let x=R(60,1440), y=R(60,1090); const segs=R(3,7);
-    g.strokeStyle='rgba(255,110,40,.5)'; g.lineWidth=R(1.4,3.2); g.lineCap='round';
-    g.shadowColor='rgba(255,120,40,.9)'; g.shadowBlur=8;
-    g.beginPath(); g.moveTo(x,y);
-    for(let s=0;s<segs;s++){ x+=R(-26,26); y+=R(-26,26); g.lineTo(x,y); }
-    g.stroke();
+  for(let i=0;i<8;i++){                                             // molten pools — bright warm focal pops
+    const x=R(120,1380), y=R(120,1030), r0=R(26,60);
+    const pg=g.createRadialGradient(x,y,2,x,y,r0);
+    pg.addColorStop(0,'rgba(255,236,180,.95)'); pg.addColorStop(0.35,'rgba(255,120,40,.7)'); pg.addColorStop(1,'rgba(120,30,10,0)');
+    g.fillStyle=pg; g.beginPath(); g.arc(x,y,r0,0,6.283); g.fill();
+  }
+  for(let i=0;i<34;i++){                                            // lava fissures: wide dim glow + white-hot core
+    let x=R(60,1440), y=R(60,1090); const segs=R(4,8), pts=[[x,y]];
+    for(let s=0;s<segs;s++){ x+=R(-30,30); y+=R(-30,30); pts.push([x,y]); }
+    const trace=()=>{ g.beginPath(); pts.forEach((p,k)=>k?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])); g.stroke(); };
+    g.lineCap='round'; g.shadowColor='rgba(255,120,40,.9)'; g.shadowBlur=10;
+    g.strokeStyle='rgba(255,110,40,.45)'; g.lineWidth=R(3,6); trace();          // wide dim glow
+    g.shadowBlur=6; g.strokeStyle='rgba(255,244,200,.9)'; g.lineWidth=R(1,1.8); trace();   // white-hot core
   }
   g.shadowBlur=0;
   // sidewalks — ring around the platform, N/S/E/W spokes, and a perimeter loop (canvas = world × 0.5)
@@ -1426,7 +1432,7 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
     g.beginPath(); g.moveTo(x,y-s*0.5); g.lineTo(x+s,y); g.lineTo(x,y+s*0.5); g.lineTo(x-s,y); g.closePath(); g.fill(); }
   g.globalAlpha=1;
   const tex=new THREE.CanvasTexture(cvt); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=4;
-  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH), new THREE.MeshBasicMaterial({map:tex,color:0xb09084}));
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH), new THREE.MeshBasicMaterial({map:tex,color:0xcfd0d4}));
   mesh.rotation.x=-Math.PI/2; mesh.position.set(WW/2,0,WH/2);
   scene.add(mesh);
   // dark apron outside the walls so the horizon isn't a hard edge
@@ -1623,7 +1629,7 @@ function makeFruit(type){
   const grp=new THREE.Group();
   let body;
   if(type==='melon') body=new THREE.Mesh(sphereGeo,new THREE.MeshToonMaterial({map:stripeTex,gradientMap:gradTex}));
-  else body=new THREE.Mesh(sphereGeo,toon(d.col));
+  else body=new THREE.Mesh(sphereGeo,toon(new THREE.Color(d.col).multiplyScalar(0.42).getHex()));   // dark charcoal base; molten glow comes from emissive
   body.material=body.material.clone();     // per-instance flash tinting
   if(type==='lemon') body.scale.set(d.r*1.05,d.r*1.15,d.r*1.0);        // bilespawn: bulbous floater
   else if(type==='slice') body.scale.set(d.r*1.1,d.r*0.82,d.r*1.1);    // gargoyle: hunched
@@ -1822,7 +1828,7 @@ for(let i=0;i<4;i++){
 /* ---- unicorn ---- */
 const uni=new THREE.Group(); scene.add(uni);
 // character-only white lights keep the steel armor bright; ember visor + blood cape read against the hell scene
-const mArmor=toon(0x4a525c), mArmorD=toon(0x2e343c), mSkin=toon(0xc9a07a), mBoot=toon(0x241c18), mVisor=basic(0xff5a2a), mCape=toon(0x7a1410);
+const mArmor=toon(0x3a4550), mArmorD=toon(0x232a33), mSkin=toon(0xc9a07a), mBoot=toon(0x1c2228), mVisor=basic(0x4de3ff), mCyan=basic(0x39d8ff);
 let uniLegs=[], riderArm, riderGrp, headGrp, weapMeshes={}, bodyMesh, cashGlow;
 const NEON3=[0x39ffa0,0xff3d9a,0x4dc3ff];   // (dead legacy palette; kept so the animate forEach stays valid)
 let maneMats=[], tailMats=[], tailNodes=[], tailPrev=[], tailSegs=[], wings=[], wingT=0;
@@ -1844,7 +1850,7 @@ function gaitLeg(p,reach,push,tuck){      // p = leg-local phase 0..1 (0 = footf
     const g=new THREE.Group();
     const thigh=new THREE.Mesh(new THREE.CylinderGeometry(3.4,3.0,16,7),mArmorD); thigh.position.y=-8; g.add(thigh);
     const shin=new THREE.Mesh(new THREE.CylinderGeometry(2.8,2.4,14,7),mArmor); shin.position.y=-22; g.add(shin);
-    const knee=new THREE.Mesh(sphereGeo,mArmor); knee.scale.setScalar(3.2); knee.position.y=-16; g.add(knee);
+    const knee=new THREE.Mesh(sphereGeo,mCyan); knee.scale.setScalar(2.4); knee.position.y=-16; g.add(knee);   // glowing cyan joint
     const boot=new THREE.Mesh(new THREE.BoxGeometry(9,6,11),mBoot); boot.position.set(1.5,-30,0); g.add(boot);
     return g;
   }
@@ -1859,7 +1865,7 @@ function gaitLeg(p,reach,push,tuck){      // p = leg-local phase 0..1 (0 = footf
     const w=new THREE.Group();
     for(let k=0;k<3;k++){
       const len=44-k*10, wid=11-k*3;
-      const f=new THREE.Mesh(new THREE.BoxGeometry(len,2,wid),basic(0xff6a2a,{transparent:true,opacity:0.85}));
+      const f=new THREE.Mesh(new THREE.BoxGeometry(len,2,wid),basic(0x39d8ff,{transparent:true,opacity:0.8}));
       f.position.set(len/2, k*2.6, 0); f.rotation.y=k*0.18*side; w.add(f);
     }
     w.position.set(-4,52,side*8);
@@ -1872,9 +1878,13 @@ function gaitLeg(p,reach,push,tuck){      // p = leg-local phase 0..1 (0 = footf
   const torsoGrp=new THREE.Group(); torsoGrp.position.set(0,38,0); riderGrp=torsoGrp;
   const chest=new THREE.Mesh(new THREE.CylinderGeometry(7.5,6.5,16,10),mArmor); chest.position.y=8; torsoGrp.add(chest);
   const collar=new THREE.Mesh(new THREE.CylinderGeometry(4.6,6.5,4,10),mArmorD); collar.position.y=16; torsoGrp.add(collar);
-  for(const sx of [-1,1]){ const paul=new THREE.Mesh(sphereGeo,mArmor); paul.scale.set(4.6,4,4.6); paul.position.set(0,14,sx*7.5); torsoGrp.add(paul); }
-  const chestRune=new THREE.Mesh(sphereGeo,basic(0xff5a2a)); chestRune.scale.set(2.2,3,1); chestRune.position.set(6.6,9,0); torsoGrp.add(chestRune);
-  const cape=new THREE.Mesh(new THREE.BoxGeometry(1.8,20,13),mCape); cape.position.set(-6.5,6,0); torsoGrp.add(cape);
+  for(const sx of [-1,1]){ const paul=new THREE.Mesh(sphereGeo,mArmor); paul.scale.set(4.6,4,4.6); paul.position.set(0,14,sx*7.5); torsoGrp.add(paul);
+    const pc=new THREE.Mesh(sphereGeo,mCyan); pc.scale.set(1.2,1.2,4.6); pc.position.set(3.4,15,sx*7.5); torsoGrp.add(pc); }   // glowing shoulder trim
+  const chestRune=new THREE.Mesh(sphereGeo,basic(0x39d8ff)); chestRune.scale.set(2.2,3,1); chestRune.position.set(6.6,9,0); torsoGrp.add(chestRune);
+  // back-mounted energy blade (cool signature) + compact pack, replacing the cape
+  const pack=new THREE.Mesh(new THREE.BoxGeometry(4,11,9),mArmorD); pack.position.set(-6.5,7,0); torsoGrp.add(pack);
+  const blade=new THREE.Mesh(new THREE.BoxGeometry(2.4,30,3),mCyan); blade.position.set(-9,15,0); blade.rotation.z=0.5; torsoGrp.add(blade);
+  const hilt=new THREE.Mesh(new THREE.BoxGeometry(3,6,3),mArmorD); hilt.position.set(-4.5,1,0); hilt.rotation.z=0.5; torsoGrp.add(hilt);
   // head — helmet with a glowing ember visor slit (child of the torso, so it aims too)
   headGrp=new THREE.Group(); headGrp.position.set(headBaseX,headBaseY,0); torsoGrp.add(headGrp);
   const helm=new THREE.Mesh(sphereGeo,mArmor); helm.scale.set(5,5.4,5); headGrp.add(helm);
@@ -2085,15 +2095,15 @@ function syncScene(dt){
     m.userData.tel.visible=(e.type==='melon'&&e.telT>0)&&(Math.sin(time*18)>-0.3);
     const bm=m.userData.body.material;
     if(e.hitF>0){ bm.emissive.set(0xffffff); bm.emissiveIntensity=0.95; }
-    else { bm.emissive.set(d.col); bm.emissiveIntensity=0.22; }   // soft candy self-glow so fruit pops at dusk
+    else { bm.emissive.set(d.col); bm.emissiveIntensity=0.5; }   // molten inner-glow: dark body lit from within
   });
 
   // projectiles
   syncSet(proj,p=>p.kind==='arrow'?'arrow':'glit',p=>p.kind==='arrow'?makeArrow():makeGlit(),(p,m)=>{
     m.position.set(p.x,14,p.y);
     if(p.kind==='arrow'){ m.rotation.y=-Math.atan2(p.vy,p.vx);
-      m.material.color.setHSL(0.02+((p.hue||0)%40)/500, 0.95, p.trail?0.6:0.86); }   // ember bolts
-    else { m.scale.setScalar(p.r); m.material.color.setHSL(0.09+((p.hue||0)%30)/900,0.9,0.74); }   // hot tracers
+      m.material.color.setHSL(0.52+((p.hue||0)%30)/1200, 0.9, p.trail?0.72:0.9); }   // electric-cyan bolts
+    else { m.scale.setScalar(p.r); m.material.color.setHSL(0.52,0.85,0.82); }   // cyan-white tracers
   });
   // seeds
   syncSet(seeds,()=>'seed',makeSeed,(s,m)=>{ m.position.set(s.x,10,s.y); });
@@ -2173,7 +2183,7 @@ function syncScene(dt){
   const _tc=new THREE.Color();
   for(const tr of trails){ if(n>=P_MAX) break;
     posA[n*3]=tr.x; posA[n*3+1]=6; posA[n*3+2]=tr.y;
-    _tc.setHSL(0.03+(tr.hue%40)/500,0.95,0.6); colA[n*3]=_tc.r; colA[n*3+1]=_tc.g; colA[n*3+2]=_tc.b; n++; }
+    _tc.setHSL(0.5+(tr.hue%30)/1500,0.85,0.66); colA[n*3]=_tc.r; colA[n*3+1]=_tc.g; colA[n*3+2]=_tc.b; n++; }
   pGeo.setDrawRange(0,n);
   pGeo.attributes.position.needsUpdate=true;
   pGeo.attributes.color.needsUpdate=true;
