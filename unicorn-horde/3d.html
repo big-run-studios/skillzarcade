@@ -168,7 +168,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE 3D v0.8.2</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE 3D v0.8.3</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -768,7 +768,7 @@ function spawnPickup(kind,wtype){
 }
 function collectPickup(p){
   p.dead=true;
-  slowmo(0.35,0.3);
+  slowmo(0.2,0.55);   // light tick, not a movement stall — pickups happen mid-dodge
   if(p.kind==='slam'){ startSlam(); return; }
   if(p.wtype===weap.cur){
     if(weap.lv<9){ weap.xp+=MAST[weap.lv-1]*0.6; checkLevel(); }
@@ -985,7 +985,7 @@ app.addEventListener('pointermove',e=>{
     let dx=e.clientX-stick.bx, dy=e.clientY-stick.by; const d=Math.hypot(dx,dy);
     if(d>STICK_R){ stick.bx=e.clientX-dx/d*STICK_R; stick.by=e.clientY-dy/d*STICK_R; dx=e.clientX-stick.bx; dy=e.clientY-stick.by; }
     if(d<STICK_DEAD){ stick.dx=0; stick.dy=0; }
-    else{ const m=Math.min(1,d/STICK_R), a=Math.atan2(dy,dx); stick.dx=Math.cos(a)*m; stick.dy=Math.sin(a)*m; }
+    else{ const m=Math.min(1,d/(STICK_R*0.7)), a=Math.atan2(dy,dx); stick.dx=Math.cos(a)*m; stick.dy=Math.sin(a)*m; }   // full speed at 70% throw
     return;
   }
   if(!ptr.on||e.pointerId!==ptr.id) return;
@@ -1080,7 +1080,7 @@ function movePlayer(dt){
       else { gx=wayPt.x; gy=wayPt.y; }
     }
     const dx=gx-px, dy=gy-py, d=Math.hypot(dx,dy);
-    if(d>6){ const ease=Math.min(1,d/46); mx=dx/d*ease; my=dy/d*ease; }
+    if(d>6){ const ease=Math.min(1,d/16); mx=dx/d*ease; my=dy/d*ease; }   // full speed almost immediately — no leash lag
     else if(goTarget && !wayPt) goTarget=null;
     if(pBlockT>0 && !wayPt && d>6 && !inStruct(gx,gy,CFG.playerR-2)){   // slide only when no detour owns the route
       const ux=dx/d, uy=dy/d;
@@ -1177,7 +1177,9 @@ function update(rdt){
    ================================================================================= */
 const glCanvas=document.getElementById('gl');
 const renderer=new THREE.WebGLRenderer({canvas:glCanvas,antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+// flat toon shading hides low DPR; capping at 1.5 nearly halves fill cost on retina
+// iPads/phones — frame rate (and therefore input latency) is fill-bound on those
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x0a0618);
 scene.fog=new THREE.Fog(0x0a0618, 1000, 2400);
@@ -1627,7 +1629,7 @@ function syncScene(){
   // camera follow (+ shake)
   const shx=shake>0?R(-shake,shake)*0.35:0, shz=shake>0?R(-shake,shake)*0.35:0;
   camera.position.set(px+shx, 700, py+520+shz);
-  camera.lookAt(px, 0, py-10);
+  camera.lookAt(px, 0, py);   // screen-center = the unicorn exactly, so a finger on it means "stand still"
 
   // unicorn
   const airY=unicornAirY();
@@ -1637,7 +1639,7 @@ function syncScene(){
   let ta=faceAng; let da=ta-uni.userData.a||0;
   uni.userData.a=uni.userData.a===undefined?ta:uni.userData.a;
   { let d2=ta-uni.userData.a; while(d2>Math.PI)d2-=6.283; while(d2<-Math.PI)d2+=6.283;
-    uni.userData.a+=d2*0.25; }
+    uni.userData.a+=d2*0.5; }   // snappy turn-in: the horse commits to the new heading fast
   uni.rotation.y=-uni.userData.a;
   riderGrp.rotation.y=-aimAng-uni.rotation.y;   // Bob twists in the saddle to face the shot
   const squash=slamState==='crouch'?0.8:1;
@@ -1952,7 +1954,7 @@ let last=performance.now();
 function frame(nw){
   requestAnimationFrame(frame);
   const rdt=Math.min((nw-last)/1000,1/30); last=nw;
-  if(ov.width!==Math.round(app.clientWidth*Math.min(devicePixelRatio||1,2))) resize();
+  if(cw!==app.clientWidth||ch!==app.clientHeight) resize();   // catch viewport changes that fire no event — stale cw/ch skews every raycast
   fps+=(1/Math.max(rdt,1e-4)-fps)*0.05;
   try{ update(rdt); }catch(err){ console.error('update',err); }
   try{ syncScene(); syncHud(); overlayDraw(); }catch(err){ console.error('sync',err); }
@@ -1969,7 +1971,7 @@ window.__game={
     enemies:enemies.length,proj:proj.length,pickups:pickups.map(p=>p.kind),slam:slamState,gate:+gateT.toFixed(1),
     budget:+budget.toFixed(1),wave:waveN,paint:paintCount,cashT:+cashT.toFixed(2),secured,
     draws:renderer.info.render.calls}; },
-  step:d=>{ try{update(d);}catch(e){console.error(e);} },
+  step:d=>{ try{update(d); syncScene();}catch(e){console.error(e);} },   // camera-true headless stepping
   startRun, toMenu,
   crashNow:()=>{ hp=1; invulnT=0; hurtPlayer(99); },
   cashNow:()=>completeCash(),
