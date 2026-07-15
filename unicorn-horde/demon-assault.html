@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.2.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.2.1</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1836,9 +1836,9 @@ let tailMesh=null, headBaseX=0, headBaseY=20, uniS=1;   // head rest pose, local
 const _DEG=Math.PI/180;
 // biped run cycle: two legs, half a stride out of phase. uniLegs = [left, right, (unused), (unused)]
 const LEG_PLANT=[0.00,0.50,0.00,0.50];
-const LEG_REACH=[0.85,0.85,0,0];
-const LEG_PUSH =[0.80,0.80,0,0];
-const LEG_TUCK =[0.42,0.42,0,0];
+const LEG_REACH=[1.0,1.0,0,0];     // long, deliberate stride
+const LEG_PUSH =[0.9,0.9,0,0];     // strong push-off behind
+const LEG_TUCK =[0.12,0.12,0,0];   // low knee lift — grounded march, not a skip
 function gaitLeg(p,reach,push,tuck){      // p = leg-local phase 0..1 (0 = footfall/plant)
   if(p<0.6) return reach-(reach+push)*(p/0.6);              // stance: planted, sweeps forward→back
   const s=(p-0.6)/0.4, e=s*s*(3-2*s);                        // swing: airborne, flings back→forward
@@ -2012,19 +2012,21 @@ function syncScene(dt){
   riderGrp.rotation.y=-aimAng-uni.rotation.y;   // Bob twists in the saddle to face the shot
   const squash=slamState==='crouch'?0.8:1;
   uni.scale.set(1,squash,1);
-  // four-beat gallop: each leg follows the gait curve, phase-offset by its footfall; body bounds through suspension
+  // strongman march: long grounded strides, torso rocks over the planted leg, body settles on each footfall
   if(moving>0.05){
     const ph=(walkPh*0.22)%1, TAU=Math.PI*2;
     for(let i=0;i<4;i++){ const p=(ph-LEG_PLANT[i]+1)%1;
       uniLegs[i].rotation.z=gaitLeg(p,LEG_REACH[i],LEG_PUSH[i],LEG_TUCK[i]); }
-    uni.position.y=airY+Math.max(0,Math.sin(ph*TAU+1.1))*8; // body bounds up through the suspension
-    uni.rotation.z=Math.sin(ph*TAU+0.6)*0.06;               // nose dips into each bound
-    headGrp.rotation.z=Math.sin(ph*TAU+1.35)*0.15-0.06;     // head & neck pump
-    headGrp.position.y=headBaseY+Math.sin(ph*TAU+1.1)*1.6;
+    const foot=Math.abs(Math.cos(ph*TAU));                  // 1 at each footfall (ph 0 & .5), 0 mid-stance
+    uni.position.y=airY + 1.3 - foot*2.6;                   // no hop: the body settles DOWN as each boot lands
+    uni.rotation.z=-0.05 + Math.sin(ph*TAU*2)*0.012;        // leans forward, driving into the march
+    riderGrp.position.z=Math.sin(ph*TAU)*2.8;              // heavy weight-shift: torso rocks side to side over the hips
+    headGrp.rotation.z=-0.03 + foot*0.05;                   // heavy nod on each plant
+    headGrp.position.y=headBaseY - foot*1.1;
   }else{
     uniLegs.forEach(leg=>{ leg.rotation.z*=0.8; });
     uni.position.y=airY+Math.sin(time*3.4)*1;
-    uni.rotation.z*=0.8;
+    uni.rotation.z*=0.8; riderGrp.position.z*=0.8;
     headGrp.rotation.z+=(Math.sin(time*1.8)*0.03-headGrp.rotation.z)*0.1;   // idle: soft breathing sway
     headGrp.position.y+=(headBaseY-headGrp.position.y)*0.15;
   }
