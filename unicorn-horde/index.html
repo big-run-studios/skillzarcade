@@ -171,7 +171,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.7.2</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.7.3</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -200,6 +200,7 @@ const CFG={
   eliteStart:55, eliteBase:0.08, eliteGrow:0.002, eliteHp:2.5, eliteSpd:1.15, eliteScore:3,
   wpFirst:12, wpEvery:14, wpLife:14, wpMax:2,
   slamStart:40, slamMinGap:26, slamLife:14, slamDmg:60,
+  spawnSafe:400,              // nothing may materialize closer than this to the player — no bad-luck deaths
   budgetBase:3, budgetRate:0.15, budgetLate:0.09,
   waveIntMax:5.2, waveIntMin:2.6, waveIntRate:0.03,
   waveScaleCap:3.2,
@@ -409,11 +410,21 @@ function spawnEnemy(type,forceElite){
 }
 function spawnAt(type,x,y,forceElite){
   const d=FRUIT[type];
+  // hard spawn-safety radius (melon slices exempt — they burst from a kill you caused)
+  if(type!=='slice'){
+    const dd=Math.hypot(x-px,y-py);
+    if(dd<CFG.spawnSafe){
+      const ux=(x-px)/(dd||1), uy=(y-py)/(dd||1);
+      x=clamp(px+ux*CFG.spawnSafe,WALL+50,WW-WALL-50);
+      y=clamp(py+uy*CFG.spawnSafe,WALL+50,WH-WALL-50);
+    }
+  }
   let elite=!!forceElite;
   if(!elite && type!=='grape' && type!=='slice' && type!=='melon' && runT>CFG.eliteStart)
     elite=Math.random()<CFG.eliteBase+(runT-CFG.eliteStart)*CFG.eliteGrow;
   const e={type,x,y,hp:d.hp*hpMul()*(elite?CFG.eliteHp:1),maxhp:0,elite,r:d.r,
     sv:R(0.85,1.2),   // per-unit speed personality — no two fruit run alike
+    spawnT:0.55,      // rising out of the ground: no moving, no biting
     kx:0,ky:0,atkCd:R(0.1,0.5),ph:R(0,6.28),hitF:0,lunge:0,stun:0,slamHit:false,dead:false,
     leapT:0,leapCd:R(0.6,1.6), telT:0,fireCd:R(1,2.2),shots:0,strafe:Math.random()<.5?-1:1,repoT:0,
     chargeCd:R(3.5,5),chargeT:0,cdx:0,cdy:0};
@@ -506,6 +517,7 @@ function updateEnemies(dt){
     const d=FRUIT[e.type];
     e.ph+=dt*(3+d.spd*0.02);
     e.hitF-=dt; e.atkCd-=dt; e.lunge-=dt;
+    if(e.spawnT>0){ e.spawnT-=dt; continue; }   // rising out of the ground
     if(e.stun>0){ e.stun-=dt;
       e.x+=e.kx*dt; e.y+=e.ky*dt; e.kx*=Math.max(0,1-6*dt); e.ky*=Math.max(0,1-6*dt);
       resolveCircle(e); continue; }
@@ -1170,7 +1182,7 @@ function movePlayer(dt){
       else pBlockT=Math.max(0,pBlockT-dt*1.2);
     }else pBlockT=0;
     walkPh+=dt*9*moving;
-    if(!target && Math.abs(mx)>0.05) face=mx>0?1:-1;
+    if(Math.abs(mx)>0.05) face=mx>0?1:-1;   // the horse always faces where it's going
   }
 }
 function updateCam(){
@@ -1219,8 +1231,7 @@ function update(rdt){
   if(target){
     const ta=Math.atan2(target.y-(py-24),target.x-px);   // from the muzzle height, not the feet — close shots must connect
     let da=ta-aimAng; while(da>Math.PI)da-=6.283; while(da<-Math.PI)da+=6.283;
-    aimAng+=da*Math.min(1,dt*16);
-    face=Math.cos(ta)>=0?1:-1;
+    aimAng+=da*Math.min(1,dt*16);   // Bob tracks the target; the horse keeps its own heading
   }
 
   director(dt);
@@ -1409,7 +1420,8 @@ function fruitFace(e,d){
 }
 function drawEnemy(e){
   const d=FRUIT[e.type];
-  const sc=(e.elite?1.15:1)*(e.lunge>0?1.12:1)*(1+Math.sin(e.ph*2)*0.04);
+  const rise=e.spawnT>0?e.spawnT/0.55:0;   // grows up out of the ground on spawn
+  const sc=(e.elite?1.15:1)*(e.lunge>0?1.12:1)*(1+Math.sin(e.ph*2)*0.04)*(1-rise*0.85);
   ctx.save(); ctx.translate(e.x,e.y);
   ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0,d.r*0.9,d.r*0.85,d.r*0.3,0,0,6.283); ctx.fill();
   const st=Math.sin(e.ph*3)*d.r*0.16;

@@ -168,7 +168,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE 3D v0.8.0</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE 3D v0.8.1</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -197,6 +197,7 @@ const CFG={
   eliteStart:55, eliteBase:0.08, eliteGrow:0.002, eliteHp:2.5, eliteSpd:1.15, eliteScore:3,
   wpFirst:12, wpEvery:14, wpLife:14, wpMax:2,
   slamStart:40, slamMinGap:26, slamLife:14, slamDmg:60,
+  spawnSafe:400,              // nothing may materialize closer than this to the player — no bad-luck deaths
   budgetBase:3, budgetRate:0.15, budgetLate:0.09,
   waveIntMax:5.2, waveIntMin:2.6, waveIntRate:0.03,
   waveScaleCap:3.2,
@@ -370,11 +371,20 @@ function spawnEnemy(type,forceElite){
 }
 function spawnAt(type,x,y,forceElite){
   const d=FRUIT[type];
+  // hard spawn-safety radius (melon slices exempt — they burst from a kill you caused)
+  if(type!=='slice'){
+    const dd=Math.hypot(x-px,y-py);
+    if(dd<CFG.spawnSafe){
+      const ux=(x-px)/(dd||1), uy=(y-py)/(dd||1);
+      x=clamp(px+ux*CFG.spawnSafe,WALL+50,WW-WALL-50);
+      y=clamp(py+uy*CFG.spawnSafe,WALL+50,WH-WALL-50);
+    }
+  }
   let elite=!!forceElite;
   if(!elite && type!=='grape' && type!=='slice' && type!=='melon' && runT>CFG.eliteStart)
     elite=Math.random()<CFG.eliteBase+(runT-CFG.eliteStart)*CFG.eliteGrow;
   const e={type,x,y,hp:d.hp*hpMul()*(elite?CFG.eliteHp:1),maxhp:0,elite,r:d.r,
-    sv:R(0.85,1.2),
+    sv:R(0.85,1.2), spawnT:0.55,
     kx:0,ky:0,vx:0,vy:0,atkCd:R(0.1,0.5),ph:R(0,6.28),hitF:0,lunge:0,stun:0,slamHit:false,dead:false,
     leapT:0,leapCd:R(0.6,1.6), telT:0,fireCd:R(1,2.2),shots:0,strafe:Math.random()<.5?-1:1,repoT:0,
     chargeCd:R(3.5,5),chargeT:0,cdx:0,cdy:0,blockT:0};
@@ -461,6 +471,7 @@ function updateEnemies(dt){
     const d=FRUIT[e.type];
     e.ph+=dt*(3+d.spd*0.02);
     e.hitF-=dt; e.atkCd-=dt; e.lunge-=dt;
+    if(e.spawnT>0){ e.spawnT-=dt; continue; }   // rising out of the ground: no moving, no biting
     if(e.stun>0){ e.stun-=dt;
       e.x+=e.kx*dt; e.y+=e.ky*dt; e.kx*=Math.max(0,1-6*dt); e.ky*=Math.max(0,1-6*dt);
       resolveCircle(e); continue; }
@@ -1093,7 +1104,7 @@ function movePlayer(dt){
       else pBlockT=Math.max(0,pBlockT-dt*1.2);
     }else pBlockT=0;
     walkPh+=dt*9*moving;
-    if(!target && moving>0.05) faceAng=Math.atan2(my,mx);
+    if(moving>0.05) faceAng=Math.atan2(my,mx);   // the horse always faces where it's GOING
   }
 }
 
@@ -1132,8 +1143,7 @@ function update(rdt){
   if(target){
     const ta=Math.atan2(target.y-py,target.x-px);
     let da=ta-aimAng; while(da>Math.PI)da-=6.283; while(da<-Math.PI)da+=6.283;
-    aimAng+=da*Math.min(1,dt*16);
-    faceAng=aimAng;
+    aimAng+=da*Math.min(1,dt*16);   // Bob tracks the target; the horse keeps its own heading
   }
 
   director(dt);
@@ -1380,17 +1390,47 @@ function makeBomb(){
   ring.rotation.x=-Math.PI/2; ring.position.y=1.2; grp.add(ring); grp.userData.ring=ring;
   return grp;
 }
-function makePickup(kind){
+function weaponModel(wt){
+  // oversized spinning replica of the actual weapon — readable across the plaza
+  const g=new THREE.Group();
+  if(wt==='bow'){
+    const arc=new THREE.Mesh(new THREE.TorusGeometry(15,2.4,8,20,Math.PI*1.3),basic(0x9fe8ff));
+    arc.rotation.z=-Math.PI*0.65; g.add(arc);
+    const str=new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.8,27,4),basic(0xffffff)); g.add(str);
+    const ag=new THREE.ConeGeometry(2.6,15,6); ag.rotateZ(-Math.PI/2);
+    const arrow=new THREE.Mesh(ag,basic(0xffe14d)); arrow.position.x=5; g.add(arrow);
+  }else if(wt==='gat'){
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(15,10,10),toon(0x3a2a5a)));
+    for(let i=0;i<3;i++){
+      const bg=new THREE.CylinderGeometry(1.8,1.8,15,6); bg.rotateZ(-Math.PI/2);
+      const bar=new THREE.Mesh(bg,basic(0x9fe8ff)); bar.position.set(13,(i-1)*3.4,0); g.add(bar);
+    }
+  }else{
+    const tg=new THREE.CylinderGeometry(4.6,4.6,13,8); tg.rotateZ(-Math.PI/2);
+    g.add(new THREE.Mesh(tg,toon(0x3a2a5a)));
+    const ball=new THREE.Mesh(sphereGeo,basic(0xff5ab8)); ball.scale.setScalar(6.5); ball.position.x=11; g.add(ball);
+    const fuse=new THREE.Mesh(sphereGeo,basic(0xffe14d)); fuse.scale.setScalar(2.2); fuse.position.set(11,8,0); g.add(fuse);
+  }
+  g.scale.setScalar(2.2);
+  return g;
+}
+function makePickup(p){
+  const kind=p.kind;
   const grp=new THREE.Group();
-  const core=new THREE.Mesh(new THREE.OctahedronGeometry(14),
-    kind==='slam'?basic(0xffffff):toon(0x5fe0ff,0x2a9adf,0.9));
-  core.position.y=26; grp.add(grp.userData.core=core);
+  let core;
   if(kind==='slam'){
+    core=new THREE.Mesh(new THREE.OctahedronGeometry(14),basic(0xffffff));
+    core.position.y=26; grp.add(core);
     const t1=new THREE.Mesh(new THREE.TorusGeometry(19,2.2,8,26),basic(0xff3d9a));
     t1.position.y=26; grp.add(t1);
     const t2=new THREE.Mesh(new THREE.TorusGeometry(25,2.2,8,26),basic(0x5fe0ff));
     t2.position.y=26; t2.rotation.x=Math.PI/2; grp.add(t2);
+  }else{
+    core=weaponModel(p.wtype);
+    core.position.y=36;
+    grp.add(core);
   }
+  grp.userData.core=core;
   const ring=new THREE.Mesh(new THREE.RingGeometry(0.86,1,28),
     basic(kind==='slam'?0xffe14d:0x5fe0ff,{transparent:true,opacity:0.8,side:THREE.DoubleSide}));
   ring.rotation.x=-Math.PI/2; ring.position.y=1.4; grp.add(ring); grp.userData.ring=ring;
@@ -1442,7 +1482,7 @@ for(let i=0;i<4;i++){
 /* ---- unicorn ---- */
 const uni=new THREE.Group(); scene.add(uni);
 const mWhite=toon(0xf6f7ff), mHoof=basic(0x5fe0ff), mSkin=toon(0xffd9b8), mSuit=toon(0xeafcff);
-let uniLegs=[], riderArm, weapMeshes={}, bodyMesh, cashGlow;
+let uniLegs=[], riderArm, riderGrp, weapMeshes={}, bodyMesh, cashGlow;
 (function buildUnicorn(){
   bodyMesh=new THREE.Mesh(sphereGeo,mWhite);
   bodyMesh.scale.set(26,17,15); bodyMesh.position.y=32;
@@ -1474,8 +1514,9 @@ let uniLegs=[], riderArm, weapMeshes={}, bodyMesh, cashGlow;
     const tl=new THREE.Mesh(new THREE.BoxGeometry(3,12-i,2.6),basic(c));
     tl.position.set(-26-i*1.6,36-i*3,(i-2.5)*1.6); tl.rotation.z=0.7; uni.add(tl);
   });
-  // rider
+  // Bob, the rider — aims independently of the horse's heading
   const rider=new THREE.Group(); rider.position.set(-4,48,0);
+  riderGrp=rider;
   const torso=new THREE.Mesh(new THREE.CylinderGeometry(4.6,5.4,13,10),mSuit);
   torso.position.y=7; rider.add(torso);
   const rhead=new THREE.Mesh(sphereGeo,mSkin); rhead.scale.setScalar(5.4); rhead.position.y=17; rider.add(rhead);
@@ -1586,6 +1627,7 @@ function syncScene(){
   { let d2=ta-uni.userData.a; while(d2>Math.PI)d2-=6.283; while(d2<-Math.PI)d2+=6.283;
     uni.userData.a+=d2*0.25; }
   uni.rotation.y=-uni.userData.a;
+  riderGrp.rotation.y=-aimAng-uni.rotation.y;   // Bob twists in the saddle to face the shot
   const squash=slamState==='crouch'?0.8:1;
   const bob=moving>0.05?Math.abs(Math.sin(walkPh*2))*3:Math.sin(time*3.4)*1.5;
   uni.scale.set(1,squash,1);
@@ -1610,7 +1652,8 @@ function syncScene(){
   // enemies
   syncSet(enemies,e=>'e_'+e.type,e=>makeFruit(e.type),(e,m)=>{
     const d=FRUIT[e.type];
-    m.position.set(e.x,0,e.y);
+    const rise=e.spawnT>0?Math.max(0,e.spawnT)/0.55:0;   // new fruit rises out of the ground
+    m.position.set(e.x,-d.r*2.6*rise,e.y);
     const sc=(e.elite?1.15:1)*(e.lunge>0?1.12:1)*(1+Math.sin(e.ph*2)*0.04);
     m.scale.setScalar(sc);
     m.rotation.y=-Math.atan2(py-e.y,px-e.x)+Math.PI/2;   // face the player
@@ -1640,9 +1683,9 @@ function syncScene(){
     m.userData.ring.scale.setScalar(14*(0.4+fB*0.6));
   });
   // pickups
-  syncSet(pickups,p=>'pk_'+p.kind,p=>makePickup(p.kind),(p,m)=>{
+  syncSet(pickups,p=>'pk_'+p.kind+'_'+(p.wtype||''),p=>makePickup(p),(p,m)=>{
     m.position.set(p.x,Math.sin(p.ph)*4,p.y);
-    m.userData.core.rotation.y=time*1.8;
+    m.userData.core.rotation.y=time*2.4;   // the weapon itself spins
     m.userData.ring.scale.setScalar(30*Math.max(0.05,p.t/p.max));
   });
   // stains
