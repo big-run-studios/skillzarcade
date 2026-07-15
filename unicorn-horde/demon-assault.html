@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.2.1</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.2.2</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1857,9 +1857,9 @@ function gaitLeg(p,reach,push,tuck){      // p = leg-local phase 0..1 (0 = footf
   for(let i=0;i<4;i++){ const leg=new THREE.Group(); uni.add(leg); uniLegs.push(leg); }
   uniLegs[0].add(buildLeg()); uniLegs[0].position.set(0,30,6);    // left leg
   uniLegs[1].add(buildLeg()); uniLegs[1].position.set(0,30,-6);   // right leg (2 & 3 stay empty handles)
-  // hips / tassets — face the run direction (part of uni, not the aiming torso)
-  const hips=new THREE.Mesh(new THREE.CylinderGeometry(7.5,6,10,10),mArmorD); hips.position.y=34; uni.add(hips);
-  const skirt=new THREE.Mesh(new THREE.CylinderGeometry(8.5,10,9,10),mArmor); skirt.position.y=30; uni.add(skirt);
+  // boxy armored pelvis — a rectangular prism, no rounded flare (no "big butt"); faces the run direction
+  const pelvis=new THREE.Mesh(new THREE.BoxGeometry(10,12,14),mArmorD); pelvis.position.y=33; uni.add(pelvis);
+  const belt=new THREE.Mesh(new THREE.BoxGeometry(11,3.5,15),mArmor); belt.position.y=37.5; uni.add(belt);
   // wings — spectral energy wings that flare out on a clear move (berserk / clear bomb)
   for(const side of [-1,1]){
     const w=new THREE.Group();
