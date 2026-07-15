@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.11.0</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.11.1</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -777,6 +777,7 @@ function collectPickup(p){
 /* ================================================================= rainbow slam */
 function startSlam(){
   slamState='crouch'; slamT=0; invulnT=Math.max(invulnT,3);
+  wingT=2.8;   // the clear move: wings out, mane & tail go gold
   slowmo(0.5,0.35); sfx('slamUp');
 }
 function updateSlam(dt){
@@ -880,6 +881,7 @@ function updateChests(dt){
   chests=chests.filter(c=>!c.opened||c.t2<0.6);
 }
 function clearBomb(){
+  wingT=2.4;   // the clear move: wings out, mane & tail go gold
   shake=18; beams('255,255,255',0.8); sfx('slam'); slowmo(0.3,0.4);
   expl.push({x:px,y:py,r:0,mx:CFG.clearBombR,t:0,life:0.5,slam:true});
   for(let i=0;i<22;i++){ const a=R(0,6.28),v=R(100,380);
@@ -1146,6 +1148,7 @@ function update(rdt){
   callouts=callouts.filter(c=>c.t<c.life);
   for(const s of stains) s.t+=rdt;
   stains=stains.filter(s=>s.t<s.life);
+  if(wingT>0) wingT-=rdt;
   if(state==='menu') return;
   if(state==='cashing'){ seqT+=rdt; updCashing(rdt); return; }
   if(state==='dying'){ seqT+=rdt; updDying(rdt); return; }
@@ -1624,6 +1627,8 @@ for(let i=0;i<4;i++){
 const uni=new THREE.Group(); scene.add(uni);
 const mWhite=toon(0xf6f7ff), mHoof=basic(0x5fe0ff), mSkin=toon(0xffd9b8), mSuit=toon(0xeafcff);
 let uniLegs=[], riderArm, riderGrp, headGrp, weapMeshes={}, bodyMesh, cashGlow;
+const NEON3=[0x39ffa0,0xff3d9a,0x4dc3ff];   // mane & tail palette: neon green, pink, blue
+let maneMats=[], tailMats=[], tailNodes=[], tailPrev=[], tailSegs=[], wings=[], wingT=0;
 (function buildUnicorn(){
   // pill-shaped body (capsule), thinned on the sides — lean, not plump
   const bodyGeo=new THREE.CapsuleGeometry(12.5,24,6,14); bodyGeo.rotateZ(Math.PI/2);
@@ -1653,12 +1658,30 @@ let uniLegs=[], riderArm, riderGrp, headGrp, weapMeshes={}, bodyMesh, cashGlow;
   horn.position.set(17,28,0); horn.rotation.z=-0.35; headGrp.add(horn);
   const hornGlow=new THREE.PointLight(0xffc233, 14, 130);
   hornGlow.position.set(17,32,0); headGrp.add(hornGlow);
-  RAINBOW.forEach((c,i)=>{
-    const m=new THREE.Mesh(new THREE.BoxGeometry(3,10-i*0.8,2.6),basic(c));
+  for(let i=0;i<6;i++){   // mane strands — neon green / pink / blue
+    const mat=basic(NEON3[i%3]); maneMats.push(mat);
+    const m=new THREE.Mesh(new THREE.BoxGeometry(3,10-i*0.8,2.6),mat);
     m.position.set(6-i*3.4,14-i*1.6,-4.5); m.rotation.z=-0.4; headGrp.add(m);
-    const tl=new THREE.Mesh(new THREE.BoxGeometry(3,12-i,2.6),basic(c));
-    tl.position.set(-26-i*1.6,36-i*3,(i-2.5)*1.6); tl.rotation.z=0.7; uni.add(tl);
-  });
+  }
+  // ribbon tail — a verlet chain of flat segments that trails, swings and settles
+  for(let i=0;i<8;i++){ tailNodes.push(new THREE.Vector3(px-24,38,py)); tailPrev.push(new THREE.Vector3(px-24,38,py)); }
+  for(let i=0;i<7;i++){
+    const mat=basic(NEON3[i%3]); tailMats.push(mat);
+    const seg=new THREE.Mesh(new THREE.BoxGeometry(9,1.6,5.4-i*0.35),mat);
+    scene.add(seg); tailSegs.push(seg);
+  }
+  // wings — grow out when a clear move fires (slam / clear bomb)
+  for(const side of [-1,1]){
+    const w=new THREE.Group();
+    for(let k=0;k<3;k++){
+      const f=new THREE.Mesh(new THREE.BoxGeometry(26-k*7,1.6,7-k*1.4),basic(0xffd76a));
+      f.position.set((26-k*7)/2, k*2.4, 0); f.rotation.y=k*0.22*side; w.add(f);
+    }
+    w.position.set(-4,42,side*10);
+    w.rotation.y=side*2.35; w.rotation.z=0.55;
+    w.scale.setScalar(0.001); w.visible=false;
+    uni.add(w); wings.push(w);
+  }
   // Bob, the rider — aims independently of the horse's heading
   const rider=new THREE.Group(); rider.position.set(-4,44,0);
   riderGrp=rider;
@@ -1743,7 +1766,7 @@ const shock=new THREE.Mesh(new THREE.RingGeometry(0.9,1,48),
 shock.rotation.x=-Math.PI/2; shock.position.y=2.5; shock.visible=false; shock.renderOrder=2; scene.add(shock);
 
 /* ================================================================= scene sync */
-const _v=new THREE.Vector3();
+const _v=new THREE.Vector3(), _tv=new THREE.Vector3(), _tv2=new THREE.Vector3(), _X1=new THREE.Vector3(1,0,0);
 function toScreen(x,z,h){
   _v.set(x,h||0,z).project(camera);
   return {x:(_v.x*0.5+0.5)*cw, y:(-_v.y*0.5+0.5)*ch, ok:_v.z<1};
@@ -1760,7 +1783,8 @@ function unicornAirY(){
   if(slamState==='impact') return Math.max(0,(0.1-slamT))/0.1*560;
   return 0;
 }
-function syncScene(){
+function syncScene(dt){
+  dt=dt||1/60;
   frameN++;
   if(structsDirty) rebuildStructMeshes();
 
@@ -1806,16 +1830,56 @@ function syncScene(){
   riderArm.scale.setScalar(1+st*0.18);
   cashGlow.intensity=(extractT>0||state==='cashing')?55:0;
   if(state==='dying') uni.visible=Math.sin(time*20)>0;
-  // headbutting a chest: lunge into it, nose down, over and over
+  // headbutting a chest: the NECK AND HEAD do the butting — the body stays planted
   if(buttInfo && state==='play' && !slamState){
     const bp=Math.sin(buttInfo.p*Math.PI);
     const ba=Math.atan2(buttInfo.y-py,buttInfo.x-px);
-    uni.position.x+=Math.cos(ba)*bp*7;
-    uni.position.z+=Math.sin(ba)*bp*7;
-    uni.rotation.z-=bp*0.18;
     uni.userData.a=ba; uni.rotation.y=-ba;   // square up to the chest
-  }
+    headGrp.rotation.z-=bp*0.62;
+    headGrp.position.x=14+bp*5;
+  }else headGrp.position.x+=(14-headGrp.position.x)*0.3;
   while(paintQueue.length) addPaint(paintQueue.shift());
+
+  // ribbon tail physics (verlet chain anchored at the rump, streaming back and up)
+  {
+    const anchor=_tv.set(-24,46,0); uni.localToWorld(anchor);
+    tailNodes[0].copy(anchor);
+    const yaw=uni.userData.a||0;
+    const bx=-Math.cos(yaw), bz=-Math.sin(yaw);          // the horse's backward direction
+    const g2=1300*dt*dt, wind=2400*dt*dt;
+    for(let i=1;i<8;i++){
+      const n=tailNodes[i], p=tailPrev[i];
+      _tv2.set((n.x-p.x)*0.9,(n.y-p.y)*0.9,(n.z-p.z)*0.9);
+      p.copy(n);
+      n.add(_tv2);
+      n.y-=g2*(0.4+i*0.14);                              // droop grows toward the tip
+      n.x+=bx*wind; n.z+=bz*wind;                        // flare backward so it reads from above
+      n.y+=Math.sin(time*3.2+i*0.8)*0.25;                // lazy ripple
+      const par=tailNodes[i-1];
+      const d=n.distanceTo(par)||1;
+      n.sub(par).multiplyScalar(8/d).add(par);
+      if(n.y<4) n.y=4;
+    }
+    for(let i=0;i<7;i++){
+      const a=tailNodes[i], b=tailNodes[i+1], seg=tailSegs[i];
+      seg.position.copy(a).add(b).multiplyScalar(0.5);
+      _tv2.copy(b).sub(a).normalize();
+      seg.quaternion.setFromUnitVectors(_X1,_tv2);
+      seg.visible=uni.visible;
+    }
+  }
+  // gold super-mode + wings while a clear move is live
+  {
+    const gold=wingT>0;
+    maneMats.forEach((m,i)=>m.color.setHex(gold?0xffdf6a:NEON3[i%3]));
+    tailMats.forEach((m,i)=>m.color.setHex(gold?0xffdf6a:NEON3[i%3]));
+    const ws=gold?clamp(wingT>2.2?(2.8-wingT)/0.3:wingT<0.45?wingT/0.45:1,0.001,1):0.001;
+    for(const w of wings){
+      w.visible=gold&&uni.visible;
+      w.scale.setScalar(ws);
+      w.rotation.z=0.55+Math.sin(time*9)*0.35*ws;   // flap
+    }
+  }
 
   // health ring position + rebuild on change
   hpTrack.position.set(px,1.2,py);
@@ -2143,7 +2207,7 @@ function frame(nw){
   if(cw!==app.clientWidth||ch!==app.clientHeight) resize();   // catch viewport changes that fire no event — stale cw/ch skews every raycast
   fps+=(1/Math.max(rdt,1e-4)-fps)*0.05;
   try{ update(rdt); }catch(err){ console.error('update',err); }
-  try{ syncScene(); syncHud(); overlayDraw(); }catch(err){ console.error('sync',err); }
+  try{ syncScene(rdt); syncHud(); overlayDraw(); }catch(err){ console.error('sync',err); }
   renderer.render(scene,camera);
 }
 requestAnimationFrame(frame);
@@ -2179,6 +2243,7 @@ window.__game={
   tp:(x,y)=>{ px=x; py=y; },
   padPos:()=>({x:PADX,y:PADY}),
   clearBombNow:clearBomb,
+  tail:()=>tailNodes.map(n=>[Math.round(n.x),Math.round(n.y),Math.round(n.z)]),
   ents:()=>({enemies,proj,seeds,bombs,pickups,structs,chests}),
   cfg:CFG, weapCfg:WEAP, fruitCfg:FRUIT,
   bench:(n=90)=>{ const t0=performance.now(); for(let i=0;i<n;i++){ update(1/60); syncScene(); renderer.render(scene,camera); } return +((performance.now()-t0)/n).toFixed(2); }
