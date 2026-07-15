@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.13.7</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.13.8</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -195,6 +195,12 @@ const CFG={
   spawnMinDist:620,           // 3D camera sees a little further — spawn beyond it
 };
 const MAST=[18,30,48,78,126,204,330,540];
+// low-health warnings — fire once each as HP crosses below the threshold
+const HP_WARN=[
+  {f:0.5, txt:'HEALTH LOW',      sub:'50% HP',              col:'#ffe14d'},
+  {f:0.2, txt:'HEALTH CRITICAL', sub:'20% HP · EXTRACT',    col:'#ff9a2e'},
+  {f:0.1, txt:'⚠ DANGER',        sub:'10% HP · GET OUT!',   col:'#ff3d6e'},
+];
 const WEAP={
   bow:  {name:'PRISM BOW',       lvName:['BRIGHT ARROW','SPLIT SHOT','RAINBOW VOLLEY','PRISM STORM'],   cd:[0.42,0.40,0.38,0.36]},
   gat:  {name:'GLITTER GATLING', lvName:['GLITTER STREAM','SPARK BARRAGE','DISCO INFERNO','GALAXY BARRAGE'],cd:[0.085,0.07,0.058,0.052]},
@@ -266,7 +272,7 @@ const rand=arr=>arr[Math.floor(Math.random()*arr.length)];
 let state='menu';
 let time=0, runT=0, score=0, best=+(store.get('uni_best')||0);
 let mult=1, multProg=0;
-let hp=CFG.maxHp, invulnT=0, hurtFx=0;
+let hp=CFG.maxHp, invulnT=0, hurtFx=0, hpWarned=[false,false,false];
 let dispHp=CFG.maxHp, dmgHoldT=0;   // lagging display hp — the red just-lost segment
 let shake=0;
 let beamFx=[], callouts=[];
@@ -633,7 +639,18 @@ function hurtPlayer(dmg){
   beams('255,61,110',0.4); shake=Math.max(shake,10); sfx('hurt');
   for(let i=0;i<10;i++){ const a=R(0,6.28),v=R(60,200);
     parts.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:R(2,4.5),c:Math.random()<.5?'#ff3d6e':'#fff',t:R(.25,.5)}); }
+  if(hp>0) warnHealth();
   if(hp<=0) startCrash();
+}
+// call out the most severe newly-crossed low-health threshold (once each)
+function warnHealth(){
+  for(let i=HP_WARN.length-1;i>=0;i--){
+    if(!hpWarned[i] && hp<=CFG.maxHp*HP_WARN[i].f){
+      const w=HP_WARN[i]; callout(w.txt,w.sub,w.col); sfx('warn');
+      for(let k=0;k<=i;k++) hpWarned[k]=true;   // deeper hit also clears the shallower warnings
+      break;
+    }
+  }
 }
 
 /* ================================================================= weapons */
@@ -1057,7 +1074,7 @@ function showOver(){
   overEl.classList.remove('hide');
 }
 function reset(){
-  runT=0; mult=1; multProg=0; score=0; hp=CFG.maxHp; dispHp=CFG.maxHp; dmgHoldT=0; invulnT=1.0; hurtFx=0;
+  runT=0; mult=1; multProg=0; score=0; hp=CFG.maxHp; dispHp=CFG.maxHp; dmgHoldT=0; invulnT=1.0; hurtFx=0; hpWarned=[false,false,false];
   shake=0; slowT=0; seqT=0; shattered=false; secured=0; gateWin=false; warn30=false; lastCount=99;
   weap=newWeap(); fireCd=0.4; gatHits=0; aimAng=-Math.PI/2; target=null;
   px=WW/2; py=WH/2+180; face=1; moving=0; walkPh=0; faceAng=0;
