@@ -57,20 +57,7 @@
   #backArcade{position:absolute;top:max(12px,env(safe-area-inset-top));left:12px;z-index:25;width:37px;height:37px;border-radius:50%;border:1.5px solid #b06cff;background:var(--panel);color:#fff;font-size:22px;font-weight:800;line-height:1;padding-bottom:3px;cursor:pointer;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;}
   #muteBtn{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;z-index:25;width:37px;height:37px;border-radius:50%;border:1.5px solid #b06cff;background:var(--panel);color:#fff;font-size:15px;line-height:1;cursor:pointer;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;}
 
-  #cashBtn{position:absolute;left:50%;transform:translateX(-50%);bottom:max(14px,env(safe-area-inset-bottom));z-index:24;
-    width:min(44%,190px);height:44px;border-radius:999px;cursor:default;pointer-events:none;border:1.5px solid rgba(255,255,255,.55);
-    display:none;align-items:center;justify-content:center;overflow:hidden;
-    font-family:var(--display);font-weight:900;letter-spacing:.7px;font-size:10.5px;color:#2a1c04;
-    background:radial-gradient(120% 160% at 50% 20%, #ffe9a8, #ffc233 55%, #d9941e);
-    box-shadow:0 0 12px rgba(255,194,51,.5), 0 3px 9px rgba(0,0,0,.5), inset 0 0 0 1.5px rgba(255,255,255,.25);}
-  #cashBtn.on{display:flex;}
-  #cashBtn.locked{filter:grayscale(.75) brightness(.72);cursor:default;}
-  #cashBtn.gate{animation:gatepulse .8s ease-in-out infinite;border-color:#9ffff0;}
-  @keyframes gatepulse{0%,100%{box-shadow:0 0 14px rgba(57,255,160,.5),0 4px 12px rgba(0,0,0,.5);}
-    50%{box-shadow:0 0 34px rgba(57,255,160,.95),0 4px 12px rgba(0,0,0,.5);}}
-  #cashFill{position:absolute;inset:0;width:0%;background:linear-gradient(180deg,rgba(57,255,160,.95),rgba(20,190,110,.95));pointer-events:none;}
-  #cashTxt{position:relative;z-index:2;pointer-events:none;text-align:center;line-height:1.2;}
-  #cashTxt small{display:block;font-size:8.5px;font-weight:800;letter-spacing:1.5px;opacity:.75;}
+  /* the cash pill is gone — the floating $ sign over the platform carries the message */
 
   .banner{position:absolute;left:50%;transform:translateX(-50%) scale(.8);text-align:center;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:22;}
   .banner.show{opacity:1;transform:translateX(-50%) scale(1);}
@@ -138,7 +125,7 @@
         <div class="row"><div class="ic">🕹️</div><div class="tx"><b>Touch anywhere and drag</b> — a floating stick appears under your thumb · the hero auto-aims</div></div>
         <div class="row"><div class="ic">🍇</div><div class="tx">Angry fruit floods in from <i>everywhere</i> — dodge, kite, use the <b>stalls as cover</b></div></div>
         <div class="row"><div class="ic">✨</div><div class="tx"><b>Run over pickups</b> · headbutt <u>chests</u> open for big loot · <u>RAINBOW SLAM</u> clears the screen</div></div>
-        <div class="row"><div class="ic">💰</div><div class="tx">Stand on the <b>center platform</b> for 3s to <u>EXTRACT</u> your pot · outlive the <i>whole song</i> for +25%</div></div>
+        <div class="row"><div class="ic">💰</div><div class="tx">Stand on the <b>$ platform</b> for 3s to <u>EXTRACT</u> your pot · if the <i>song ends first, it's gone</i></div></div>
       </div>
       <button class="btn" id="playBtn">SADDLE UP</button>
       <div class="pb" id="menuBest"></div>
@@ -164,10 +151,9 @@
       <button class="btn ghost" id="cashMenuBtn">ARCADE</button>
     </div>
 
-    <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">EXTRACT AT CENTER</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.10.2</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.11.0</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -187,7 +173,7 @@ const CFG={
   dmgHold:0.45, dmgDrain:0.5,   // damage telegraph: red segment holds, then drains (fraction of maxHp/s)
   aimRange:{bow:360,gat:330,bomb:300},
   pickupR:34, lemonStand:230,
-  maxRun:120, surviveBonus:0.25,
+  maxRun:120,   // the song IS the run — extract before it ends or the pot is gone
   cashUnlock:15,
   extractR:95, extractTime:3,   // cash out = STAND on the center platform for 3s — exposed, committed
   chestOpen:3, chestN:5, chestRange:85, clearBombR:480,   // stand NEAR a chest and Bob's ride goes to work
@@ -223,10 +209,10 @@ const FRUIT={
 };
 const PADX=1500, PADY=1150;   // extraction platform at world centre (walkable — replaces the fountain)
 const BASE_STRUCTS=[
-  {x:880,y:540,w:66,h:62,  hh:74,kind:'crystal'},
-  {x:2054,y:540,w:66,h:62, hh:74,kind:'crystal'},
-  {x:880,y:1680,w:66,h:62, hh:74,kind:'crystal'},
-  {x:2054,y:1680,w:66,h:62,hh:74,kind:'crystal'},
+  {x:880,y:540,w:66,h:62,  hh:74,kind:'bins'},
+  {x:2054,y:540,w:66,h:62, hh:74,kind:'bins'},
+  {x:880,y:1680,w:66,h:62, hh:74,kind:'bins'},
+  {x:2054,y:1680,w:66,h:62,hh:74,kind:'bins'},
   {x:500,y:400,w:150,h:58, hh:52,kind:'stall'},
   {x:740,y:400,w:150,h:58, hh:52,kind:'stall'},
   {x:2110,y:400,w:150,h:58,hh:52,kind:'stall'},
@@ -239,14 +225,14 @@ const BASE_STRUCTS=[
   {x:1420,y:1935,w:160,h:58,hh:52,kind:'stall'},
   {x:300,y:1090,w:150,h:58, hh:52,kind:'stall'},
   {x:2550,y:1090,w:150,h:58,hh:52,kind:'stall'},
-  {x:1140,y:740,w:62,h:48, hh:34,kind:'crate'},
-  {x:1810,y:740,w:66,h:52, hh:34,kind:'crate'},
-  {x:1140,y:1470,w:66,h:52,hh:34,kind:'crate'},
-  {x:1810,y:1470,w:62,h:48,hh:34,kind:'crate'},
-  {x:620,y:1250,w:62,h:48, hh:34,kind:'crate'},
-  {x:2320,y:1250,w:66,h:52,hh:34,kind:'crate'},
-  {x:1020,y:230,w:66,h:52, hh:34,kind:'crate'},
-  {x:1950,y:2030,w:62,h:48,hh:34,kind:'crate'},
+  {x:1140,y:740,w:62,h:48, hh:34,kind:'tree'},
+  {x:1810,y:740,w:66,h:52, hh:34,kind:'tree'},
+  {x:1140,y:1470,w:66,h:52,hh:34,kind:'tree'},
+  {x:1810,y:1470,w:62,h:48,hh:34,kind:'tree'},
+  {x:620,y:1250,w:62,h:48, hh:34,kind:'tree'},
+  {x:2320,y:1250,w:66,h:52,hh:34,kind:'tree'},
+  {x:1020,y:230,w:66,h:52, hh:34,kind:'tree'},
+  {x:1950,y:2030,w:62,h:48,hh:34,kind:'tree'},
 ];
 let structs=[], structsDirty=true;
 
@@ -265,7 +251,7 @@ let dispHp=CFG.maxHp, dmgHoldT=0;   // lagging display hp — the red just-lost 
 let shake=0;
 let beamFx=[], callouts=[];
 let slowT=0, slowF=1, paused=false, dbg=false, fps=60;
-let seqT=0, shattered=false, secured=0, gateWin=false, surviveWin=false, finaleWarned=false;
+let seqT=0, shattered=false, secured=0, gateWin=false, warn30=false, lastCount=99;
 
 let px=WW/2, py=WH/2+180, face=1, moving=0, walkPh=0, faceAng=0;
 let weap=null, fireCd=0, gatHits=0, aimAng=-Math.PI/2, target=null;
@@ -335,7 +321,7 @@ function buildStructs(){
   structs=BASE_STRUCTS.map(s=>({...s}));
   for(let i=0;i<6;i++){
     const p=openSpot(260,30,120);
-    if(p) structs.push({x:p.x-30,y:p.y-24,w:60,h:48,hh:34,kind:'crate'});
+    if(p) structs.push({x:p.x-30,y:p.y-24,w:60,h:48,hh:34,kind:'tree'});
   }
   structsDirty=true;
 }
@@ -828,12 +814,10 @@ function updateGates(dt){
     const nxt=runT<42?'LEMON SPITTERS INCOMING':runT<58?'ORANGE BRUISERS INCOMING':runT<72?'JUGGERNAUT INCOMING':'ELITE WAVE INCOMING';
     gateBanner.innerHTML='🌈 RAINBOW GATE — EXTRACT NOW FOR +'+Math.round(CFG.gateBonus*100)+'%<small>'+nxt+'</small>';
     gateBanner.classList.add('show');
-    cashBtn.classList.add('gate');
   }
   if(gateT>0){
     gateT-=dt;
     if(gateT<CFG.gateDur-2.5) gateBanner.classList.remove('show');
-    if(gateT<=0) cashBtn.classList.remove('gate');
   }
 }
 function onPad(){ return Math.hypot(px-PADX,py-PADY)<CFG.extractR; }
@@ -845,11 +829,11 @@ function updateExtract(dt){
     if(extractT>=CFG.extractTime) completeCash();
   }else extractT=Math.max(0,extractT-dt*2);   // step off and the charge bleeds away fast
 }
-function completeCash(survived){
-  gateWin=gateT>0; surviveWin=!!survived;
-  secured=Math.round(score*(1+(gateWin?CFG.gateBonus:0)+(surviveWin?CFG.surviveBonus:0)));
+function completeCash(){
+  gateWin=gateT>0;
+  secured=Math.round(score*(1+(gateWin?CFG.gateBonus:0)));
   state='cashing'; seqT=0; extractT=0;
-  cashBtn.classList.remove('on','gate'); gateBanner.classList.remove('show');
+  gateBanner.classList.remove('show');
   sfx('cash'); beams('57,255,160',0.9); syncMusic();
 }
 /* ================================================================= chests */
@@ -921,7 +905,7 @@ function updCashing(rdt){
 /* ================================================================= crash */
 function startCrash(){
   state='dying'; seqT=0; shattered=false;
-  extractT=0; cashBtn.classList.remove('on','gate');
+  extractT=0;
   gateBanner.classList.remove('show');
   slowT=0; sfx('crash'); beams('255,61,110',1.0); shake=16; syncMusic();
   for(let i=0;i<26;i++){ const a=R(0,6.28),v=R(80,300);
@@ -941,8 +925,7 @@ function updDying(rdt){
 
 /* ================================================================= results / flow */
 const menuEl=document.getElementById('menu'), overEl=document.getElementById('over'), hudEl=document.getElementById('hud');
-const cashedEl=document.getElementById('cashed'), cashBtn=document.getElementById('cashBtn');
-const cashFill=document.getElementById('cashFill'), cashTxt=document.getElementById('cashTxt');
+const cashedEl=document.getElementById('cashed');
 const scoreBox=document.getElementById('scoreBox'), scoreEl=document.getElementById('scoreVal'), multEl=document.getElementById('multRow');
 const weapNameEl=document.getElementById('weapName'), weapLvEl=document.getElementById('weapLv'), mastFill=document.getElementById('mastFill');
 const multWrap=document.getElementById('multWrap'), multFill=document.getElementById('multFill');
@@ -958,8 +941,7 @@ function showCashed(){
   hudEl.classList.remove('on');
   document.getElementById('cashPts').textContent=secured.toLocaleString();
   document.getElementById('cashChips').innerHTML=statLine()
-    +(gateWin?'<br>🌈 GATE BONUS +'+Math.round(CFG.gateBonus*100)+'%':'')
-    +(surviveWin?'<br>🎵 FULL SONG SURVIVED +'+Math.round(CFG.surviveBonus*100)+'%':'');
+    +(gateWin?'<br>🌈 GATE BONUS +'+Math.round(CFG.gateBonus*100)+'%':'');
   const b=document.getElementById('cashBest');
   if(secured>=best&&secured>0){ b.textContent='★ NEW BEST ★'; b.className='best newbest'; }
   else{ b.textContent='BEST '+best.toLocaleString(); b.className='best'; }
@@ -975,7 +957,7 @@ function showOver(){
 }
 function reset(){
   runT=0; mult=1; multProg=0; score=0; hp=CFG.maxHp; dispHp=CFG.maxHp; dmgHoldT=0; invulnT=1.0; hurtFx=0;
-  shake=0; slowT=0; seqT=0; shattered=false; secured=0; gateWin=false; surviveWin=false; finaleWarned=false;
+  shake=0; slowT=0; seqT=0; shattered=false; secured=0; gateWin=false; warn30=false; lastCount=99;
   weap=newWeap(); fireCd=0.4; gatHits=0; aimAng=-Math.PI/2; target=null;
   px=WW/2; py=WH/2+180; face=1; moving=0; walkPh=0; faceAng=0;
   budget=8; spawnT=0.8; waveN=0; baseAng=R(0,6.283); melonSeen=false; melonCd=0;
@@ -991,18 +973,17 @@ function reset(){
   beamFx=[]; callouts=[];
   scoreBox.classList.remove('shatter');
   gateBanner.classList.remove('show');
-  cashBtn.classList.remove('gate');
 }
 function startRun(){
   reset(); state='play'; paused=false;
   menuEl.classList.add('hide'); overEl.classList.add('hide'); cashedEl.classList.add('hide');
-  hudEl.classList.add('on'); cashBtn.classList.add('on');
+  hudEl.classList.add('on');
   if(!muted){ try{music.currentTime=0;}catch(e){} }
   syncMusic();
 }
 function toMenu(){
   state='menu'; overEl.classList.add('hide'); cashedEl.classList.add('hide');
-  hudEl.classList.remove('on'); cashBtn.classList.remove('on');
+  hudEl.classList.remove('on');
   document.getElementById('menuBest').textContent=best>0?('BEST '+best.toLocaleString()):'';
   menuEl.classList.remove('hide');
   syncMusic();
@@ -1174,12 +1155,16 @@ function update(rdt){
   const dt=rdt*(slowT>0?slowF:1);
   slowT-=rdt;
   runT+=dt;
-  if(!finaleWarned && runT>=CFG.maxRun-10){ finaleWarned=true;
-    callout('FINALE','10 SECONDS — CASH OUT OR RIDE IT OUT','#ff5a7a'); sfx('warn'); }
+  // no free ride: extract before the song ends or lose everything
+  if(!warn30 && runT>=CFG.maxRun-30){ warn30=true;
+    callout('30 SECONDS','GET TO THE PLATFORM AND EXTRACT','#ff5a7a'); sfx('warn'); }
+  { const remC=Math.ceil(CFG.maxRun-runT);
+    if(remC<=10 && remC>=1 && remC!==lastCount){ lastCount=remC;
+      callout(String(remC), remC<=3?'EXTRACT NOW!':null, remC<=3?'#ff3d6e':'#ff5a7a');
+      sfx(remC<=3?'warn':'tick'); } }
   if(runT>=CFG.maxRun){
-    callout('ENCORE!','FULL SONG SURVIVED +'+Math.round(CFG.surviveBonus*100)+'%','#ffe14d');
-    beams('255,225,77',1.0);
-    completeCash(true);
+    callout('TIME UP','THE POT IS GONE','#ff3d6e');
+    startCrash();
     return;
   }
   invulnT-=dt; hurtFx-=dt;
@@ -1256,6 +1241,33 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
   const step=64*sc;
   for(let c=-1500;c<2400;c+=step){ g.beginPath(); g.moveTo(0,c); g.lineTo(1500,0.5*1500+c); g.stroke(); }
   for(let c=0;c<2400;c+=step){ g.beginPath(); g.moveTo(0,c); g.lineTo(1500,-0.5*1500+c); g.stroke(); }
+  // sidewalks — ring around the platform, N/S/E/W spokes, and a perimeter loop (canvas = world × 0.5)
+  g.strokeStyle='#3d3560'; g.lineCap='butt';
+  g.lineWidth=36; g.strokeRect(48,48,1500-96,1150-96);          // perimeter loop
+  g.beginPath(); g.arc(750,575,88,0,6.283); g.stroke();          // center ring
+  g.beginPath();                                                  // four spokes
+  g.moveTo(750,487); g.lineTo(750,48);
+  g.moveTo(750,663); g.lineTo(750,1102);
+  g.moveTo(662,575); g.lineTo(48,575);
+  g.moveTo(838,575); g.lineTo(1452,575);
+  g.stroke();
+  g.strokeStyle='rgba(122,110,168,.8)'; g.lineWidth=2;            // curb lines
+  g.strokeRect(30,30,1500-60,1150-60);
+  g.strokeRect(66,66,1500-132,1150-132);
+  g.beginPath(); g.arc(750,575,106,0,6.283); g.stroke();
+  g.beginPath(); g.arc(750,575,70,0,6.283); g.stroke();
+  g.beginPath();
+  for(const L of [[732,487,732,66],[768,487,768,66],[732,663,732,1084],[768,663,768,1084],
+    [662,557,66,557],[662,593,66,593],[838,557,1434,557],[838,593,1434,593]]){
+    g.moveTo(L[0],L[1]); g.lineTo(L[2],L[3]); }
+  g.stroke();
+  g.strokeStyle='rgba(20,12,40,.35)'; g.lineWidth=2;              // expansion joints
+  g.beginPath();
+  for(let y=110;y<470;y+=44){ g.moveTo(733,y); g.lineTo(767,y); }
+  for(let y=690;y<1080;y+=44){ g.moveTo(733,y); g.lineTo(767,y); }
+  for(let x=110;x<650;x+=44){ g.moveTo(x,558); g.lineTo(x,592); }
+  for(let x=850;x<1420;x+=44){ g.moveTo(x,558); g.lineTo(x,592); }
+  g.stroke();
   for(let i=0;i<260;i++){ const x=R(20,1480), y=R(20,1130), s=R(9,17);
     g.globalAlpha=R(0.05,0.12); g.fillStyle=rand(RAINBOW);
     g.beginPath(); g.moveTo(x,y-s*0.5); g.lineTo(x+s,y); g.lineTo(x,y+s*0.5); g.lineTo(x-s,y); g.closePath(); g.fill(); }
@@ -1303,13 +1315,20 @@ function rebuildStructMeshes(){
         basic(0x5fe0ff,{transparent:true,opacity:0.85}));
       water.position.set(cx,s.hh+1,cz); structGroup.add(water);
       const glow=new THREE.PointLight(0x5fe0ff, 40, 340); glow.position.set(cx,s.hh+30,cz); structGroup.add(glow);
-    }else if(s.kind==='crystal'){
-      const cry=new THREE.Mesh(new THREE.OctahedronGeometry(s.w*0.62),
-        toon(0xb06cff,0x7a3adf,0.85));
-      cry.scale.y=2.1; cry.position.set(cx,s.hh*0.85,cz); cry.rotation.y=R(0,3.14);
-      cry.userData.spin=true;
-      structGroup.add(cry);
-      const gl2=new THREE.PointLight(0xb06cff, 30, 300); gl2.position.set(cx,70,cz); structGroup.add(gl2);
+    }else if(s.kind==='bins'){
+      // side-by-side municipal pair: recycling (blue) + trash (dark)
+      const mk=(ox,col,lidCol)=>{
+        const bin=new THREE.Mesh(new THREE.CylinderGeometry(15,13,44,10),toon(col));
+        bin.position.set(cx+ox,22,cz); structGroup.add(bin);
+        const lid=new THREE.Mesh(new THREE.CylinderGeometry(16.5,16.5,5,10),toon(lidCol));
+        lid.position.set(cx+ox,47,cz); structGroup.add(lid);
+        const knob=new THREE.Mesh(sphereGeo,toon(lidCol)); knob.scale.setScalar(3.4);
+        knob.position.set(cx+ox,51,cz); structGroup.add(knob);
+      };
+      mk(-17,0x2f8fdc,0x1e6aa8);   // recycling
+      mk( 17,0x4a4a58,0x33333f);   // trash
+      const arrow=new THREE.Mesh(new THREE.TorusGeometry(6,1.6,6,14),basic(0x9fe8ff));
+      arrow.position.set(cx-17,32,cz+15.5); structGroup.add(arrow);   // recycling mark
     }else if(s.kind==='stall'){
       const body=new THREE.Mesh(new THREE.BoxGeometry(s.w,s.hh*0.72,s.h),toon(0x2a1250));
       body.position.set(cx,s.hh*0.36,cz); structGroup.add(body);
@@ -1318,11 +1337,15 @@ function rebuildStructMeshes(){
       canopy.position.set(cx,s.hh*0.72+8,cz); structGroup.add(canopy);
       const trim=new THREE.Mesh(new THREE.BoxGeometry(s.w+2,2.5,s.h+2),basic(0xffc233));
       trim.position.set(cx,2,cz); structGroup.add(trim);
-    }else{ // crate
-      const box=new THREE.Mesh(new THREE.BoxGeometry(s.w,s.hh,s.h),toon(0x4a2f18));
-      box.position.set(cx,s.hh/2,cz); structGroup.add(box);
-      const tr=new THREE.Mesh(new THREE.BoxGeometry(s.w+2,2.5,s.h+2),basic(0xffc233));
-      tr.position.set(cx,2,cz); structGroup.add(tr);
+    }else{ // tree — cartoon: chunky trunk + stacked foliage blobs
+      const trunk=new THREE.Mesh(new THREE.CylinderGeometry(7,9,30,8),toon(0x6a4520));
+      trunk.position.set(cx,15,cz); structGroup.add(trunk);
+      const f1=new THREE.Mesh(sphereGeo,toon(0x2fae5e));
+      f1.scale.set(28,24,28); f1.position.set(cx,48,cz); structGroup.add(f1);
+      const f2=new THREE.Mesh(sphereGeo,toon(0x3ddc74));
+      f2.scale.set(18,16,18); f2.position.set(cx+6,68,cz-4); structGroup.add(f2);
+      const glow=new THREE.Mesh(sphereGeo,basic(0xb0ffd0,{transparent:true,opacity:0.14}));
+      glow.scale.set(31,27,31); glow.position.copy(f1.position); structGroup.add(glow);
     }
   }
   scene.add(structGroup);
@@ -1340,6 +1363,23 @@ const padGrp=new THREE.Group();
   padGrp.position.set(PADX,0,PADY);
   scene.add(padGrp);
 }
+// floating $ / CASHOUT sign over the platform (green when unlocked, dim while locked)
+const cashSign=(()=>{
+  const c=document.createElement('canvas'); c.width=160; c.height=200;
+  const g2=c.getContext('2d');
+  g2.textAlign='center';
+  g2.lineJoin='round';
+  g2.font='900 108px Arial';
+  g2.lineWidth=12; g2.strokeStyle='#062c1a'; g2.strokeText('$',80,108);
+  g2.fillStyle='#39ffa0'; g2.fillText('$',80,108);
+  g2.font='900 25px Arial';
+  g2.lineWidth=7; g2.strokeText('CASHOUT',80,168);
+  g2.fillText('CASHOUT',80,168);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false}));
+  sp.scale.set(84,105,1); sp.position.set(PADX,150,PADY);
+  scene.add(sp); return sp;
+})();
 let extArc=null, extArcF=-1;
 function rebuildExtArc(f){
   if(extArc){ scene.remove(extArc); extArc.geometry.dispose(); extArc=null; }
@@ -1822,6 +1862,12 @@ function syncScene(){
   // extraction progress ring around the platform
   { const ef=extractT/CFG.extractTime;
     if(Math.abs(ef-extArcF)>0.01){ rebuildExtArc(ef); extArcF=ef; } }
+  // $ sign: bobs, dims while locked, pulses while extracting
+  cashSign.position.y=150+Math.sin(time*2)*8;
+  const unlocked=state!=='play'||runT>=CFG.cashUnlock;
+  cashSign.material.color.set(unlocked?0xffffff:0x555566);
+  const pulse=extractT>0?1+0.14*Math.sin(time*10):1;
+  cashSign.scale.set(84*pulse,105*pulse,1);
   // chests (headbutt shake + lid pop)
   syncSet(chests,()=>'chest',makeChest,(c,m)=>{
     m.position.set(c.x,0,c.y);
@@ -1951,6 +1997,14 @@ function overlayDraw(){
       octx.fillStyle='#ffd0e8'; octx.fillText(c.sub,ps.x,y+13); }
   });
   octx.globalAlpha=1;
+  // extraction percentage over the platform
+  if(state==='play'&&extractT>0){
+    const s=toScreen(PADX,PADY,210);
+    if(s.ok){ octx.font='900 17px Orbitron';
+      const pct=Math.round(extractT/CFG.extractTime*100)+'%';
+      octx.fillStyle='rgba(8,4,20,.7)'; octx.fillText(pct,s.x+1.5,s.y+1.5);
+      octx.fillStyle='#39ffa0'; octx.fillText(pct,s.x,s.y); }
+  }
   // chest open-progress bars
   if(state==='play') for(const c of chests){
     if(c.opened||c.t>=CFG.chestOpen) continue;
@@ -2051,7 +2105,7 @@ function overlayDraw(){
 }
 
 /* ================================================================= HUD DOM sync */
-let lastScore=-1,lastMult=-1,lastMultP=-1,lastWeapTxt='',lastMast=-1,lastCash='',lastTime='';
+let lastScore=-1,lastMult=-1,lastMultP=-1,lastWeapTxt='',lastMast=-1,lastTime='';
 function syncHud(){
   if(lastScore!==score){ scoreEl.textContent=score.toLocaleString(); lastScore=score; }
   if(lastMult!==mult){ multEl.textContent='×'+mult; multEl.style.fontSize=(11+mult*1.6)+'px';
@@ -2066,14 +2120,6 @@ function syncHud(){
     if(lastWeapTxt!==wt){ weapNameEl.textContent=WEAP[weap.cur].name; weapLvEl.textContent='LV '+weap.lv; lastWeapTxt=wt; }
     const m=weap.lv>=9?100:Math.min(100,weap.xp/MAST[weap.lv-1]*100);
     if(Math.abs(m-lastMast)>0.5){ mastFill.style.width=m+'%'; lastMast=m; }
-  }
-  if(state==='play'){
-    let txt;
-    if(runT<CFG.cashUnlock){ txt='EXTRACTION IN '+Math.ceil(CFG.cashUnlock-runT)+'s'; cashBtn.classList.add('locked'); }
-    else if(extractT>0){ txt='EXTRACTING '+Math.round(extractT/CFG.extractTime*100)+'%<small>HOLD THE PLATFORM</small>'; cashBtn.classList.remove('locked'); }
-    else{ txt='EXTRACT AT CENTER<small>'+score.toLocaleString()+(gateT>0?' +'+Math.round(CFG.gateBonus*100)+'% 🌈':'')+'</small>'; cashBtn.classList.remove('locked'); }
-    if(txt!==lastCash){ cashTxt.innerHTML=txt; lastCash=txt; }
-    cashFill.style.width=(extractT/CFG.extractTime*100)+'%';
   }
 }
 
