@@ -167,7 +167,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">EXTRACT AT CENTER</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.10.0</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.10.1</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -190,7 +190,7 @@ const CFG={
   maxRun:120, surviveBonus:0.25,
   cashUnlock:15,
   extractR:95, extractTime:3,   // cash out = STAND on the center platform for 3s — exposed, committed
-  chestOpen:3, chestN:5, clearBombR:480,
+  chestOpen:3, chestN:5, chestRange:85, clearBombR:480,   // stand NEAR a chest and Bob's ride goes to work
   gateFirst:30, gateEvery:26, gateDur:6, gateBonus:0.10,
   multBar:[15,25,35,50], multMax:5,
   maxEnemies:120,
@@ -877,8 +877,8 @@ function updateChests(dt){
     if(c.opened){ c.t2+=dt; continue; }
     c.shake=Math.max(0,c.shake-dt*3);
     const dx=px-c.x, dy=py-c.y, dd=Math.hypot(dx,dy)||1, min=CFG.playerR+30;
-    if(dd<min){
-      px=c.x+dx/dd*min; py=c.y+dy/dd*min;   // lean against it
+    if(dd<min){ px=c.x+dx/dd*min; py=c.y+dy/dd*min; }   // the chest is still solid
+    if(dd<CFG.chestRange){                              // ...but proximity is all it takes to work it open
       c.t-=dt; c.butt-=dt;
       if(c.butt<=0){ c.butt=0.45; c.shake=1; sfx('thud');
         for(let i=0;i<5;i++){ const a=R(0,6.28),v=R(30,110);
