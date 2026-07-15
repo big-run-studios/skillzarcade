@@ -167,7 +167,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">EXTRACT AT CENTER</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.10.1</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.10.2</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -1583,10 +1583,12 @@ for(let i=0;i<4;i++){
 /* ---- unicorn ---- */
 const uni=new THREE.Group(); scene.add(uni);
 const mWhite=toon(0xf6f7ff), mHoof=basic(0x5fe0ff), mSkin=toon(0xffd9b8), mSuit=toon(0xeafcff);
-let uniLegs=[], riderArm, riderGrp, weapMeshes={}, bodyMesh, cashGlow;
+let uniLegs=[], riderArm, riderGrp, headGrp, weapMeshes={}, bodyMesh, cashGlow;
 (function buildUnicorn(){
-  bodyMesh=new THREE.Mesh(sphereGeo,mWhite);
-  bodyMesh.scale.set(26,17,15); bodyMesh.position.y=32;
+  // pill-shaped body (capsule), thinned on the sides — lean, not plump
+  const bodyGeo=new THREE.CapsuleGeometry(12.5,24,6,14); bodyGeo.rotateZ(Math.PI/2);
+  bodyMesh=new THREE.Mesh(bodyGeo,mWhite);
+  bodyMesh.scale.set(1,1.02,0.8); bodyMesh.position.y=32;
   uni.add(bodyMesh);
   for(const [lx,lz] of [[-13,-7],[-13,7],[13,-7],[13,7]]){
     const leg=new THREE.Group();
@@ -1597,26 +1599,28 @@ let uniLegs=[], riderArm, riderGrp, weapMeshes={}, bodyMesh, cashGlow;
     leg.position.set(lx,24,lz);
     uni.add(leg); uniLegs.push(leg);
   }
+  // head + neck + mane on one pivot so the whole front end pumps with the gallop
+  headGrp=new THREE.Group(); headGrp.position.set(14,42,0); uni.add(headGrp);
   const neck=new THREE.Mesh(new THREE.CylinderGeometry(6,8,22,10),mWhite);
-  neck.position.set(20,46,0); neck.rotation.z=-0.5; uni.add(neck);
+  neck.position.set(6,4,0); neck.rotation.z=-0.5; headGrp.add(neck);
   const head=new THREE.Mesh(sphereGeo,mWhite);
-  head.scale.set(11,9,8); head.position.set(29,58,0); uni.add(head);
+  head.scale.set(11,9,8); head.position.set(15,16,0); headGrp.add(head);
   const snout=new THREE.Mesh(sphereGeo,mWhite);
-  snout.scale.set(6,4.6,5); snout.position.set(38,55,0); uni.add(snout);
+  snout.scale.set(6,4.6,5); snout.position.set(24,13,0); headGrp.add(snout);
   const ear=new THREE.Mesh(new THREE.ConeGeometry(2.6,6,6),mWhite);
-  ear.position.set(25,67,3); uni.add(ear);
+  ear.position.set(11,25,3); headGrp.add(ear);
   const horn=new THREE.Mesh(new THREE.ConeGeometry(2.6,15,8),basic(0xffd76a));
-  horn.position.set(31,70,0); horn.rotation.z=-0.35; uni.add(horn);
+  horn.position.set(17,28,0); horn.rotation.z=-0.35; headGrp.add(horn);
   const hornGlow=new THREE.PointLight(0xffc233, 14, 130);
-  hornGlow.position.set(31,74,0); uni.add(hornGlow);
+  hornGlow.position.set(17,32,0); headGrp.add(hornGlow);
   RAINBOW.forEach((c,i)=>{
     const m=new THREE.Mesh(new THREE.BoxGeometry(3,10-i*0.8,2.6),basic(c));
-    m.position.set(20-i*3.4,56-i*1.6,-4.5); m.rotation.z=-0.4; uni.add(m);
+    m.position.set(6-i*3.4,14-i*1.6,-4.5); m.rotation.z=-0.4; headGrp.add(m);
     const tl=new THREE.Mesh(new THREE.BoxGeometry(3,12-i,2.6),basic(c));
     tl.position.set(-26-i*1.6,36-i*3,(i-2.5)*1.6); tl.rotation.z=0.7; uni.add(tl);
   });
   // Bob, the rider — aims independently of the horse's heading
-  const rider=new THREE.Group(); rider.position.set(-4,48,0);
+  const rider=new THREE.Group(); rider.position.set(-4,44,0);
   riderGrp=rider;
   const torso=new THREE.Mesh(new THREE.CylinderGeometry(4.6,5.4,13,10),mSuit);
   torso.position.y=7; rider.add(torso);
@@ -1656,7 +1660,7 @@ function addPaint(colHex){
   const th=R(0,6.283), ph2=R(0.15,1.35);
   const dx=Math.cos(th)*Math.sin(ph2), dyy=Math.cos(ph2), dz=Math.sin(th)*Math.sin(ph2);
   m.scale.set(R(2.2,4.2),R(1.2,2),R(2.2,4.2));
-  m.position.set(dx*25,32+dyy*16,dz*14.5);
+  m.position.set(dx*23,32+dyy*13,dz*10.2);
   paintGroup.add(m); paintCount++;
 }
 
@@ -1747,10 +1751,14 @@ function syncScene(){
     uniLegs[3].rotation.z=Math.sin(c-2.12)*0.95;
     uni.position.y=airY+Math.max(0,Math.sin(c+0.5))*6; // suspension: airborne beat of the stride
     uni.rotation.z=Math.sin(c+0.9)*0.07;               // nose dips into each bound
+    headGrp.rotation.z=Math.sin(c+1.35)*0.17-0.06;     // head & neck pump into each stride
+    headGrp.position.y=42+Math.sin(c+1.1)*1.6;
   }else{
     uniLegs.forEach(leg=>{ leg.rotation.z*=0.8; });
     uni.position.y=airY+Math.sin(time*3.4)*1;
     uni.rotation.z*=0.8;
+    headGrp.rotation.z+=(Math.sin(time*1.8)*0.03-headGrp.rotation.z)*0.1;   // idle: soft breathing sway
+    headGrp.position.y+=(42-headGrp.position.y)*0.15;
   }
   riderArm.rotation.z=0;
   for(const k of WKEYS) weapMeshes[k].visible=(weap&&weap.cur===k);
