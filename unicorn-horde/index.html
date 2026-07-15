@@ -170,7 +170,7 @@
     <button id="cashBtn"><div id="cashFill"></div><span id="cashTxt">HOLD TO CASH OUT</span></button>
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN HORDE v0.7.1</div>
+  <div class="brand">CRASHARCADE · UNICORN HORDE v0.7.2</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -1515,26 +1515,29 @@ function drawUnicorn(){
   const rear=(state==='cashing'&&seqT<0.45)?Math.min(1,seqT/0.3):0;
   const gy=py+offY;
   const shScale=clamp(1+offY/640,0.25,1);
-  // the shadow IS the health bar: a hollow ring that drains clockwise and never refills
+  // the shadow IS the health bar: a hollow ring anchored at 8 o'clock — the drain edge
+  // eats clockwise from there, so what's left always ends at the bottom where you can see it
   {
     const f=Math.max(0,hp/CFG.maxHp);
-    const rx=40*shScale, ry=11*shScale, a0=-Math.PI/2, lw=Math.max(0.4,shScale);
+    const rx=40*shScale, ry=11*shScale, lw=Math.max(0.4,shScale);
+    const A_END=Math.PI*5/6;                 // 8 o'clock (canvas y-down)
+    const a0=A_END-6.283*f;                  // drain edge walks clockwise as health drops
     ctx.lineCap='round';
     ctx.setLineDash([5,6]);                                              // drained part: the shadow has worn away
     ctx.lineWidth=2*lw;
     ctx.strokeStyle='rgba(255,255,255,.14)';
-    ctx.beginPath(); ctx.ellipse(px,py+6,rx,ry,0,a0+6.283*f,a0+6.283); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(px,py+6,rx,ry,0,A_END-6.283,a0); ctx.stroke();
     ctx.setLineDash([]);
     if(f>0.005){
       ctx.lineWidth=9*lw;
       ctx.strokeStyle='rgba(0,0,0,.62)';                                 // remaining life (the shadow)
-      ctx.beginPath(); ctx.ellipse(px,py+6,rx,ry,0,a0,a0+6.283*f); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(px,py+6,rx,ry,0,a0,A_END); ctx.stroke();
       const rim = hurtFx>0 ? 'rgba(255,255,255,.9)'
         : hp>CFG.maxHp*0.6 ? 'rgba(120,235,255,.55)'
         : hp>CFG.maxHp*0.3 ? 'rgba(255,194,51,.65)'
         : 'rgba(255,61,110,'+(0.55+0.35*Math.sin(time*8))+')';           // danger pulse
       ctx.strokeStyle=rim; ctx.lineWidth=2.6*lw;
-      ctx.beginPath(); ctx.ellipse(px,py+6,rx,ry,0,a0,a0+6.283*f); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(px,py+6,rx,ry,0,a0,A_END); ctx.stroke();
     }
     ctx.lineCap='butt';
     ctx.fillStyle='rgba(0,0,0,.16)';                                     // soft core so the unicorn stays grounded
