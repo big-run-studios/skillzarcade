@@ -128,6 +128,7 @@
         <div class="row"><div class="ic">💰</div><div class="tx">Stand on the <b>$ platform</b> for 3s to <u>EXTRACT</u> your pot · if the <i>song ends first, it's gone</i></div></div>
       </div>
       <button class="btn" id="playBtn">SADDLE UP</button>
+      <button class="btn ghost" id="demonBtn">😈 DEMON ASSAULT</button>
       <div class="pb" id="menuBest"></div>
     </div>
 
@@ -153,13 +154,14 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · UNICORN ASSAULT v0.14.2</div>
+  <div class="brand">CRASHARCADE · UNICORN ASSAULT v0.15.6</div>
 </div>
 
 <audio id="music" src="music.mp3" loop preload="auto"></audio>
 
 <script type="module">
 import * as THREE from './lib/three.module.js';
+import { GLTFLoader } from './lib/GLTFLoader.js';
 /* =================================================================================
    UNICORN ASSAULT 3D — same tuned simulation as the 2D game (all logic in the XZ
    plane, 1 unit = 1 classic px), rendered as a stylized cartoon 3D world.
@@ -864,7 +866,7 @@ function slamHit(){
   shake=22; beams('255,255,255',0.9); sfx('slam');
   for(let i=0;i<30;i++){ const a=R(0,6.28),v=R(120,420);
     parts.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:R(2,6),c:rand(RAINBOW),t:R(.4,.8)}); }
-  expl.push({x:px,y:py,r:0,mx:560,t:0,life:0.5,slam:true});
+  // blast wave is the blue half-donut `shock` (rendered in syncScene); rainbow burst above provides the pop
 }
 
 /* ================================================================= gates / cashout */
@@ -1108,6 +1110,7 @@ function toMenu(){
   syncMusic();
 }
 document.getElementById('playBtn').addEventListener('click',()=>{ ac(); startRun(); });
+document.getElementById('demonBtn').addEventListener('click',()=>{ location.href='demon-assault.html'; });
 document.getElementById('againBtn').addEventListener('click',()=>startRun());
 document.getElementById('menuBtn').addEventListener('click',()=>toMenu());
 document.getElementById('cashAgainBtn').addEventListener('click',()=>startRun());
@@ -1333,8 +1336,13 @@ const renderer=new THREE.WebGLRenderer({canvas:glCanvas,antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x0b0820);
+// subtle env so the unicorn's glossy PBR reflects (toon/basic materials ignore this)
+const _pmrem=new THREE.PMREMGenerator(renderer); const _envScene=new THREE.Scene();
+_envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50,20,10),new THREE.MeshBasicMaterial({color:0x6c78b4,side:THREE.BackSide})));
+const uniEnv=_pmrem.fromScene(_envScene,0.06).texture;
 scene.fog=new THREE.Fog(0x160b30, 900, 2200);
 const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 10, 4200);
+camera.layers.enable(1);   // render layer 1 (character-only lights live here, else the renderer culls them)
 
 // evening / dusk: dim cool skylight, a low warm sunset key, and a magenta rim so neon reads
 scene.add(new THREE.HemisphereLight(0x5766c4, 0x241246, 0.75));
@@ -1342,6 +1350,11 @@ const sun=new THREE.DirectionalLight(0xffb26b, 1.05);
 sun.position.set(-760,470,340); scene.add(sun);
 const rim=new THREE.DirectionalLight(0xff5fae, 0.4);
 rim.position.set(680,220,-520); scene.add(rim);
+// character-only lighting (layer 1): brightens the unicorn so the white coat pops, without touching the dusk scene
+const CHAR_LAYER=1;
+const charKey=new THREE.DirectionalLight(0xffffff,1.7); charKey.position.set(200,520,340); charKey.layers.set(CHAR_LAYER); scene.add(charKey);
+const charFill=new THREE.DirectionalLight(0xeaf0ff,0.85); charFill.position.set(-320,220,-160); charFill.layers.set(CHAR_LAYER); scene.add(charFill);
+const charHemi=new THREE.HemisphereLight(0xffffff,0xc2ccec,1.05); charHemi.layers.set(CHAR_LAYER); scene.add(charHemi);
 
 const gradTex=(()=>{ const d=new Uint8Array([90,90,90,255, 175,175,175,255, 255,255,255,255]);
   const t=new THREE.DataTexture(d,3,1); t.needsUpdate=true; t.minFilter=t.magFilter=THREE.NearestFilter; return t; })();
@@ -1792,47 +1805,35 @@ const mWhite=toon(0xffffff, 0xf4f6ff, 0.62), mHoof=basic(0xffd23a), mSkin=toon(0
 let uniLegs=[], riderArm, riderGrp, headGrp, weapMeshes={}, bodyMesh, cashGlow;
 const NEON3=[0x39ffa0,0xff3d9a,0x4dc3ff];   // mane & tail palette: neon green, pink, blue
 let maneMats=[], tailMats=[], tailNodes=[], tailPrev=[], tailSegs=[], wings=[], wingT=0;
+// GLB unicorn (Meshy parts, aligned by Andrew — see assets/assembly.json). Upper legs dropped.
+let tailMesh=null, headBaseX=14, headBaseY=42, uniS=1;
+const gltfLoader=new GLTFLoader();
+const MDL=new THREE.Group(); uni.add(MDL);
+const ASM={
+  body:{p:[0,0,0],r:[0,180,0],s:[1,1,1]},
+  head:{p:[1.044,1.04,-0.135],r:[-145.5,86,145.4],s:[0.82,0.748,0.689]},
+  leg_rl_lo:{p:[-0.684,-0.604,0.36],r:[0,180,0],s:[0.522,0.395,0.471]},
+  leg_rr_lo:{p:[-0.809,-0.564,-0.3],r:[0,180,0],s:[0.46,0.46,0.46]},
+  leg_fl_lo:{p:[0.72,-0.557,0.21],r:[0,180,0],s:[0.46,0.46,0.46]},
+  leg_fr_lo:{p:[0.72,-0.546,-0.3],r:[0,180,0],s:[0.46,0.46,0.46]},
+  tail:{p:[-1.435,0.056,-0.035],r:[180,0,169.3],s:[0.95,0.95,0.95]},
+};
+const _DEG=Math.PI/180;
+function labXf(o,t){ o.position.set(t.p[0],t.p[1],t.p[2]); o.rotation.set(t.r[0]*_DEG,t.r[1]*_DEG,t.r[2]*_DEG); o.scale.set(t.s[0],t.s[1],t.s[2]); }
+// four-beat gallop (right-front lead). uniLegs = [rear-L, rear-R, front-L, front-R]
+const LEG_PLANT=[0.00,0.12,0.44,0.56];   // footfall phase per leg: LR→RR→LF→RF (RF lead lands last)
+const LEG_REACH=[0.85,0.85,0.95,1.08];   // forward reach; the lead RF reaches farthest
+const LEG_PUSH =[0.62,0.62,0.55,0.55];   // backward propulsion extent
+const LEG_TUCK =[0.22,0.22,0.28,0.30];   // extra fold-up mid-swing
+function gaitLeg(p,reach,push,tuck){      // p = leg-local phase 0..1 (0 = footfall/plant)
+  if(p<0.6) return reach-(reach+push)*(p/0.6);              // stance: planted, sweeps forward→back
+  const s=(p-0.6)/0.4, e=s*s*(3-2*s);                        // swing: airborne, flings back→forward
+  return -push+(reach+push)*e + Math.sin(s*Math.PI)*tuck;    // + tuck: gathers up under the body mid-swing
+}
 (function buildUnicorn(){
-  // pill-shaped body (capsule), thinned on the sides — lean, not plump
-  const bodyGeo=new THREE.CapsuleGeometry(12.5,24,6,14); bodyGeo.rotateZ(Math.PI/2);
-  bodyMesh=new THREE.Mesh(bodyGeo,mWhite);
-  bodyMesh.scale.set(1,1.02,0.8); bodyMesh.position.y=32;
-  uni.add(bodyMesh);
-  for(const [lx,lz] of [[-13,-7],[-13,7],[13,-7],[13,7]]){
-    const leg=new THREE.Group();
-    const g=new THREE.CylinderGeometry(3.4,3,22,8); g.translate(0,-11,0);
-    const legM=new THREE.Mesh(g,mWhite); leg.add(legM);
-    const hoof=new THREE.Mesh(new THREE.CylinderGeometry(3.6,3.6,3.4,8),mHoof);
-    hoof.position.y=-22; leg.add(hoof);
-    leg.position.set(lx,24,lz);
-    uni.add(leg); uniLegs.push(leg);
-  }
-  // head + neck + mane on one pivot so the whole front end pumps with the gallop
-  headGrp=new THREE.Group(); headGrp.position.set(14,42,0); uni.add(headGrp);
-  const neck=new THREE.Mesh(new THREE.CylinderGeometry(6,8,22,10),mWhite);
-  neck.position.set(6,4,0); neck.rotation.z=-0.5; headGrp.add(neck);
-  const head=new THREE.Mesh(sphereGeo,mWhite);
-  head.scale.set(11,9,8); head.position.set(15,16,0); headGrp.add(head);
-  const snout=new THREE.Mesh(sphereGeo,mWhite);
-  snout.scale.set(6,4.6,5); snout.position.set(24,13,0); headGrp.add(snout);
-  const ear=new THREE.Mesh(new THREE.ConeGeometry(2.6,6,6),mWhite);
-  ear.position.set(11,25,3); headGrp.add(ear);
-  const horn=new THREE.Mesh(new THREE.ConeGeometry(2.6,15,8),basic(0xffd76a));
-  horn.position.set(17,28,0); horn.rotation.z=-0.35; headGrp.add(horn);
-  const hornGlow=new THREE.PointLight(0xffc233, 14, 130);
-  hornGlow.position.set(17,32,0); headGrp.add(hornGlow);
-  for(let i=0;i<6;i++){   // mane strands — neon green / pink / blue
-    const mat=basic(NEON3[i%3]); maneMats.push(mat);
-    const m=new THREE.Mesh(new THREE.BoxGeometry(3,10-i*0.8,2.6),mat);
-    m.position.set(6-i*3.4,14-i*1.6,-4.5); m.rotation.z=-0.4; headGrp.add(m);
-  }
-  // ribbon tail — short verlet chain of flat segments; calm, not whippy
-  for(let i=0;i<6;i++){ tailNodes.push(new THREE.Vector3(px-24,38,py)); tailPrev.push(new THREE.Vector3(px-24,38,py)); }
-  for(let i=0;i<5;i++){
-    const mat=basic(NEON3[i%3]); tailMats.push(mat);
-    const seg=new THREE.Mesh(new THREE.BoxGeometry(7.4,1.6,5.4-i*0.4),mat);
-    scene.add(seg); tailSegs.push(seg);
-  }
+  // GLB parts load async; make empty pivots now so the gallop/head animation always has valid handles
+  headGrp=new THREE.Group(); headGrp.position.set(headBaseX,headBaseY,0); uni.add(headGrp);
+  for(let i=0;i<4;i++){ const leg=new THREE.Group(); uni.add(leg); uniLegs.push(leg); }
   // wings — grow out when a clear move fires (slam / clear bomb); each ~as long as the body,
   // rooted at the shoulder just below the neck/body join and sweeping OUT to the sides
   for(const side of [-1,1]){
@@ -1880,7 +1881,65 @@ let maneMats=[], tailMats=[], tailNodes=[], tailPrev=[], tailSegs=[], wings=[], 
   uni.add(rider);
   // cash-charge glow
   cashGlow=new THREE.PointLight(0x39ffa0, 0, 220); cashGlow.position.y=40; uni.add(cashGlow);
+  loadUnicornGLB();
 })();
+function loadUnicornGLB(){
+  const names=Object.keys(ASM), P={}; let n=0;
+  names.forEach(nm=>gltfLoader.load('assets/parts/'+nm+'.glb', gl=>{ P[nm]=gl.scene; if(++n===names.length) assembleGLB(P); },
+    undefined, e=>console.error('GLB '+nm, e)));
+}
+// rebuild each mesh under root, keeping only triangles for which keep(mesh,ia,ib,ic) is true
+function cropTris(root, keep){
+  root.traverse(o=>{ if(!o.isMesh) return;
+    const geo=o.geometry, pos=geo.attributes.position, idx=geo.index;
+    const triN=idx?idx.count/3:pos.count/3, gi=idx?(t,k)=>idx.getX(t*3+k):(t,k)=>t*3+k, kept=[];
+    for(let t=0;t<triN;t++){ const a=gi(t,0),b=gi(t,1),c=gi(t,2); if(keep(o,a,b,c)) kept.push(a,b,c); }
+    const ng=new THREE.BufferGeometry();
+    for(const nm in geo.attributes){ const src=geo.attributes[nm], is=src.itemSize, arr=new Float32Array(kept.length*is);
+      for(let i=0;i<kept.length;i++){ const vi=kept[i];
+        arr[i*is]=src.getX(vi); if(is>1)arr[i*is+1]=src.getY(vi); if(is>2)arr[i*is+2]=src.getZ(vi); if(is>3)arr[i*is+3]=src.getW(vi); }
+      ng.setAttribute(nm,new THREE.BufferAttribute(arr,is)); }
+    geo.dispose(); o.geometry=ng;
+  });
+}
+// body: drop the redundant leg stubs below the belly (body isn't tilted → local Y is fine)
+function cropBelowY(root, yThresh){ cropTris(root,(o,a,b,c)=>{ const p=o.geometry.attributes.position;
+  return (p.getY(a)+p.getY(b)+p.getY(c))/3>=yThresh; }); }
+// head: strip Meshy's floating slab above the horn tip — head is heavily tilted, so measure in asm/world Y
+function cropAboveWorldY(root, wyThresh){ root.updateWorldMatrix(true,true);
+  cropTris(root,(o,a,b,c)=>{ const p=o.geometry.attributes.position, m=o.matrixWorld.elements;
+    const Y=i=>m[1]*p.getX(i)+m[5]*p.getY(i)+m[9]*p.getZ(i)+m[13];
+    return (Y(a)+Y(b)+Y(c))/3<=wyThresh; }); }
+function assembleGLB(P){
+  // measure the assembled model in lab space → auto-fit scale + ground lift
+  const asm=new THREE.Group();
+  for(const nm in P){ labXf(P[nm],ASM[nm]); asm.add(P[nm]); }
+  asm.updateMatrixWorld(true);
+  const box=new THREE.Box3().setFromObject(asm), sz=box.getSize(new THREE.Vector3());
+  const S=78/sz.y; uniS=S; const L=-box.min.y*S+2;   // ~78 units tall (between the 52 and 104 tries)
+  const bodyTop=new THREE.Box3().setFromObject(P.body).max.y;
+  // body + tail live in the scaled group
+  MDL.scale.setScalar(S); MDL.position.set(0,L,0);
+  cropBelowY(P.body,-0.12);        // remove the body's redundant leg stubs (below the belly)
+  cropAboveWorldY(P.head,1.66);    // strip the floating slab above the horn tip (asm-space gap at Y 1.65–1.68)
+  MDL.add(P.body); MDL.add(P.tail); tailMesh=P.tail;
+  // head → its pivot (game units); glb scaled inside
+  const hp=ASM.head.p; headBaseX=hp[0]*S; headBaseY=hp[1]*S+L;
+  headGrp.position.set(headBaseX,headBaseY,hp[2]*S);
+  const hh=new THREE.Group(); hh.scale.setScalar(S); P.head.position.set(0,0,0); hh.add(P.head); headGrp.add(hh);
+  // legs → hip pivots (rotated by the gallop)
+  ['leg_rl_lo','leg_rr_lo','leg_fl_lo','leg_fr_lo'].forEach((nm,i)=>{
+    const t=ASM[nm], halfY=t.s[1];
+    uniLegs[i].position.set(t.p[0]*S,(t.p[1]+halfY)*S+L,t.p[2]*S);
+    const hh2=new THREE.Group(); hh2.scale.setScalar(S); P[nm].position.set(0,-halfY,0); hh2.add(P[nm]); uniLegs[i].add(hh2);
+  });
+  // Bob + wings ride the back
+  const backY=bodyTop*S+L;
+  riderGrp.position.set(-2,backY,0);
+  wings.forEach(w=>w.position.set(2,backY,w.position.z<0?-10:10));
+  scene.environment=uniEnv;
+  uni.traverse(o=>{ if(o.isMesh) o.layers.enable(CHAR_LAYER); });   // character-only lights brighten the whole rig
+}
 const paintGroup=new THREE.Group(); uni.add(paintGroup);
 function clearPaint(){ while(paintGroup.children.length) paintGroup.remove(paintGroup.children[0]); paintCount=0; }
 function addPaint(colHex){
@@ -1930,9 +1989,10 @@ const portal=new THREE.Group(); portal.visible=false; scene.add(portal);
   portal.add(t);
 });
 const portalLight=new THREE.PointLight(0xff6ad5, 0, 400); portal.add(portalLight);
-const shock=new THREE.Mesh(new THREE.RingGeometry(0.9,1,48),
-  new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,side:THREE.DoubleSide,depthWrite:false}));
-shock.rotation.x=-Math.PI/2; shock.position.y=2.5; shock.visible=false; shock.renderOrder=2; scene.add(shock);
+// slam blast wave: a blue torus half-sunk in the ground (ground occludes the buried half → rising half-donut wave)
+const shock=new THREE.Mesh(new THREE.TorusGeometry(1,0.05,12,56),
+  new THREE.MeshBasicMaterial({color:0x4ab4ff,transparent:true,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
+shock.rotation.x=Math.PI/2; shock.position.y=0; shock.visible=false; shock.renderOrder=2; scene.add(shock);
 
 /* ================================================================= scene sync */
 const _v=new THREE.Vector3(), _tv=new THREE.Vector3(), _tv2=new THREE.Vector3(), _X1=new THREE.Vector3(1,0,0), _upY=new THREE.Vector3(0,1,0);
@@ -1947,10 +2007,8 @@ function screenToWorld(cssX,cssY){
   return ray.ray.intersectPlane(plane,hitP)?{x:hitP.x,y:hitP.z}:null;
 }
 function unicornAirY(){
-  if(slamState==='crouch') return 0;
-  if(slamState==='air'){ const p=Math.min(1,slamT/0.72); return (1-(1-p)*(1-p))*560; }
-  if(slamState==='impact') return Math.max(0,(0.1-slamT))/0.1*560;
-  return 0;
+  if(slamState==='air'){ const p=Math.min(1,slamT/0.72); return Math.sin(p*Math.PI)*560; }  // arc UP then back DOWN
+  return 0;   // crouch + impact: on the ground
 }
 function syncScene(dt){
   dt=dt||1/60;
@@ -1975,23 +2033,28 @@ function syncScene(dt){
   riderGrp.rotation.y=-aimAng-uni.rotation.y;   // Bob twists in the saddle to face the shot
   const squash=slamState==='crouch'?0.8:1;
   uni.scale.set(1,squash,1);
-  // gallop: rear pair drives, front pair reaches ~a half-cycle later, body bounds and pitches
+  // four-beat gallop: each leg follows the gait curve, phase-offset by its footfall; body bounds through suspension
   if(moving>0.05){
-    const c=walkPh*2;
-    uniLegs[0].rotation.z=Math.sin(c)*0.85;            // back legs (drive)
-    uniLegs[1].rotation.z=Math.sin(c-0.22)*0.85;
-    uniLegs[2].rotation.z=Math.sin(c-1.9)*0.95;        // front legs (reach)
-    uniLegs[3].rotation.z=Math.sin(c-2.12)*0.95;
-    uni.position.y=airY+Math.max(0,Math.sin(c+0.5))*6; // suspension: airborne beat of the stride
-    uni.rotation.z=Math.sin(c+0.9)*0.07;               // nose dips into each bound
-    headGrp.rotation.z=Math.sin(c+1.35)*0.17-0.06;     // head & neck pump into each stride
-    headGrp.position.y=42+Math.sin(c+1.1)*1.6;
+    const ph=(walkPh*0.22)%1, TAU=Math.PI*2;
+    for(let i=0;i<4;i++){ const p=(ph-LEG_PLANT[i]+1)%1;
+      uniLegs[i].rotation.z=gaitLeg(p,LEG_REACH[i],LEG_PUSH[i],LEG_TUCK[i]); }
+    uni.position.y=airY+Math.max(0,Math.sin(ph*TAU+1.1))*8; // body bounds up through the suspension
+    uni.rotation.z=Math.sin(ph*TAU+0.6)*0.06;               // nose dips into each bound
+    headGrp.rotation.z=Math.sin(ph*TAU+1.35)*0.15-0.06;     // head & neck pump
+    headGrp.position.y=headBaseY+Math.sin(ph*TAU+1.1)*1.6;
   }else{
     uniLegs.forEach(leg=>{ leg.rotation.z*=0.8; });
     uni.position.y=airY+Math.sin(time*3.4)*1;
     uni.rotation.z*=0.8;
     headGrp.rotation.z+=(Math.sin(time*1.8)*0.03-headGrp.rotation.z)*0.1;   // idle: soft breathing sway
-    headGrp.position.y+=(42-headGrp.position.y)*0.15;
+    headGrp.position.y+=(headBaseY-headGrp.position.y)*0.15;
+  }
+  // pegasus slam pose: launch = nose UP + legs BACK; dive = nose DOWN + legs FORWARD
+  if(slamState==='air'){
+    if(slamT<0.36){ uni.rotation.z=0.6;  uniLegs.forEach(l=>l.rotation.z=-0.85); }  // rising: nose up, legs swept back
+    else          { uni.rotation.z=-0.75; uniLegs.forEach(l=>l.rotation.z=0.95); }  // diving: nose down, legs reaching forward
+  }else if(slamState==='crouch'){              // wind-up gather
+    uniLegs.forEach(l=>l.rotation.z=0.25);
   }
   riderArm.rotation.z=0;
   for(const k of WKEYS) weapMeshes[k].visible=(weap&&weap.cur===k);
@@ -2010,39 +2073,14 @@ function syncScene(dt){
     const ba=Math.atan2(buttInfo.y-py,buttInfo.x-px);
     uni.userData.a=ba; uni.rotation.y=-ba;   // square up to the chest
     headGrp.rotation.z = Z_WIND + (Z_STRIKE-Z_WIND)*t;
-    headGrp.position.y = 42 - t*10;          // dips down as it strikes
-    headGrp.position.x = 14 + t*8;           // ...and lunges toward the chest
-  }else headGrp.position.x+=(14-headGrp.position.x)*0.3;
+    headGrp.position.y = headBaseY - t*10;   // dips down as it strikes
+    headGrp.position.x = headBaseX + t*8;    // ...and lunges toward the chest
+  }else headGrp.position.x+=(headBaseX-headGrp.position.x)*0.3;
   while(paintQueue.length) addPaint(paintQueue.shift());
 
-  // ribbon tail physics (verlet chain anchored at the rump, streaming back and up)
-  {
-    const anchor=_tv.set(-24,46,0); uni.localToWorld(anchor);
-    tailNodes[0].copy(anchor);
-    const yaw=uni.userData.a||0;
-    const bx=-Math.cos(yaw), bz=-Math.sin(yaw);          // the horse's backward direction
-    const g2=1300*dt*dt, wind=1500*dt*dt;
-    for(let i=1;i<6;i++){
-      const n=tailNodes[i], p=tailPrev[i];
-      _tv2.set((n.x-p.x)*0.8,(n.y-p.y)*0.8,(n.z-p.z)*0.8);   // heavier damping = settled, not wild
-      p.copy(n);
-      n.add(_tv2);
-      n.y-=g2*(0.4+i*0.14);                              // droop grows toward the tip
-      n.x+=bx*wind; n.z+=bz*wind;                        // flare backward so it reads from above
-      n.y+=Math.sin(time*3.2+i*0.8)*0.12;                // faint ripple
-      const par=tailNodes[i-1];
-      const d=n.distanceTo(par)||1;
-      n.sub(par).multiplyScalar(7/d).add(par);
-      if(n.y<4) n.y=4;
-    }
-    for(let i=0;i<5;i++){
-      const a=tailNodes[i], b=tailNodes[i+1], seg=tailSegs[i];
-      seg.position.copy(a).add(b).multiplyScalar(0.5);
-      _tv2.copy(b).sub(a).normalize();
-      seg.quaternion.setFromUnitVectors(_X1,_tv2);
-      seg.visible=uni.visible;
-    }
-  }
+  // tail: gentle bounce/sway on the modeled tail (replaces the old verlet ribbon)
+  if(tailMesh){ const amp=moving>0.05?1:0.5;
+    tailMesh.rotation.set(180*_DEG, Math.sin(time*2.6)*0.12*amp, (169.3+Math.sin(time*3.4)*9*amp)*_DEG); }
   // gold super-mode + wings while a clear move is live
   {
     const gold=wingT>0;
@@ -2225,12 +2263,12 @@ function syncScene(dt){
     }
   } else portal.visible=false;
 
-  // slam shock ring
+  // slam blast wave — blue half-donut expanding out from the impact, centered on the ground
   if(slamState==='impact'){
-    shock.visible=true; shock.position.set(px,2.5,py);
+    shock.visible=true; shock.position.set(px,0,py);
     const r2=560*Math.min(1,slamT/0.45);
-    shock.scale.setScalar(Math.max(1,r2));
-    shock.material.opacity=1-slamT/0.6;
+    shock.scale.setScalar(Math.max(1,r2));    // grows wide; the buried lower half is hidden by the ground
+    shock.material.opacity=(1-slamT/0.6)*0.9;
   } else shock.visible=false;
 
   // idle spin for crystals

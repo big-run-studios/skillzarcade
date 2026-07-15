@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model Lab — Unicorn Assault</title>
+<style>
+  html,body{margin:0;height:100%;background:#12101c;overflow:hidden;font-family:ui-monospace,monospace;color:#cfe;}
+  #c{position:fixed;inset:0;}
+  #hud{position:fixed;top:8px;left:8px;z-index:2;font-size:11px;line-height:1.45;white-space:pre;
+    background:rgba(8,6,18,.72);padding:6px 9px;border:1px solid #445;border-radius:8px;pointer-events:none;}
+  #save{position:fixed;top:8px;right:8px;z-index:5;font:600 12px ui-monospace;color:#cfe;background:rgba(8,6,18,.85);border:1px solid #556;border-radius:8px;padding:8px 12px;cursor:pointer;}
+  #ed{position:fixed;left:8px;bottom:8px;z-index:5;background:rgba(8,6,18,.92);border:1px solid #556;border-radius:10px;padding:10px;width:300px;font-size:12px;}
+  #ed select{width:100%;font:inherit;background:#1b1830;color:#cfe;border:1px solid #556;border-radius:6px;padding:5px;margin-bottom:6px;}
+  #ed button{font:inherit;background:#26224a;color:#cfe;border:1px solid #667;border-radius:6px;padding:5px 9px;cursor:pointer;margin:0 4px 6px 0;}
+  #ed button.on{background:#3a5;border-color:#6fb;color:#031;}
+  #rd{color:#8fd;font-size:11px;white-space:pre;margin:4px 0;}
+  #out{width:100%;height:54px;background:#0c0a18;color:#8fd;border:1px solid #445;border-radius:6px;font:10px ui-monospace;display:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">loading…</div>
+<button id="save">Save PNG</button>
+<div id="ed">
+  <select id="sel"></select>
+  <div>
+    <button id="mMove" class="on">Move (W)</button><button id="mRot">Rotate (E)</button><button id="mScale">Scale (R)</button>
+    <button id="space">World (X)</button>
+  </div>
+  <div id="rd">select a part</div>
+  <div>
+    <button id="frame">Frame (F)</button><button id="reset">Reset part</button><button id="exp">Export JSON</button>
+  </div>
+  <textarea id="out" readonly></textarea>
+</div>
+<script type="module">
+import * as THREE from './lib/three.module.js';
+import { GLTFLoader } from './lib/GLTFLoader.js';
+import { TransformControls } from './lib/TransformControls.js';
+const hud=document.getElementById('hud'), rd=document.getElementById('rd');
+const say=t=>hud.textContent=t;
+
+const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2)); renderer.setSize(innerWidth,innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x181526);
+const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.01,5000);
+scene.add(new THREE.HemisphereLight(0xffffff,0x40405a,1.1));
+const key=new THREE.DirectionalLight(0xffffff,1.6); key.position.set(3,6,4); scene.add(key);
+const rim=new THREE.DirectionalLight(0x9fd0ff,0.7); rim.position.set(-4,3,-5); scene.add(rim);
+const pmrem=new THREE.PMREMGenerator(renderer); const esc=new THREE.Scene();
+esc.add(new THREE.Mesh(new THREE.SphereGeometry(50,24,12),new THREE.MeshBasicMaterial({color:0x9fb3d9,side:THREE.BackSide})));
+scene.environment=pmrem.fromScene(esc,0.04).texture;
+scene.add(new THREE.GridHelper(4,16,0x556,0x334)); scene.add(new THREE.AxesHelper(1.5));
+
+// ---- orbit ----
+let yaw=1.05,pitch=0.18,dist=4.2,_drag=false,_lx=0,_ly=0,_giz=false;
+function place(){ camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dist,Math.sin(pitch)*dist,Math.cos(yaw)*Math.cos(pitch)*dist); camera.lookAt(0,0,0); }
+place();
+addEventListener('pointerup',()=>_drag=false);
+addEventListener('pointermove',e=>{ if(!_drag||_giz)return; yaw-=(e.clientX-_lx)*0.008; pitch=Math.max(-1.45,Math.min(1.45,pitch+(e.clientY-_ly)*0.008)); _lx=e.clientX;_ly=e.clientY; place(); });
+addEventListener('wheel',e=>{ dist=Math.max(0.6,dist*(e.deltaY>0?1.1:0.9)); place(); },{passive:true});
+
+// ---- load parts ----
+const loader=new GLTFLoader(); const partsGroup=new THREE.Group(); scene.add(partsGroup); const reg={};
+function addPart(n,p){ return new Promise(res=>{ loader.load(p,g=>{ const r=g.scene; r.name=n; partsGroup.add(r); reg[n]=r; res(r); },undefined,()=>{say('ERR '+n);res(null);}); }); }
+function frameAll(){ const b=new THREE.Box3().setFromObject(partsGroup),c=b.getCenter(new THREE.Vector3()),s=b.getSize(new THREE.Vector3()); partsGroup.position.set(-c.x,-c.y,-c.z); dist=Math.max(s.x,s.y,s.z)*1.9; place(); }
+
+// upper legs dropped (bad meshes) — the four lower-leg-with-hoof parts ARE the legs
+const DEF={
+  body:{p:[0,0,0], r:[0,180,0], s:[1,1,1]},
+  head:{p:[1.044,1.04,-0.135], r:[-145.5,86,145.4], s:[0.82,0.748,0.689]},
+  leg_fl_lo:{p:[0.72,-0.557,0.21], r:[0,180,0], s:[0.46,0.46,0.46]},
+  leg_fr_lo:{p:[0.72,-0.546,-0.3], r:[0,180,0], s:[0.46,0.46,0.46]},
+  leg_rl_lo:{p:[-0.684,-0.604,0.36], r:[0,180,0], s:[0.522,0.395,0.471]},
+  leg_rr_lo:{p:[-0.809,-0.564,-0.3], r:[0,180,0], s:[0.46,0.46,0.46]},
+  tail:{p:[-1.435,0.056,-0.035], r:[180,0,169.3], s:[0.95,0.95,0.95]},
+};
+const NAMES=Object.keys(DEF);
+let XF; try{ XF=JSON.parse(localStorage.getItem('ua_xforms_v2'))||{}; }catch(e){ XF={}; }
+NAMES.forEach(n=>{ if(!XF[n]) XF[n]=JSON.parse(JSON.stringify(DEF[n])); });
+Object.keys(XF).forEach(k=>{ if(!DEF[k]) delete XF[k]; });   // drop removed parts (e.g. neck)
+const D=Math.PI/180;
+function apply(n){ const t=XF[n],o=reg[n]; if(!o)return; o.position.set(...t.p); o.rotation.set(t.r[0]*D,t.r[1]*D,t.r[2]*D); o.scale.set(...t.s); }
+function saveLS(){ localStorage.setItem('ua_xforms_v2',JSON.stringify(XF)); }
+function sync(n){ const o=reg[n]; if(!o)return; XF[n]={ p:[o.position.x,o.position.y,o.position.z].map(v=>+v.toFixed(3)),
+  r:[o.rotation.x/D,o.rotation.y/D,o.rotation.z/D].map(v=>+v.toFixed(1)), s:[o.scale.x,o.scale.y,o.scale.z].map(v=>+v.toFixed(3)) }; saveLS(); readout(); }
+function readout(){ const n=sel.value,t=XF[n]; if(!t){rd.textContent='';return;} rd.textContent=`${n}\n pos ${t.p.join(', ')}\n rot ${t.r.join(', ')}\n scl ${t.s.join(', ')}`; }
+
+// ---- gizmo ----
+const giz=new TransformControls(camera,renderer.domElement); giz.setSize(0.85); scene.add(giz);
+giz.addEventListener('dragging-changed',e=>{ _giz=e.value; if(e.value)_drag=false; });
+giz.addEventListener('objectChange',()=>{ if(giz.object) sync(giz.object.name); });
+const sel=document.getElementById('sel'); NAMES.forEach(n=>{ const o=document.createElement('option'); o.value=o.textContent=n; sel.appendChild(o); });
+function select(n){ sel.value=n; giz.attach(reg[n]); readout(); }
+sel.addEventListener('change',()=>select(sel.value));
+
+// pick to select
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+addEventListener('pointerdown',e=>{ if(e.target.id!=='c')return; if(_giz||giz.axis)return;
+  ndc.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight*2-1)); ray.setFromCamera(ndc,camera);
+  const h=ray.intersectObjects(partsGroup.children,true);
+  if(h.length){ let o=h[0].object; while(o.parent&&o.parent!==partsGroup)o=o.parent; select(o.name); }
+  else { _drag=true; _lx=e.clientX; _ly=e.clientY; } });
+
+// mode buttons + keys
+const bMove=document.getElementById('mMove'),bRot=document.getElementById('mRot'),bScale=document.getElementById('mScale'),bSpace=document.getElementById('space');
+function setMode(m){ giz.setMode(m); bMove.classList.toggle('on',m==='translate'); bRot.classList.toggle('on',m==='rotate'); bScale.classList.toggle('on',m==='scale'); }
+bMove.onclick=()=>setMode('translate'); bRot.onclick=()=>setMode('rotate'); bScale.onclick=()=>setMode('scale');
+bSpace.onclick=()=>{ giz.setSpace(giz.space==='world'?'local':'world'); bSpace.textContent=(giz.space==='world'?'World':'Local')+' (X)'; };
+document.getElementById('frame').onclick=frameAll;
+document.getElementById('reset').onclick=()=>{ const n=sel.value; XF[n]=JSON.parse(JSON.stringify(DEF[n])); apply(n); saveLS(); readout(); };
+document.getElementById('exp').onclick=()=>{ const o=document.getElementById('out'); o.style.display='block'; o.value=JSON.stringify(XF); o.select(); try{navigator.clipboard.writeText(o.value);}catch(e){} };
+document.getElementById('save').onclick=()=>{ renderer.render(scene,camera); const a=document.createElement('a'); a.download='unicorn_assault.png'; a.href=renderer.domElement.toDataURL('image/png'); a.click(); };
+addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
+  if(k==='w')setMode('translate'); else if(k==='e')setMode('rotate'); else if(k==='r')setMode('scale');
+  else if(k==='x')bSpace.click(); else if(k==='f')frameAll(); });
+
+window.__ua={ get xf(){return XF;}, reg, select, apply:()=>NAMES.forEach(apply), frameAll };
+
+(async()=>{ for(const n of NAMES){ await addPart(n,'assets/parts/'+n+'.glb'); }
+  NAMES.forEach(apply); frameAll(); select('body'); setMode('rotate');
+  say('UNICORN ASSAULT — align mode\nclick a part to select · W/E/R = move/rotate/scale · X = world/local\ndrag empty space = orbit · wheel = zoom · Export JSON when done'); })();
+addEventListener('resize',()=>{ renderer.setSize(innerWidth,innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); });
+renderer.setAnimationLoop(()=>renderer.render(scene,camera));
+</script>
+</body>
+</html>
