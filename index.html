@@ -14,7 +14,7 @@
     --display:'Orbitron',sans-serif; --body:'Fredoka','Arial Rounded MT Bold',sans-serif;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{height:100%;}
+  html,body{height:100%;overflow-x:hidden;overscroll-behavior-x:none;}
   body{
     font-family:var(--body);color:var(--txt);overflow-x:hidden;min-height:100%;
     background:
@@ -65,6 +65,20 @@
   .bn-item:hover{color:#cfe9ff;}
   .bn-item.active{color:var(--cyan);background:rgba(95,224,255,.08);}
   .bn-item.active .ni{filter:drop-shadow(0 0 8px rgba(95,224,255,.85));}
+
+  /* compact header on phones so brand + balance never overflow (was rubber-banding sideways) */
+  @media (max-width:600px){
+    header{gap:8px;padding:14px 0 4px;}
+    .brand{gap:8px;}
+    .brandmark{height:30px;}
+    .logo{font-size:clamp(12px,3.6vw,17px);letter-spacing:.4px;}
+    .logo small{font-size:8px;letter-spacing:3px;margin-top:3px;}
+    .bal{gap:6px;}
+    .chip{font-size:10px;padding:5px 8px;}
+    .chip .plus{width:15px;height:15px;font-size:11px;}
+    .avatar{width:30px;height:30px;font-size:16px;}
+    .avatar::after{width:8px;height:8px;}
+  }
 
   /* ---- hero strip ---- */
   .hero{margin:18px 0 8px;padding:18px 20px;border-radius:20px;position:relative;overflow:hidden;
@@ -286,7 +300,7 @@
 
     </div>
 
-    <footer>Big Run Studios — CrashArcade · Internal Prototype · v0.5.1</footer>
+    <footer>Big Run Studios — CrashArcade · Internal Prototype · v0.5.2</footer>
   </div>
 
   <nav class="botnav" aria-label="Primary">
