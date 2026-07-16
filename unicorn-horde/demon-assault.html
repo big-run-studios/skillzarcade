@@ -154,7 +154,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.8.3</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.9.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1773,10 +1773,49 @@ function makeHellhoundGLB(d){
   grp.userData.legs=null; grp.userData.wings=null; grp.userData.tel=null;
   return grp;
 }
+/* ---- HELL KNIGHT / BRUTE: animated GLB (Walking clip; root motion stripped so it walks in place) ---- */
+const _hkLoader=new GLTFLoader();
+let hkSrc=null, HK_MAT=null, HK_CLIP=null, HK_FIT=1, HK_MINY=0, HK_CX=0, HK_CZ=0, HK_YAW=0;
+function stripRootMotion(clip){   // freeze horizontal x/z of the biggest-moving .position track (the root) → in-place walk
+  let best=null,bestSpan=-1;
+  for(const t of clip.tracks){ if(!/\.position$/.test(t.name)) continue; const v=t.values; let mnx=1e9,mxx=-1e9,mnz=1e9,mxz=-1e9;
+    for(let i=0;i<v.length;i+=3){ if(v[i]<mnx)mnx=v[i]; if(v[i]>mxx)mxx=v[i]; if(v[i+2]<mnz)mnz=v[i+2]; if(v[i+2]>mxz)mxz=v[i+2]; }
+    const span=Math.max(mxx-mnx,mxz-mnz); if(span>bestSpan){ bestSpan=span; best=t; } }
+  if(best && bestSpan>0.5){ const v=best.values, x0=v[0], z0=v[2]; for(let i=0;i<v.length;i+=3){ v[i]=x0; v[i+2]=z0; } }
+}
+_hkLoader.load('assets/hellknight.glb', gl=>{
+  gl.scene.updateWorldMatrix(true,true);
+  let skin=null; gl.scene.traverse(o=>{ if(!skin&&o.isSkinnedMesh) skin=o; });
+  if(!skin){ console.error('hellknight: no skinned mesh'); return; }
+  hkSrc=gl.scene;
+  HK_CLIP=gl.animations.find(a=>/walk/i.test(a.name))||gl.animations[0];
+  if(HK_CLIP) stripRootMotion(HK_CLIP);
+  HK_MAT=Array.isArray(skin.material)?skin.material[0]:skin.material;
+  if(HK_MAT.emissive) HK_MAT.emissive.setScalar(1); HK_MAT.emissiveIntensity=1.3;
+  const bb=new THREE.Box3(), _v=new THREE.Vector3(); skin.skeleton.bones.forEach(b=>bb.expandByPoint(b.getWorldPosition(_v)));
+  const sz=bb.getSize(new THREE.Vector3()); HK_FIT=Math.max(sz.x,sz.z)||1; HK_MINY=bb.min.y; HK_CX=(bb.min.x+bb.max.x)/2; HK_CZ=(bb.min.z+bb.max.z)/2;
+}, undefined, e=>console.error('hellknight GLB load', e));
+function makeHellknightGLB(d){
+  const grp=new THREE.Group();
+  const model=cloneSkinned(hkSrc), s=d.r*3.0/HK_FIT;
+  const wrap=new THREE.Group(); wrap.add(model);
+  wrap.scale.setScalar(s); wrap.position.set(-HK_CX*s,-HK_MINY*s,-HK_CZ*s); wrap.rotation.y=HK_YAW;
+  let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=HK_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
+  grp.add(wrap); grp.userData.body=skin; grp.userData.glb=true;
+  const mixer=new THREE.AnimationMixer(model); mixer.clipAction(HK_CLIP).play();
+  mixer.update(Math.random()*HK_CLIP.duration);
+  grp.userData.mixer=mixer;
+  grp.add(groundBlob(d.r*2.0));
+  const elite=new THREE.Mesh(new THREE.TorusGeometry(d.r*1.35,1.8,8,24),basic(0xff5a2a));
+  elite.rotation.x=Math.PI/2; elite.position.y=4; grp.add(elite); grp.userData.elite=elite;
+  grp.userData.legs=null; grp.userData.wings=null; grp.userData.tel=null;
+  return grp;
+}
 function makeFruit(type){
   const d=FRUIT[type];
   if(type==='grape' && impSrc) return makeImpGLB(d);        // imp = GLB model when loaded
   if(type==='straw' && hhSrc) return makeHellhoundGLB(d);   // hellhound = animated GLB
+  if(type==='orange' && hkSrc) return makeHellknightGLB(d); // brute/hell knight = animated GLB
   const grp=new THREE.Group();
   const torso=new THREE.Group(); grp.add(torso);   // body + upper parts, lifted so the legs show
   const mDark=toon(d.dark), mBone=toon(0xbfa878);   // charcoal body bits; bronze/bone horns, talons, feet
