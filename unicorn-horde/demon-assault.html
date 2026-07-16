@@ -154,7 +154,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.9.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.10.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1411,78 +1411,17 @@ function basic(color,opts){ return new THREE.MeshBasicMaterial(Object.assign({co
 const colCache={};
 function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
 
-/* ---- ground (baked cartoon texture) ---- */
+/* ---- ground (authored lava-field texture: assets/ground.jpg — calmer center, hotter edges) ---- */
 (function buildGround(){
-  const cvt=document.createElement('canvas'); cvt.width=1500; cvt.height=1150;
-  const g=cvt.getContext('2d'), sc=0.5;
-  // hellstone ground — near-black COOL stone with a molten core; bright lava veins + pools = high contrast
-  const grd=g.createRadialGradient(750,575,60,750,575,900);
-  grd.addColorStop(0,'#3a1608'); grd.addColorStop(0.42,'#161a22'); grd.addColorStop(1,'#090b0f');
-  g.fillStyle=grd; g.fillRect(0,0,1500,1150);
-  g.globalAlpha=0.06; g.fillStyle='#000000';                        // subtle flagstone banding
-  for(let i=0;i<12;i++){ if(i%2) g.fillRect(0,i*96,1500,96); }
-  g.globalAlpha=1;
-  for(let i=0;i<520;i++){                                           // stone cracks / soot flecks (some cool)
-    const x=R(0,1500), y=R(0,1150);
-    g.strokeStyle=Math.random()<0.5?'rgba(90,110,140,.10)':'rgba(0,0,0,.42)';
-    g.lineWidth=1.2;
-    g.beginPath(); g.moveTo(x,y); g.lineTo(x+R(-4,4),y+R(-4,4)); g.stroke();
-  }
-  for(let i=0;i<8;i++){                                             // molten pools — bright warm focal pops
-    const x=R(120,1380), y=R(120,1030), r0=R(26,60);
-    const pg=g.createRadialGradient(x,y,2,x,y,r0);
-    pg.addColorStop(0,'rgba(255,236,180,.95)'); pg.addColorStop(0.35,'rgba(255,120,40,.7)'); pg.addColorStop(1,'rgba(120,30,10,0)');
-    g.fillStyle=pg; g.beginPath(); g.arc(x,y,r0,0,6.283); g.fill();
-  }
-  for(let i=0;i<34;i++){                                            // lava fissures: wide dim glow + white-hot core
-    let x=R(60,1440), y=R(60,1090); const segs=R(4,8), pts=[[x,y]];
-    for(let s=0;s<segs;s++){ x+=R(-30,30); y+=R(-30,30); pts.push([x,y]); }
-    const trace=()=>{ g.beginPath(); pts.forEach((p,k)=>k?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])); g.stroke(); };
-    g.lineCap='round'; g.shadowColor='rgba(255,120,40,.9)'; g.shadowBlur=10;
-    g.strokeStyle='rgba(255,110,40,.45)'; g.lineWidth=R(3,6); trace();          // wide dim glow
-    g.shadowBlur=6; g.strokeStyle='rgba(255,244,200,.9)'; g.lineWidth=R(1,1.8); trace();   // white-hot core
-  }
-  g.shadowBlur=0;
-  // sidewalks — ring around the platform, N/S/E/W spokes, and a perimeter loop (canvas = world × 0.5)
-  g.strokeStyle='#4a4038'; g.lineCap='butt';   // worn stone processional path
-  g.lineWidth=36; g.strokeRect(48,48,1500-96,1150-96);          // perimeter loop
-  g.beginPath(); g.arc(750,575,88,0,6.283); g.stroke();          // center ring
-  g.beginPath();                                                  // four spokes
-  g.moveTo(750,487); g.lineTo(750,48);
-  g.moveTo(750,663); g.lineTo(750,1102);
-  g.moveTo(662,575); g.lineTo(48,575);
-  g.moveTo(838,575); g.lineTo(1452,575);
-  g.stroke();
-  g.strokeStyle='rgba(255,120,50,.45)'; g.lineWidth=2;            // ember-lit rune curbs
-  g.strokeRect(30,30,1500-60,1150-60);
-  g.strokeRect(66,66,1500-132,1150-132);
-  g.beginPath(); g.arc(750,575,106,0,6.283); g.stroke();
-  g.beginPath(); g.arc(750,575,70,0,6.283); g.stroke();
-  g.beginPath();
-  for(const L of [[732,487,732,66],[768,487,768,66],[732,663,732,1084],[768,663,768,1084],
-    [662,557,66,557],[662,593,66,593],[838,557,1434,557],[838,593,1434,593]]){
-    g.moveTo(L[0],L[1]); g.lineTo(L[2],L[3]); }
-  g.stroke();
-  g.strokeStyle='rgba(0,0,0,.42)'; g.lineWidth=2;                // cracked joints
-  g.beginPath();
-  for(let y=110;y<470;y+=44){ g.moveTo(733,y); g.lineTo(767,y); }
-  for(let y=690;y<1080;y+=44){ g.moveTo(733,y); g.lineTo(767,y); }
-  for(let x=110;x<650;x+=44){ g.moveTo(x,558); g.lineTo(x,592); }
-  for(let x=850;x<1420;x+=44){ g.moveTo(x,558); g.lineTo(x,592); }
-  g.stroke();
-  // confetti litter — only on the concrete (mirrors onSidewalk); grass stays clean, not buggy-speckled
-  const onWalkC=(x,y)=>{ const dx=x-750,dy=y-575,d=Math.hypot(dx,dy);
-    return (d>=70&&d<=106)||(d>70&&(Math.abs(dx)<=18||Math.abs(dy)<=18))||x<=66||x>=1434||y<=66||y>=1084; };
-  for(let i=0,placed=0; i<3000 && placed<300; i++){ const x=R(20,1480), y=R(20,1130);
-    if(!onWalkC(x,y)) continue;
-    const s=R(9,17); placed++;
-    g.globalAlpha=R(0.05,0.12); g.fillStyle=rand(RAINBOW);
-    g.beginPath(); g.moveTo(x,y-s*0.5); g.lineTo(x+s,y); g.lineTo(x,y+s*0.5); g.lineTo(x-s,y); g.closePath(); g.fill(); }
-  g.globalAlpha=1;
-  const tex=new THREE.CanvasTexture(cvt); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=4;
-  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH), new THREE.MeshBasicMaterial({map:tex,color:0xcfd0d4}));
+  const mat=new THREE.MeshBasicMaterial({color:0x14161b});   // dark charcoal until the texture streams in (no white flash)
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH), mat);
   mesh.rotation.x=-Math.PI/2; mesh.position.set(WW/2,0,WH/2);
   scene.add(mesh);
+  new THREE.TextureLoader().load('assets/ground.jpg', tex=>{
+    tex.colorSpace=THREE.SRGBColorSpace;
+    tex.anisotropy=renderer.capabilities.getMaxAnisotropy();   // crisp at grazing camera angles
+    mat.map=tex; mat.color.set(0xffffff); mat.needsUpdate=true;   // show the texture as authored (untinted)
+  });
   // dark apron outside the walls so the horizon isn't a hard edge
   const apron=new THREE.Mesh(new THREE.PlaneGeometry(WW*3,WH*3), basic(0x0a0403));
   apron.rotation.x=-Math.PI/2; apron.position.set(WW/2,-1,WH/2);
@@ -1811,11 +1750,68 @@ function makeHellknightGLB(d){
   grp.userData.legs=null; grp.userData.wings=null; grp.userData.tel=null;
   return grp;
 }
+/* ---- BILESPAWN: rigged GLB, no clip → static floater (hovers via userData.float) ---- */
+const _bsLoader=new GLTFLoader();
+let bsSrc=null,BS_MAT=null,BS_FIT=1,BS_MINY=0,BS_CX=0,BS_CZ=0,BS_YAW=0;
+_bsLoader.load('assets/bilespawn.glb', gl=>{
+  gl.scene.updateWorldMatrix(true,true);
+  let skin=null; gl.scene.traverse(o=>{ if(!skin&&o.isSkinnedMesh) skin=o; });
+  if(!skin){ console.error('bilespawn: no skinned mesh'); return; }
+  bsSrc=gl.scene;
+  BS_MAT=Array.isArray(skin.material)?skin.material[0]:skin.material;
+  if(BS_MAT.emissive) BS_MAT.emissive.setScalar(1); BS_MAT.emissiveIntensity=1.3;
+  const bb=new THREE.Box3(),_v=new THREE.Vector3(); skin.skeleton.bones.forEach(b=>bb.expandByPoint(b.getWorldPosition(_v)));
+  const sz=bb.getSize(new THREE.Vector3()); BS_FIT=Math.max(sz.x,sz.z)||1; BS_MINY=bb.min.y; BS_CX=(bb.min.x+bb.max.x)/2; BS_CZ=(bb.min.z+bb.max.z)/2;
+}, undefined, e=>console.error('bilespawn GLB load', e));
+function makeBilespawnGLB(d){
+  const grp=new THREE.Group();
+  const model=cloneSkinned(bsSrc), s=d.r*2.6/BS_FIT;
+  const wrap=new THREE.Group(); wrap.add(model);
+  wrap.scale.setScalar(s); wrap.position.set(-BS_CX*s,-BS_MINY*s,-BS_CZ*s); wrap.rotation.y=BS_YAW;
+  let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=BS_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
+  grp.add(wrap); grp.userData.body=skin; grp.userData.glb=true; grp.userData.float=true;
+  grp.add(groundBlob(d.r*1.8));
+  const elite=new THREE.Mesh(new THREE.TorusGeometry(d.r*1.35,1.8,8,24),basic(0xff5a2a));
+  elite.rotation.x=Math.PI/2; elite.position.y=4; grp.add(elite); grp.userData.elite=elite;
+  grp.userData.legs=null; grp.userData.wings=null; grp.userData.tel=null;
+  return grp;
+}
+/* ---- BARON: animated GLB (Walking clip; root motion stripped) ---- */
+const _brLoader=new GLTFLoader();
+let brSrc=null,BR_MAT=null,BR_CLIP=null,BR_FIT=1,BR_MINY=0,BR_CX=0,BR_CZ=0,BR_YAW=0;
+_brLoader.load('assets/baron.glb', gl=>{
+  gl.scene.updateWorldMatrix(true,true);
+  let skin=null; gl.scene.traverse(o=>{ if(!skin&&o.isSkinnedMesh) skin=o; });
+  if(!skin){ console.error('baron: no skinned mesh'); return; }
+  brSrc=gl.scene;
+  BR_CLIP=gl.animations.find(a=>/walk/i.test(a.name))||gl.animations[0]; if(BR_CLIP) stripRootMotion(BR_CLIP);
+  BR_MAT=Array.isArray(skin.material)?skin.material[0]:skin.material;
+  if(BR_MAT.emissive) BR_MAT.emissive.setScalar(1); BR_MAT.emissiveIntensity=1.3;
+  const bb=new THREE.Box3(),_v=new THREE.Vector3(); skin.skeleton.bones.forEach(b=>bb.expandByPoint(b.getWorldPosition(_v)));
+  const sz=bb.getSize(new THREE.Vector3()); BR_FIT=Math.max(sz.x,sz.z)||1; BR_MINY=bb.min.y; BR_CX=(bb.min.x+bb.max.x)/2; BR_CZ=(bb.min.z+bb.max.z)/2;
+}, undefined, e=>console.error('baron GLB load', e));
+function makeBaronGLB(d){
+  const grp=new THREE.Group();
+  const model=cloneSkinned(brSrc), s=d.r*3.0/BR_FIT;
+  const wrap=new THREE.Group(); wrap.add(model);
+  wrap.scale.setScalar(s); wrap.position.set(-BR_CX*s,-BR_MINY*s,-BR_CZ*s); wrap.rotation.y=BR_YAW;
+  let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=BR_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
+  grp.add(wrap); grp.userData.body=skin; grp.userData.glb=true;
+  const mixer=new THREE.AnimationMixer(model); mixer.clipAction(BR_CLIP).play(); mixer.update(Math.random()*BR_CLIP.duration);
+  grp.userData.mixer=mixer;
+  grp.add(groundBlob(d.r*2.2));
+  const elite=new THREE.Mesh(new THREE.TorusGeometry(d.r*1.35,1.8,8,24),basic(0xff5a2a));
+  elite.rotation.x=Math.PI/2; elite.position.y=4; grp.add(elite); grp.userData.elite=elite;
+  grp.userData.legs=null; grp.userData.wings=null; grp.userData.tel=null;
+  return grp;
+}
 function makeFruit(type){
   const d=FRUIT[type];
   if(type==='grape' && impSrc) return makeImpGLB(d);        // imp = GLB model when loaded
   if(type==='straw' && hhSrc) return makeHellhoundGLB(d);   // hellhound = animated GLB
   if(type==='orange' && hkSrc) return makeHellknightGLB(d); // brute/hell knight = animated GLB
+  if(type==='lemon' && bsSrc) return makeBilespawnGLB(d);   // bilespawn = static floater GLB
+  if(type==='melon' && brSrc) return makeBaronGLB(d);       // baron = animated GLB
   const grp=new THREE.Group();
   const torso=new THREE.Group(); grp.add(torso);   // body + upper parts, lifted so the legs show
   const mDark=toon(d.dark), mBone=toon(0xbfa878);   // charcoal body bits; bronze/bone horns, talons, feet
