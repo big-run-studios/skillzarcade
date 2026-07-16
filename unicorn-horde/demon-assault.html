@@ -154,7 +154,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.12.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.13.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1465,46 +1465,79 @@ function rebuildStructMeshes(){
       water.position.set(cx,s.hh+1,cz); structGroup.add(water);
       const glow=new THREE.PointLight(0x5fe0ff, 40, 340); glow.position.set(cx,s.hh+30,cz); structGroup.add(glow);
     }else if(s.kind==='bins'){
-      // a pair of stone braziers — pedestal + glowing fire bowl that lights the ruins
+      // a pair of braziers (GLB fire bowls) + firelight; primitive fallback before the GLB loads
       const mk=(ox)=>{
-        const col2=new THREE.Mesh(new THREE.CylinderGeometry(9,12,40,8),toon(0x2a211c));
-        col2.position.set(cx+ox,20,cz); structGroup.add(col2);
-        const bowl=new THREE.Mesh(new THREE.CylinderGeometry(15,9,10,10),toon(0x1a1512));
-        bowl.position.set(cx+ox,45,cz); structGroup.add(bowl);
-        const fire=new THREE.Mesh(sphereGeo,basic(0xff7a2a,{transparent:true,opacity:0.92}));
-        fire.scale.set(9,12,9); fire.position.set(cx+ox,52,cz); structGroup.add(fire);
-        const glow=new THREE.PointLight(0xff6a2a, 26, 240); glow.position.set(cx+ox,58,cz); structGroup.add(glow);
+        if(bowlP){
+          const holder=new THREE.Group(); holder.position.set(cx+ox,0,cz); holder.rotation.y=BOWL_YAW; structGroup.add(holder);
+          const sc=Math.min(38/bowlP.fitXZ, 72/bowlP.fitY), m=bowlP.m.clone();
+          m.scale.setScalar(sc); m.position.set(-bowlP.cx*sc,-bowlP.miny*sc,-bowlP.cz*sc); holder.add(m);
+          const h=bowlP.fitY*sc;
+          const fire=new THREE.Mesh(sphereGeo,basic(0xff8a3a,{transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending}));
+          fire.scale.set(7,10,7); fire.position.set(cx+ox,h*0.9,cz); structGroup.add(fire);
+          const glow=new THREE.PointLight(0xff6a2a,26,240); glow.position.set(cx+ox,h+6,cz); structGroup.add(glow);
+        }else{
+          const col2=new THREE.Mesh(new THREE.CylinderGeometry(9,12,40,8),toon(0x2a211c));
+          col2.position.set(cx+ox,20,cz); structGroup.add(col2);
+          const bowl=new THREE.Mesh(new THREE.CylinderGeometry(15,9,10,10),toon(0x1a1512));
+          bowl.position.set(cx+ox,45,cz); structGroup.add(bowl);
+          const fire=new THREE.Mesh(sphereGeo,basic(0xff7a2a,{transparent:true,opacity:0.92}));
+          fire.scale.set(9,12,9); fire.position.set(cx+ox,52,cz); structGroup.add(fire);
+          const glow=new THREE.PointLight(0xff6a2a, 26, 240); glow.position.set(cx+ox,58,cz); structGroup.add(glow);
+        }
       };
       mk(-17); mk(17);
     }else if(s.kind==='stall'){
-      // PILE OF SKULLS on a dark mound (was a market stall) — same footprint = same cover
-      const base=new THREE.Mesh(new THREE.BoxGeometry(s.w,s.hh*0.5,s.h),toon(0x1c1712));
-      base.position.set(cx,s.hh*0.25,cz); structGroup.add(base);
-      const nx=Math.max(2,Math.min(4,Math.round(s.w/34))), nz=Math.max(2,Math.min(4,Math.round(s.h/34)));
-      let placed=0;
-      for(let ix=0;ix<nx && placed<8;ix++) for(let iz=0;iz<nz && placed<8;iz++){
-        const jx=cx+(ix+0.5-nx/2)*(s.w/nx)+R(-3,3);
-        const jz=cz+(iz+0.5-nz/2)*(s.h/nz)+R(-3,3);
-        const sc=R(6.5,9), sy=s.hh*0.5+sc*0.8+((ix+iz)%2)*4;
-        const sk=new THREE.Mesh(sphereGeo,skullMat); sk.scale.set(sc,sc*1.12,sc*0.95);
-        sk.position.set(jx,sy,jz); sk.rotation.y=R(-0.5,0.5); structGroup.add(sk); placed++;
+      // PILE OF SKULLS (GLB) filling the footprint — same footprint = same cover; primitive fallback before load
+      const cand=skullP.filter(Boolean);
+      const tpl=cand.length? cand[Math.abs(Math.round(cx*0.11+cz*0.13))%cand.length] : null;
+      if(tpl){
+        const holder=new THREE.Group(); holder.position.set(cx,0,cz);
+        const modelLongX=tpl.lx>=tpl.lz, footLongX=s.w>=s.h;
+        holder.rotation.y=(modelLongX!==footLongX)?Math.PI/2:0; structGroup.add(holder);   // align the pile's long axis to the footprint
+        const sc=Math.min((Math.max(s.w,s.h)*0.98)/tpl.fitXZ, 58/tpl.fitY), m=tpl.m.clone();
+        m.scale.setScalar(sc); m.position.set(-tpl.cx*sc,-tpl.miny*sc,-tpl.cz*sc); holder.add(m);
+      }else{
+        const base=new THREE.Mesh(new THREE.BoxGeometry(s.w,s.hh*0.5,s.h),toon(0x1c1712));
+        base.position.set(cx,s.hh*0.25,cz); structGroup.add(base);
+        const nx=Math.max(2,Math.min(4,Math.round(s.w/34))), nz=Math.max(2,Math.min(4,Math.round(s.h/34)));
+        let placed=0;
+        for(let ix=0;ix<nx && placed<8;ix++) for(let iz=0;iz<nz && placed<8;iz++){
+          const jx=cx+(ix+0.5-nx/2)*(s.w/nx)+R(-3,3);
+          const jz=cz+(iz+0.5-nz/2)*(s.h/nz)+R(-3,3);
+          const sc=R(6.5,9), sy=s.hh*0.5+sc*0.8+((ix+iz)%2)*4;
+          const sk=new THREE.Mesh(sphereGeo,skullMat); sk.scale.set(sc,sc*1.12,sc*0.95);
+          sk.position.set(jx,sy,jz); sk.rotation.y=R(-0.5,0.5); structGroup.add(sk); placed++;
+        }
       }
-    }else{ // FIERY EYE — a watching demon eye on a gnarled stalk; glows and follows the player
-      const eyeH=82, eyeR=17;
-      const stalk=new THREE.Mesh(new THREE.CylinderGeometry(3,7,eyeH,7),toon(0x160f0c));
-      stalk.position.set(cx,eyeH/2,cz); structGroup.add(stalk);
-      const socket=new THREE.Mesh(sphereGeo,toon(0x0e0806)); socket.scale.set(eyeR*1.25,eyeR*1.1,eyeR*0.9);
-      socket.position.set(cx,eyeH,cz-eyeR*0.3); structGroup.add(socket);   // dark socket behind the eye
-      const glow=new THREE.Mesh(sphereGeo,basic(0xff6a1a,{transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending}));
-      glow.scale.setScalar(eyeR*1.7); glow.position.set(cx,eyeH,cz); structGroup.add(glow);
-      const eyeball=new THREE.Mesh(sphereGeo,basic(0xffb24a)); eyeball.scale.setScalar(eyeR); eyeball.position.set(cx,eyeH,cz); structGroup.add(eyeball);
-      const pg=new THREE.Group(); pg.position.set(cx,eyeH,cz); structGroup.add(pg);   // rotates to look at the player
-      const iris=new THREE.Mesh(sphereGeo,basic(0xff3d0a)); iris.scale.set(eyeR*0.5,eyeR*0.62,eyeR*0.35); iris.position.set(0,-eyeR*0.18,eyeR*0.82); pg.add(iris);
-      const pupil=new THREE.Mesh(sphereGeo,basic(0x140600)); pupil.scale.set(eyeR*0.14,eyeR*0.42,eyeR*0.2); pupil.position.set(0,-eyeR*0.18,eyeR*1.0); pg.add(pupil);   // vertical slit
-      const pool=new THREE.Mesh(new THREE.PlaneGeometry(240,240),
-        new THREE.MeshBasicMaterial({map:glowTex,color:0xff6a1a,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending}));
-      pool.rotation.x=-Math.PI/2; pool.position.set(cx,1.3,cz); pool.renderOrder=1; structGroup.add(pool);
-      eyeStructs.push({pg, glow, x:cx, z:cz});
+    }else{ // FIERY EYE — GLB eye-staff that glows + rotates to watch the player; primitive fallback before load
+      if(eyeP){
+        const pg=new THREE.Group(); pg.position.set(cx,0,cz); structGroup.add(pg);   // whole staff rotates to face the player
+        const sc=Math.min(104/eyeP.fitY, 46/eyeP.fitXZ), m=eyeP.m.clone();
+        m.scale.setScalar(sc); m.position.set(-eyeP.cx*sc,-eyeP.miny*sc,-eyeP.cz*sc); m.rotation.y=EYE_YAW; pg.add(m);
+        const eyeY=eyeP.fitY*sc*0.86;
+        const glow=new THREE.Mesh(sphereGeo,basic(0xff6a1a,{transparent:true,opacity:0.4,depthWrite:false,blending:THREE.AdditiveBlending}));
+        glow.scale.setScalar(9); glow.position.set(cx,eyeY,cz); structGroup.add(glow);   // small ember halo — don't wash out the sculpted eye
+        const pool=new THREE.Mesh(new THREE.PlaneGeometry(240,240),
+          new THREE.MeshBasicMaterial({map:glowTex,color:0xff6a1a,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending}));
+        pool.rotation.x=-Math.PI/2; pool.position.set(cx,1.3,cz); pool.renderOrder=1; structGroup.add(pool);
+        eyeStructs.push({pg, glow, x:cx, z:cz});
+      }else{
+        const eyeH=82, eyeR=17;
+        const stalk=new THREE.Mesh(new THREE.CylinderGeometry(3,7,eyeH,7),toon(0x160f0c));
+        stalk.position.set(cx,eyeH/2,cz); structGroup.add(stalk);
+        const socket=new THREE.Mesh(sphereGeo,toon(0x0e0806)); socket.scale.set(eyeR*1.25,eyeR*1.1,eyeR*0.9);
+        socket.position.set(cx,eyeH,cz-eyeR*0.3); structGroup.add(socket);   // dark socket behind the eye
+        const glow=new THREE.Mesh(sphereGeo,basic(0xff6a1a,{transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending}));
+        glow.scale.setScalar(eyeR*1.7); glow.position.set(cx,eyeH,cz); structGroup.add(glow);
+        const eyeball=new THREE.Mesh(sphereGeo,basic(0xffb24a)); eyeball.scale.setScalar(eyeR); eyeball.position.set(cx,eyeH,cz); structGroup.add(eyeball);
+        const pg=new THREE.Group(); pg.position.set(cx,eyeH,cz); structGroup.add(pg);   // rotates to look at the player
+        const iris=new THREE.Mesh(sphereGeo,basic(0xff3d0a)); iris.scale.set(eyeR*0.5,eyeR*0.62,eyeR*0.35); iris.position.set(0,-eyeR*0.18,eyeR*0.82); pg.add(iris);
+        const pupil=new THREE.Mesh(sphereGeo,basic(0x140600)); pupil.scale.set(eyeR*0.14,eyeR*0.42,eyeR*0.2); pupil.position.set(0,-eyeR*0.18,eyeR*1.0); pg.add(pupil);   // vertical slit
+        const pool=new THREE.Mesh(new THREE.PlaneGeometry(240,240),
+          new THREE.MeshBasicMaterial({map:glowTex,color:0xff6a1a,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending}));
+        pool.rotation.x=-Math.PI/2; pool.position.set(cx,1.3,cz); pool.renderOrder=1; structGroup.add(pool);
+        eyeStructs.push({pg, glow, x:cx, z:cz});
+      }
     }
   }
   scene.add(structGroup);
@@ -1552,13 +1585,19 @@ function rebuildExtArc(f){
 /* ---- chests ---- */
 function makeChest(){
   const grp=new THREE.Group();
-  const base=new THREE.Mesh(new THREE.BoxGeometry(38,24,28),toon(0x2a2420));
-  base.position.y=12; grp.add(base);
-  const lid=new THREE.Mesh(new THREE.BoxGeometry(40,12,30),toon(0x352c26));
-  lid.position.y=28; grp.add(lid); grp.userData.lid=lid;
-  const band=new THREE.Mesh(new THREE.BoxGeometry(42,6,31),basic(0xb08a3a));
-  band.position.y=22; grp.add(band);
-  const lock=new THREE.Mesh(sphereGeo,basic(0xff7a2a)); lock.scale.setScalar(4); lock.position.set(0,20,16); grp.add(lock);
+  if(chestP){   // GLB reliquary; fused mesh has no separable lid, so the open-anim targets a dummy node
+    const sc=Math.min(44/chestP.fitXZ, 40/chestP.fitY), m=chestP.m.clone();
+    m.scale.setScalar(sc); m.position.set(-chestP.cx*sc,-chestP.miny*sc,-chestP.cz*sc); m.rotation.y=CHEST_YAW;
+    grp.add(m); grp.userData.lid=new THREE.Object3D(); grp.add(grp.userData.lid);
+  }else{
+    const base=new THREE.Mesh(new THREE.BoxGeometry(38,24,28),toon(0x2a2420));
+    base.position.y=12; grp.add(base);
+    const lid=new THREE.Mesh(new THREE.BoxGeometry(40,12,30),toon(0x352c26));
+    lid.position.y=28; grp.add(lid); grp.userData.lid=lid;
+    const band=new THREE.Mesh(new THREE.BoxGeometry(42,6,31),basic(0xb08a3a));
+    band.position.y=22; grp.add(band);
+    const lock=new THREE.Mesh(sphereGeo,basic(0xff7a2a)); lock.scale.setScalar(4); lock.position.set(0,20,16); grp.add(lock);
+  }
   grp.add(groundBlob(30));
   return grp;
 }
@@ -1837,6 +1876,23 @@ function makeGargoyleGLB(d){
   grp.userData.legs=null; grp.userData.wings=null; grp.userData.tel=null;
   return grp;
 }
+/* ---- ENVIRONMENT PROPS: static (non-skinned) GLBs — brazier, eye-staff, chest, 2× skull pile ---- */
+function _propFit(model){
+  model.traverse(o=>{ if(o.isMesh){ o.layers.enable(CHAR_LAYER); o.frustumCulled=false;   // lit by the character lights so PBR reads in the dark scene
+    const m=o.material; if(m&&m.emissive){ m.emissiveIntensity=m.emissiveMap?1.0:0.5; if(!m.emissiveMap) m.emissive.set(0x24110a); } } });
+  const box=new THREE.Box3().setFromObject(model), sz=box.getSize(new THREE.Vector3());
+  return { m:model, fitXZ:Math.max(sz.x,sz.z)||1, fitY:sz.y||1, lx:sz.x, lz:sz.z,
+           cx:(box.min.x+box.max.x)/2, cz:(box.min.z+box.max.z)/2, miny:box.min.y };
+}
+let bowlP=null, eyeP=null, chestP=null; const skullP=[];
+let EYE_YAW=0, BOWL_YAW=0, CHEST_YAW=0;   // facing offsets — tune if a prop faces wrong
+const _propLoader=new GLTFLoader();
+_propLoader.load('assets/brazier.glb',      g=>{ bowlP =_propFit(g.scene); structsDirty=true; }, undefined, e=>console.error('brazier GLB',e));
+_propLoader.load('assets/eye-staff.glb',    g=>{ eyeP  =_propFit(g.scene); structsDirty=true; }, undefined, e=>console.error('eye-staff GLB',e));
+_propLoader.load('assets/chest.glb',        g=>{ chestP=_propFit(g.scene); }, undefined, e=>console.error('chest GLB',e));
+_propLoader.load('assets/skull-pile-a.glb', g=>{ skullP[0]=_propFit(g.scene); structsDirty=true; }, undefined, e=>console.error('skull-a GLB',e));
+_propLoader.load('assets/skull-pile-b.glb', g=>{ skullP[1]=_propFit(g.scene); structsDirty=true; }, undefined, e=>console.error('skull-b GLB',e));
+
 function makeFruit(type){
   const d=FRUIT[type];
   if(type==='grape' && impSrc) return makeImpGLB(d);        // imp = GLB model when loaded
@@ -2335,9 +2391,11 @@ function syncScene(dt){
     uni.rotation.y = Math.PI/2 - aimAng + HERO_YAW; uni.rotation.z=0; uni.scale.set(1,1,1); uni.position.y=airY;
     let clip='Walking', ts=1;
     if(state==='dying') clip='Shot_and_Fall_Forward';
-    else if(moving>0.05){ let dl=faceAng-aimAng; while(dl>Math.PI)dl-=6.283; while(dl<-Math.PI)dl+=6.283;
-      clip = Math.abs(dl)>Math.PI/2 ? 'Walk_Backward_with_Gun_inplace' : 'Walking'; }
-    else ts=0;   // idle: freeze the walk pose (no idle clip in the set)
+    else { let dl=faceAng-aimAng; while(dl>Math.PI)dl-=6.283; while(dl<-Math.PI)dl+=6.283;
+      if(moving>0.05 && Math.abs(dl)>Math.PI/2) clip='Walk_Backward_with_Gun_inplace';   // back-pedal (aiming behind)
+      else if(target) clip='Run_and_Shoot';        // shooting forward
+      else if(moving>0.05) clip='Walking';         // advancing, nothing to shoot
+      else ts=0; }                                 // idle: freeze the walk pose (no idle clip in the set)
     heroPlay(clip); if(heroCurAct) heroCurAct.timeScale=ts;
     if(heroMixer) heroMixer.update(dt);
   } else {
