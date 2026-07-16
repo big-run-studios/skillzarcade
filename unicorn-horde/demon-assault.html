@@ -128,6 +128,7 @@
         <div class="row"><div class="ic">💰</div><div class="tx">Stand on the <b>$ rift</b> for 3s to <u>EXTRACT</u> your souls · if the <i>song ends first, it's gone</i></div></div>
       </div>
       <button class="btn" id="playBtn">DESCEND</button>
+      <button class="btn ghost" id="sandBtn">SANDBOX (dev)</button>
       <div class="pb" id="menuBest"></div>
     </div>
 
@@ -153,7 +154,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.7.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.8.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1112,12 +1113,47 @@ function toMenu(){
   menuEl.classList.remove('hide');
   syncMusic();
 }
+/* ================================================================= SANDBOX (dev review grid) */
+let sandbox=false, sandFloor=null, sandLabels=[], _savedFog=null;
+const SAND_GX=1500, SAND_GZ=-2600, SAND_SX=470, SAND_SZ=440;
+const SAND_CELLS=[   // [type|'player', col(-1/1), row(0..3), label]
+  ['player',-1,0,'SLAYER'], ['grape',1,0,'IMP'],
+  ['straw',-1,1,'HELLHOUND'], ['lemon',1,1,'BILESPAWN'],
+  ['orange',-1,2,'BRUTE'], ['slice',1,2,'GARGOYLE'],
+  ['melon',-1,3,'BARON'],
+];
+const sandCell=(col,row)=>({x:SAND_GX+col*SAND_SX*0.5, z:SAND_GZ+(1.5-row)*SAND_SZ});
+function buildSandFloor(){
+  const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){ g.fillStyle=((x+y)&1)?'#3b414a':'#1d2129'; g.fillRect(x*32,y*32,32,32); }
+  const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(6,9);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(1500,2300), new THREE.MeshBasicMaterial({map:tex}));
+  m.rotation.x=-Math.PI/2; m.position.set(SAND_GX,0.2,SAND_GZ); m.visible=false; scene.add(m); return m;
+}
+function enterSandbox(){
+  sandbox=true; state='sandbox';
+  menuEl.classList.add('hide'); overEl.classList.add('hide'); cashedEl.classList.add('hide'); hudEl.classList.remove('on');
+  if(!sandFloor) sandFloor=buildSandFloor(); sandFloor.visible=true;
+  _savedFog=scene.fog; scene.fog=null;   // review without distance fog
+  hpTrack.visible=false; if(hpArc)hpArc.visible=false; if(hpRim)hpRim.visible=false; if(hpDmg)hpDmg.visible=false;
+  enemies.length=0; sandLabels=[];
+  weap=newWeap(); wingT=0; slamState=null; invulnT=0; hp=CFG.maxHp; dispHp=CFG.maxHp; buttInfo=null;
+  for(const [type,col,row,label] of SAND_CELLS){
+    const p=sandCell(col,row); sandLabels.push({x:p.x,z:p.z,label});
+    if(type==='player'){ px=p.x; py=p.z; faceAng=aimAng=Math.PI/2; uni.userData.a=Math.PI/2; }
+    else { const d=FRUIT[type];
+      enemies.push({type,x:p.x,y:p.z,hp:d.hp,maxhp:d.hp,spawnT:0,stun:0,elite:false,ph:Math.random()*6.28,atkCd:1,lunge:0,hitF:0,telT:0,chargeT:0,vx:0,vy:0,kx:0,ky:0,slamHit:false,dead:false}); }
+  }
+  moving=1; walkPh=0; syncMusic();
+}
+function exitSandbox(){ sandbox=false; if(sandFloor)sandFloor.visible=false; if(_savedFog)scene.fog=_savedFog; hpTrack.visible=true; enemies.length=0; toMenu(); }
+document.getElementById('sandBtn').addEventListener('click',()=>{ ac(); enterSandbox(); });
 document.getElementById('playBtn').addEventListener('click',()=>{ ac(); startRun(); });
 document.getElementById('againBtn').addEventListener('click',()=>startRun());
 document.getElementById('menuBtn').addEventListener('click',()=>toMenu());
 document.getElementById('cashAgainBtn').addEventListener('click',()=>startRun());
 document.getElementById('cashMenuBtn').addEventListener('click',()=>toMenu());
-document.getElementById('backArcade').addEventListener('click',()=>{ location.href='../index.html'; });
+document.getElementById('backArcade').addEventListener('click',()=>{ if(sandbox) exitSandbox(); else location.href='../index.html'; });
 document.getElementById('menuBest').textContent=best>0?('BEST '+best.toLocaleString()):'';
 
 // the cash pill is a status indicator now — extraction happens by STANDING on the platform
@@ -1272,6 +1308,7 @@ function update(rdt){
   for(const s of stains) s.t+=rdt;
   stains=stains.filter(s=>s.t<s.life);
   if(wingT>0) wingT-=rdt;
+  if(state==='sandbox'){ for(const e of enemies) e.ph+=rdt*(3+FRUIT[e.type].spd*0.02); walkPh+=rdt*9; return; }
   if(state==='menu') return;
   if(state==='cashing'){ seqT+=rdt; updCashing(rdt); return; }
   if(state==='dying'){ seqT+=rdt; updDying(rdt); return; }
@@ -1663,7 +1700,7 @@ function cloneSkinned(src){
   const map=new Map(), clone=src.clone(true);
   (function walk(a,b){ map.set(a,b); for(let i=0;i<a.children.length;i++) walk(a.children[i],b.children[i]); })(src,clone);
   src.traverse(o=>{ if(o.isSkinnedMesh){ const cm=map.get(o), sk=o.skeleton;
-    cm.bind(new THREE.Skeleton(sk.bones.map(b=>map.get(b)), sk.boneInverses), cm.matrixWorld); } });
+    cm.bind(new THREE.Skeleton(sk.bones.map(b=>map.get(b)), sk.boneInverses), o.bindMatrix); } });   // reuse the source bind matrix (identity breaks non-identity binds)
   return clone;
 }
 _impLoader.load('assets/imp.glb', gl=>{
@@ -1715,9 +1752,10 @@ _hhLoader.load('assets/hellhound.glb', gl=>{
 function makeHellhoundGLB(d){
   const grp=new THREE.Group();
   const model=cloneSkinned(hhSrc), s=d.r*2.0/HH_FIT;   // fit the footprint (bone extent) to the collision size
-  model.scale.setScalar(s); model.position.set(-HH_CX*s,-HH_MINY*s,-HH_CZ*s); model.rotation.y=HH_YAW;
+  const wrap=new THREE.Group(); wrap.add(model);   // scale a WRAPPER — the mixer animates the model's root scale and would override a scale set on it
+  wrap.scale.setScalar(s); wrap.position.set(-HH_CX*s,-HH_MINY*s,-HH_CZ*s); wrap.rotation.y=HH_YAW;
   let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=HH_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
-  grp.add(model); grp.userData.body=skin; grp.userData.glb=true;
+  grp.add(wrap); grp.userData.body=skin; grp.userData.glb=true;
   const mixer=new THREE.AnimationMixer(model); mixer.clipAction(HH_CLIP).play();
   mixer.update(Math.random()*HH_CLIP.duration);   // desync the pack
   grp.userData.mixer=mixer;
@@ -2166,8 +2204,9 @@ function syncScene(dt){
 
   // camera follow (+ shake)
   const shx=shake>0?R(-shake,shake)*0.35:0, shz=shake>0?R(-shake,shake)*0.35:0;
-  camera.position.set(px+shx, 700, py+520+shz);
-  camera.lookAt(px, 0, py);   // screen-center = the unicorn exactly, so a finger on it means "stand still"
+  if(state==='sandbox'){ camera.position.set(SAND_GX, 1480, SAND_GZ+1620); camera.lookAt(SAND_GX, 150, SAND_GZ-90); }
+  else { camera.position.set(px+shx, 700, py+520+shz);
+    camera.lookAt(px, 0, py); }   // screen-center = the player exactly, so a finger on it means "stand still"
 
   // unicorn
   const airY=unicornAirY();
@@ -2262,7 +2301,7 @@ function syncScene(dt){
     m.position.set(e.x,by,e.y);
     const sc=(e.elite?1.15:1)*(e.lunge>0?1.12:1)*(1+Math.sin(e.ph*2)*0.04);
     m.scale.setScalar(sc);
-    m.rotation.y=-Math.atan2(py-e.y,px-e.x)+Math.PI/2;   // face the player
+    m.rotation.y = sandbox ? 0 : (-Math.atan2(py-e.y,px-e.x)+Math.PI/2);   // sandbox: all face the camera; else face the player
     if(e.stun>0) m.rotation.z=Math.sin(time*24)*0.09; else m.rotation.z=0;
     // walk cycle (legs stride while chasing) + wing flap
     const active=e.spawnT<=0 && e.stun<=0;
@@ -2450,8 +2489,15 @@ function syncScene(dt){
 const ov=document.getElementById('ov'), octx=ov.getContext('2d');
 function overlayDraw(){
   octx.clearRect(0,0,cw,ch);
-  // pops (world → screen)
   octx.textAlign='center'; octx.textBaseline='middle';
+  if(sandbox){
+    octx.font='800 13px Orbitron';
+    for(const L of sandLabels){ const s=toScreen(L.x,L.z,0); if(!s.ok) continue;
+      octx.fillStyle='rgba(6,3,2,.75)'; octx.fillText(L.label,s.x+1,s.y+18); octx.fillStyle='#e8c9a0'; octx.fillText(L.label,s.x,s.y+17); }
+    octx.font='700 12px Orbitron'; octx.fillStyle='#8fb6c4'; octx.fillText('SANDBOX — ‹ back to exit', cw/2, 26);
+    return;
+  }
+  // pops (world → screen)
   for(const p of pops){
     const s=toScreen(p.x,p.y,26+(0.85-p.t)*46); if(!s.ok) continue;
     octx.globalAlpha=Math.min(1,p.t*2.4);
