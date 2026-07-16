@@ -155,7 +155,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.24.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.24.3</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -222,7 +222,7 @@ const FRUIT={
   slice: {r:24,hp:9,   spd:143,dmg:9, cd:0.9, score:40, xp:3,  col:0x8a8f98, dark:0x3a3e45, juice:'#6a1010'},   // GARGOYLE (ambush)
 };
 const PADX=1500, PADY=1150;   // extraction platform at world centre (walkable — replaces the fountain)
-const GATE_Z=PADY-163;   // gate pushed NORTH (back) so its first arch wraps the portal anchor (~PADY-104) and its body clears the platform; smaller subtraction = gate forward (south)
+const GATE_Z=PADY-139;   // gate pushed NORTH (back) so its first arch wraps the portal anchor (~PADY-104) and its body clears the platform; smaller subtraction = gate forward (south)
 /* layout hugs the sidewalks: spokes x∈[1464,1536] & y∈[1114,1186], ring 140-212, perimeter walk 60-132.
    Stalls sit beside a walk with their long side facing it; bin pairs flank the walks too. */
 const BASE_STRUCTS=[
@@ -2883,7 +2883,7 @@ function syncScene(dt){
   else if(state==='cashing') pf=0.5+Math.min(1,seqT/0.5)*0.5;
   if(pf>0){
     portal.visible=true;
-    portal.position.set(PADX, 98, PADY-104);         // sits on the gate's FRONT ring (gate body is pushed back to GATE_Z)
+    portal.position.set(PADX, 98, PADY-92);          // sits on the gate's FRONT ring (moved FORWARD toward the platform)
     portal.scale.setScalar(Math.max(0.05,pf)*2.5);   // radius grows with the extraction bar; 2.5x bigger at max
     portal.rotation.set(0, 0, time*0.5);             // opening faces SOUTH; gentle swirl on the tunnel axis
     portalLight.intensity=pf*110;
