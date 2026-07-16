@@ -129,6 +129,7 @@
       </div>
       <button class="btn" id="playBtn">DESCEND</button>
       <button class="btn ghost" id="sandBtn">SANDBOX (dev)</button>
+      <button class="btn ghost" id="envBtn">ROAM ENVIRONMENT (dev)</button>
       <div class="pb" id="menuBest"></div>
     </div>
 
@@ -154,7 +155,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.13.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.17.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -287,7 +288,7 @@ let px=WW/2, py=WH/2+180, face=1, moving=0, walkPh=0, faceAng=0;
 let weap=null, fireCd=0, gatHits=0, aimAng=-Math.PI/2, target=null;
 let budget=0, spawnT=1, melonSeen=false, melonCd=0;
 let wpNext=0, slamLast=-99, gateNext=0, gateT=0;
-let enemies=[], proj=[], seeds=[], bombs=[], pend=[], trails=[], expl=[], parts=[], pops=[], pickups=[];
+let enemies=[], corpses=[], proj=[], seeds=[], bombs=[], pend=[], trails=[], expl=[], parts=[], pops=[], pickups=[];
 let missiles=[], barrage=null;   // clear-bomb homing-missile barrage
 let stains=[], paintQueue=[], paintCount=0;
 let trailTick=0;
@@ -631,6 +632,81 @@ function killEnemy(e,w){
   if(weap && weap.lv<9){ weap.xp+=d.xp; checkLevel(); }   // EVERY kill counts (trample/slam/missiles too), not just weapon hits
   if(e.type==='melon'){ for(let i=0;i<3;i++){ const a=R(0,6.28); spawnAt('slice',e.x+Math.cos(a)*24,e.y+Math.sin(a)*24); } }
   sfx(d.big?'splat':'pop');
+  spawnCorpse(e);   // shared death: tint teal → freeze → disintegrate top-to-bottom (JRPG dissolve)
+}
+
+/* ============================================================ death dissolve (all enemies)
+   No per-enemy death clips — one shared 3-beat effect: flash TEAL + freeze the pose, then
+   the body disintegrates top-to-bottom with a blocky, glowing dissolve edge (old-school JRPG,
+   in 3D). Driven by a material-agnostic onBeforeCompile injection so it works on every demon's
+   PBR/toon/basic materials alike. The dying mesh is lifted out of the pool, dissolved, then
+   restored + returned clean for reuse. */
+const DEATH_FREEZE=0.14, DEATH_DUR=0.62, DEATH_COL=0x40dcff, DEATH_MOTE='#9ff4ff';
+function dissolveMat(src, cutTop, cutBot, noise){
+  const m=src.clone();
+  const u={ uDis:{value:0}, uFreeze:{value:0}, uCutTop:{value:cutTop}, uCutBot:{value:cutBot},
+            uNoise:{value:noise}, uEdge:{value:new THREE.Color(DEATH_COL)} };
+  m.onBeforeCompile=sh=>{
+    Object.assign(sh.uniforms,u);
+    sh.vertexShader=sh.vertexShader
+      .replace('#include <common>','#include <common>\nvarying float vDisY;\nvarying vec3 vDisP;')
+      .replace('#include <project_vertex>','#include <project_vertex>\nvec4 _dwp=modelMatrix*vec4(transformed,1.0);\nvDisY=_dwp.y; vDisP=_dwp.xyz;');
+    sh.fragmentShader=sh.fragmentShader
+      .replace('#include <common>','#include <common>\nuniform float uDis;\nuniform float uFreeze;\nuniform float uCutTop;\nuniform float uCutBot;\nuniform float uNoise;\nuniform vec3 uEdge;\nvarying float vDisY;\nvarying vec3 vDisP;\nfloat _dhash(vec3 p){return fract(sin(dot(floor(p),vec3(12.9898,78.233,37.719)))*43758.5453123);}')
+      // inject BEFORE tonemapping/colorspace so the teal is graded with the rest of the scene
+      // (ACES rolls the glow off instead of clipping it flat — no post-grade blowout)
+      .replace('#include <tonemapping_fragment>',
+        '{ float _cut=mix(uCutTop,uCutBot,uDis);\n'+
+        '  float _nz=_dhash(vDisP*0.16);\n'+                       // blocky (pixelated) noise → chunks vanish together
+        '  float _edge=vDisY+(_nz*2.0-1.0)*uNoise;\n'+
+        '  if(_edge>_cut) discard;\n'+                             // erase from the top down
+        '  gl_FragColor.rgb=mix(gl_FragColor.rgb,uEdge,uFreeze*0.9);\n'+  // whole-body teal freeze tint — full color presence (matches the projectile/weapon teal)
+        '  float _rim=smoothstep(_cut-uNoise*2.2,_cut,_edge);\n'+
+        '  gl_FragColor.rgb+=uEdge*(_rim*0.55+uFreeze*0.3);\n'+     // dissolve edge glow — the color is bright, the glow isn't hot
+        '}\n#include <tonemapping_fragment>');
+  };
+  m.customProgramCacheKey=()=>'daDeath';   // all dissolve mats of a base type share ONE program (compile once)
+  m.needsUpdate=true; m.userData.dis=u;
+  return m;
+}
+const _deathBox=new THREE.Box3();
+function spawnCorpse(e){
+  const m=meshMap.get(e);
+  if(!m) return;                 // never rendered (spawned+killed same frame) → nothing to dissolve
+  meshMap.delete(e);             // take the mesh out of the pool/sweep; the corpse owns it now
+  m.updateWorldMatrix(true,true);
+  _deathBox.setFromObject(m);
+  const top=_deathBox.max.y, bot=_deathBox.min.y, noise=Math.max(4,(top-bot)*0.14);
+  const cutTop=top+noise+2, cutBot=bot-noise-2;   // pad so freeze shows the whole body and uDis=1 clears it fully
+  const swaps=[];
+  m.traverse(o=>{ if(o.isMesh && o.material && !o.userData.noDissolve){
+    const arr=Array.isArray(o.material)?o.material:[o.material];
+    const clones=arr.map(mm=>dissolveMat(mm,cutTop,cutBot,noise));
+    swaps.push({mesh:o, orig:o.material, clones});
+    o.material=Array.isArray(o.material)?clones:clones[0];
+  }});
+  corpses.push({mesh:m, swaps, t:0, x:e.x, z:e.y, rad:FRUIT[e.type].r});
+}
+function retireCorpse(c){
+  for(const s of c.swaps){ s.mesh.material=s.orig; for(const cm of s.clones) cm.dispose(); }
+  release(c.mesh);   // clean mesh (original materials) back to the pool for reuse
+}
+function flushCorpses(){ for(const c of corpses) retireCorpse(c); corpses.length=0; }
+function updateCorpses(dt){
+  if(!corpses.length) return;
+  for(const c of corpses){
+    c.t+=dt;
+    const fz=Math.min(1,c.t/DEATH_FREEZE);
+    const dis=c.t<=DEATH_FREEZE?0:Math.min(1,(c.t-DEATH_FREEZE)/(DEATH_DUR-DEATH_FREEZE));
+    for(const s of c.swaps) for(const cm of s.clones){ const u=cm.userData.dis; u.uFreeze.value=fz; u.uDis.value=dis; }
+    if(dis>0 && dis<1 && parts.length<P_MAX && Math.random()<0.85){   // shed teal motes along the dissolving edge
+      const a=R(0,6.28), rr=R(0,c.rad*0.9);
+      parts.push({x:c.x+Math.cos(a)*rr, y:c.z+Math.sin(a)*rr, vx:Math.cos(a)*R(12,70), vy:Math.sin(a)*R(12,70),
+        r:R(2,5.5), c:DEATH_MOTE, t:R(.25,.55)});
+    }
+    if(c.t>=DEATH_DUR) c.done=true;
+  }
+  corpses=corpses.filter(c=>{ if(c.done){ retireCorpse(c); return false; } return true; });
 }
 function hurtPlayer(dmg){
   if(state!=='play') return;
@@ -1081,11 +1157,12 @@ function showOver(){
 }
 function reset(){
   runT=0; mult=1; multProg=0; score=0; hp=CFG.maxHp; dispHp=CFG.maxHp; dmgHoldT=0; invulnT=1.0; hurtFx=0; hpWarned=[false,false,false];
-  shake=0; slowT=0; seqT=0; shattered=false; secured=0; gateWin=false; warn30=false; lastCount=99;
+  shake=0; slowT=0; seqT=0; shattered=false; secured=0; gateWin=false; warn30=false; lastCount=99; envSandbox=false;
   weap=newWeap(); fireCd=0.4; gatHits=0; aimAng=-Math.PI/2; target=null;
   px=WW/2; py=WH/2+180; face=1; moving=0; walkPh=0; faceAng=0;
   budget=8; spawnT=0.8; waveN=0; baseAng=R(0,6.283); melonSeen=false; melonCd=0;
   wpNext=CFG.wpFirst; slamLast=0; gateNext=CFG.gateFirst; gateT=0;
+  flushCorpses();
   enemies=[]; proj=[]; seeds=[]; bombs=[]; pend=[]; trails=[]; expl=[]; parts=[]; pops=[]; pickups=[];
   missiles=[]; barrage=null;
   stains=[]; paintQueue=[]; clearPaint();
@@ -1114,6 +1191,15 @@ function toMenu(){
   menuEl.classList.remove('hide');
   syncMusic();
 }
+/* ---- ENV SANDBOX: free-roam the real arena (no enemies / no timer / no death) to tweak the environment ---- */
+let envSandbox=false;
+function startEnvSandbox(){
+  if(sandbox){ sandbox=false; if(sandFloor)sandFloor.visible=false; if(_savedFog)scene.fog=_savedFog; hpTrack.visible=true; }
+  reset(); state='play'; paused=false; envSandbox=true; invulnT=0;   // reset() clears envSandbox → set it after; invulnT MUST be 0 (a nonzero frozen value makes the invuln-blink hide the hero — see uni.visible), immortality comes from the update early-return
+  menuEl.classList.add('hide'); overEl.classList.add('hide'); cashedEl.classList.add('hide');
+  hudEl.classList.add('on');
+  syncMusic();
+}
 /* ================================================================= SANDBOX (dev review grid) */
 let sandbox=false, sandFloor=null, sandLabels=[], _savedFog=null;
 let sbxYaw=0, sbxPitch=-0.7; const sbxPos=new THREE.Vector3(), _fwd=new THREE.Vector3(), _rgt=new THREE.Vector3();
@@ -1129,7 +1215,7 @@ function buildSandFloor(){
   const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
   for(let y=0;y<8;y++)for(let x=0;x<8;x++){ g.fillStyle=((x+y)&1)?'#3b414a':'#1d2129'; g.fillRect(x*32,y*32,32,32); }
   const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(6,9);
-  const m=new THREE.Mesh(new THREE.PlaneGeometry(1500,2300), new THREE.MeshBasicMaterial({map:tex}));
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(1500,2300), MBM({map:tex}));
   m.rotation.x=-Math.PI/2; m.position.set(SAND_GX,0.2,SAND_GZ); m.visible=false; scene.add(m); return m;
 }
 function enterSandbox(){
@@ -1155,12 +1241,13 @@ function enterSandbox(){
 }
 function exitSandbox(){ sandbox=false; if(sandFloor)sandFloor.visible=false; if(_savedFog)scene.fog=_savedFog; hpTrack.visible=true; enemies.length=0; toMenu(); }
 document.getElementById('sandBtn').addEventListener('click',()=>{ ac(); enterSandbox(); });
+document.getElementById('envBtn').addEventListener('click',()=>{ ac(); startEnvSandbox(); });
 document.getElementById('playBtn').addEventListener('click',()=>{ ac(); startRun(); });
 document.getElementById('againBtn').addEventListener('click',()=>startRun());
 document.getElementById('menuBtn').addEventListener('click',()=>toMenu());
 document.getElementById('cashAgainBtn').addEventListener('click',()=>startRun());
 document.getElementById('cashMenuBtn').addEventListener('click',()=>toMenu());
-document.getElementById('backArcade').addEventListener('click',()=>{ if(sandbox) exitSandbox(); else location.href='../index.html'; });
+document.getElementById('backArcade').addEventListener('click',()=>{ if(sandbox) exitSandbox(); else if(envSandbox){ envSandbox=false; toMenu(); } else location.href='../index.html'; });
 document.getElementById('menuBest').textContent=best>0?('BEST '+best.toLocaleString()):'';
 
 // the cash pill is a status indicator now — extraction happens by STANDING on the platform
@@ -1326,6 +1413,12 @@ function update(rdt){
 
   const dt=rdt*(slowT>0?slowF:1);
   slowT-=rdt;
+  if(envSandbox){   // free-roam the REAL arena to tweak the environment: move + face only — no timer, spawns, combat, extraction, or death
+    movePlayer(dt);
+    const ta=moving>0.05?faceAng:aimAng; let da=ta-aimAng; while(da>Math.PI)da-=6.283; while(da<-Math.PI)da+=6.283;
+    aimAng+=da*Math.min(1,dt*8);
+    return;
+  }
   runT+=dt;
   // no free ride: extract before the song ends or lose everything (audio cues here; big banner drawn in overlay)
   if(!warn30 && runT>=CFG.maxRun-30){ warn30=true; sfx('warn'); }
@@ -1366,6 +1459,7 @@ function update(rdt){
   updateSlam(dt);
   updateExtract(dt);
 
+  updateCorpses(dt);   // advance the shared death dissolve (spawns teal motes into parts, so update before them)
   for(const p of parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=1-2*dt; p.vy*=1-2*dt; p.t-=dt; }
   parts=parts.filter(p=>p.t>0);
   for(const p of pops){ p.t-=dt; }
@@ -1380,21 +1474,38 @@ const renderer=new THREE.WebGLRenderer({canvas:glCanvas,antialias:true});
 // flat toon shading hides low DPR; capping at 1.5 nearly halves fill cost on retina
 // iPads/phones — frame rate (and therefore input latency) is fill-bound on those
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
+// filmic grade: rolls the hellfire/emissive highlights off instead of clipping them flat —
+// the single biggest "shipped-mobile" lever, and it deepens the toon shading's mid-contrast
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+// one real shadow caster (the sun) grounds the hero + structures; a tight PCF map keeps it cheap
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+// Every MeshBasicMaterial here is an UNLIT surface painted at its final value — the authored lava
+// ground, neon FX, glow pools, blob shadows. MBM() builds them with toneMapped off so they read
+// exactly as authored; only lit toon/GLB-PBR forms get the filmic curve. (THREE is a read-only
+// ES-module namespace and can't be monkey-patched, so call sites use MBM instead of the raw ctor.)
+const _MB=THREE.MeshBasicMaterial;
+const MBM=(p)=>{ const m=new _MB(p); m.toneMapped=false; return m; };
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x0e0604);
 // subtle env so the slayer's metal PBR catches highlights (toon/basic materials ignore this)
 const _pmrem=new THREE.PMREMGenerator(renderer); const _envScene=new THREE.Scene();
-_envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50,20,10),new THREE.MeshBasicMaterial({color:0x3a1c14,side:THREE.BackSide})));
+_envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50,20,10),MBM({color:0x3a1c14,side:THREE.BackSide})));
 const uniEnv=_pmrem.fromScene(_envScene,0.06).texture;
 scene.fog=new THREE.Fog(0x1a0805, 900, 2200);
 const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 10, 4200);
 camera.layers.enable(1);   // render layer 1 (character-only lights live here, else the renderer culls them)
 
-// hell mood: dim warm skylight, a low hellfire key, and an ember rim
-scene.add(new THREE.HemisphereLight(0x6a3020, 0x140604, 0.62));
-const sun=new THREE.DirectionalLight(0xff7a3a, 1.0);
-sun.position.set(-760,470,340); scene.add(sun);
-const rim=new THREE.DirectionalLight(0xff3a1a, 0.5);
+// hell mood: dim warm skylight, a hellfire key (also the shadow caster), a hot ember rim.
+// Less flat fill + a stronger key & rim = deeper modeling and silhouettes that lift off the murk.
+scene.add(new THREE.HemisphereLight(0x6a3020, 0x140604, 0.5));
+const sun=new THREE.DirectionalLight(0xff7a3a, 1.3);
+sun.position.set(-760,470,340); scene.add(sun); scene.add(sun.target);
+sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
+sun.shadow.bias=-0.0006; sun.shadow.normalBias=6;   // world units are large — a few units of normal bias kills toon acne
+{ const sc=sun.shadow.camera; sc.near=200; sc.far=2600; sc.left=sc.bottom=-1000; sc.right=sc.top=1000; }
+const rim=new THREE.DirectionalLight(0xff5a2a, 1.1);
 rim.position.set(680,220,-520); scene.add(rim);
 // character-only lighting (layer 1): brightens the unicorn so the white coat pops, without touching the dusk scene
 const CHAR_LAYER=1;
@@ -1408,13 +1519,13 @@ function toon(color,emissive,eIntensity){
   return new THREE.MeshToonMaterial({color, gradientMap:gradTex,
     emissive:emissive||0x000000, emissiveIntensity:eIntensity===undefined?0.35:eIntensity});
 }
-function basic(color,opts){ return new THREE.MeshBasicMaterial(Object.assign({color},opts||{})); }
+function basic(color,opts){ return MBM(Object.assign({color},opts||{})); }
 const colCache={};
 function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
 
 /* ---- ground (authored lava-field texture: assets/ground.jpg — calmer center, hotter edges) ---- */
 (function buildGround(){
-  const mat=new THREE.MeshBasicMaterial({color:0x14161b});   // dark charcoal until the texture streams in (no white flash)
+  const mat=MBM({color:0x14161b});   // dark charcoal until the texture streams in (no white flash)
   const mesh=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH), mat);
   mesh.rotation.x=-Math.PI/2; mesh.position.set(WW/2,0,WH/2);
   scene.add(mesh);
@@ -1427,6 +1538,13 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
   const apron=new THREE.Mesh(new THREE.PlaneGeometry(WW*3,WH*3), basic(0x0a0403));
   apron.rotation.x=-Math.PI/2; apron.position.set(WW/2,-1,WH/2);
   scene.add(apron);
+  // real cast shadows land here: a transparent catcher just above the authored ground. The lava
+  // texture is an unlit MeshBasicMaterial (can't receive light), so this ShadowMaterial plane shows
+  // the sun's shadows without relighting or tinting the painted floor.
+  const shadowCatcher=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH), new THREE.ShadowMaterial({opacity:0.42}));
+  shadowCatcher.rotation.x=-Math.PI/2; shadowCatcher.position.set(WW/2,0.6,WH/2);
+  shadowCatcher.receiveShadow=true; shadowCatcher.renderOrder=0.5;
+  scene.add(shadowCatcher);
 })();
 
 /* ---- walls ---- */
@@ -1488,13 +1606,14 @@ function rebuildStructMeshes(){
       mk(-17); mk(17);
     }else if(s.kind==='stall'){
       // PILE OF SKULLS (GLB) filling the footprint — same footprint = same cover; primitive fallback before load
-      const cand=skullP.filter(Boolean);
-      const tpl=cand.length? cand[Math.abs(Math.round(cx*0.11+cz*0.13))%cand.length] : null;
+      let slot=Math.abs(Math.round(cx*0.11+cz*0.13))%2;         // 0 = skull-pile-a, 1 = skull-pile-b
+      if(!skullP[slot]) slot=skullP[0]?0:(skullP[1]?1:-1);       // fall back to whichever variant is loaded
+      const tpl=slot>=0?skullP[slot]:null;
       if(tpl){
         const holder=new THREE.Group(); holder.position.set(cx,0,cz);
         const modelLongX=tpl.lx>=tpl.lz, footLongX=s.w>=s.h;
         holder.rotation.y=(modelLongX!==footLongX)?Math.PI/2:0; structGroup.add(holder);   // align the pile's long axis to the footprint
-        const sc=Math.min((Math.max(s.w,s.h)*0.98)/tpl.fitXZ, 58/tpl.fitY), m=tpl.m.clone();
+        const sc=Math.min((Math.max(s.w,s.h)*0.98)/tpl.fitXZ, 58/tpl.fitY)*(SKULL_MUL[slot]||1), m=tpl.m.clone();
         m.scale.setScalar(sc); m.position.set(-tpl.cx*sc,-tpl.miny*sc,-tpl.cz*sc); holder.add(m);
       }else{
         const base=new THREE.Mesh(new THREE.BoxGeometry(s.w,s.hh*0.5,s.h),toon(0x1c1712));
@@ -1518,7 +1637,7 @@ function rebuildStructMeshes(){
         const glow=new THREE.Mesh(sphereGeo,basic(0xff6a1a,{transparent:true,opacity:0.4,depthWrite:false,blending:THREE.AdditiveBlending}));
         glow.scale.setScalar(9); glow.position.set(cx,eyeY,cz); structGroup.add(glow);   // small ember halo — don't wash out the sculpted eye
         const pool=new THREE.Mesh(new THREE.PlaneGeometry(240,240),
-          new THREE.MeshBasicMaterial({map:glowTex,color:0xff6a1a,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending}));
+          MBM({map:glowTex,color:0xff6a1a,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending}));
         pool.rotation.x=-Math.PI/2; pool.position.set(cx,1.3,cz); pool.renderOrder=1; structGroup.add(pool);
         eyeStructs.push({pg, glow, x:cx, z:cz});
       }else{
@@ -1534,12 +1653,14 @@ function rebuildStructMeshes(){
         const iris=new THREE.Mesh(sphereGeo,basic(0xff3d0a)); iris.scale.set(eyeR*0.5,eyeR*0.62,eyeR*0.35); iris.position.set(0,-eyeR*0.18,eyeR*0.82); pg.add(iris);
         const pupil=new THREE.Mesh(sphereGeo,basic(0x140600)); pupil.scale.set(eyeR*0.14,eyeR*0.42,eyeR*0.2); pupil.position.set(0,-eyeR*0.18,eyeR*1.0); pg.add(pupil);   // vertical slit
         const pool=new THREE.Mesh(new THREE.PlaneGeometry(240,240),
-          new THREE.MeshBasicMaterial({map:glowTex,color:0xff6a1a,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending}));
+          MBM({map:glowTex,color:0xff6a1a,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending}));
         pool.rotation.x=-Math.PI/2; pool.position.set(cx,1.3,cz); pool.renderOrder=1; structGroup.add(pool);
         eyeStructs.push({pg, glow, x:cx, z:cz});
       }
     }
   }
+  // solid structure parts cast real shadows (skip transparent glow pools / fire / ember halos)
+  structGroup.traverse(o=>{ if(o.isMesh && o.material && !o.material.transparent) o.castShadow=true; });
   scene.add(structGroup);
   structsDirty=false;
 }
@@ -1570,7 +1691,7 @@ let padDecal;
   g2.fillStyle='#eafff6'; g2.fillText('EXTRACT',128,182);
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
   padDecal=new THREE.Mesh(new THREE.CircleGeometry(CFG.extractR-8,44),
-    new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false}));
+    MBM({map:t,transparent:true,depthWrite:false}));
   padDecal.rotation.x=-Math.PI/2; padDecal.position.y=6.4; padDecal.renderOrder=2;
   padGrp.add(padDecal);
 }
@@ -1579,7 +1700,7 @@ function rebuildExtArc(f){
   if(extArc){ scene.remove(extArc); extArc.geometry.dispose(); extArc=null; }
   if(f<=0.01) return;
   extArc=new THREE.Mesh(new THREE.RingGeometry(CFG.extractR+8,CFG.extractR+20,48,1,-Math.PI/2,6.283*f),
-    new THREE.MeshBasicMaterial({color:0xffc233,transparent:true,opacity:0.9,side:THREE.DoubleSide,depthWrite:false}));
+    MBM({color:0xffc233,transparent:true,opacity:0.9,side:THREE.DoubleSide,depthWrite:false}));
   extArc.rotation.x=-Math.PI/2; extArc.position.set(PADX,1.6,PADY); extArc.renderOrder=2; scene.add(extArc);
 }
 /* ---- chests ---- */
@@ -1598,6 +1719,16 @@ function makeChest(){
     band.position.y=22; grp.add(band);
     const lock=new THREE.Mesh(sphereGeo,basic(0xff7a2a)); lock.scale.setScalar(4); lock.position.set(0,20,16); grp.add(lock);
   }
+  // heavenly loot shaft: a gold god-ray + ground pool so chests read from clear across the dark arena,
+  // plus a warm emissive lift so the reliquary itself catches the "light" (cheaper than a real spotlight)
+  grp.traverse(o=>{ if(o.isMesh && o.material && o.material.emissive && o.material.emissive.getHex()===0){
+    o.material.emissive.set(0x4a3212); o.material.emissiveIntensity=0.5; } });
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(9,30,360,18,1,true),
+    MBM({map:beamTex,color:0xffcf6a,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+  beam.position.y=180; beam.renderOrder=2; grp.add(beam); grp.userData.beam=beam;
+  const pool=new THREE.Mesh(new THREE.PlaneGeometry(150,150),
+    MBM({map:glowTex,color:0xffcf6a,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));
+  pool.rotation.x=-Math.PI/2; pool.position.y=1.5; pool.renderOrder=1; grp.add(pool); grp.userData.pool=pool;
   grp.add(groundBlob(30));
   return grp;
 }
@@ -1614,6 +1745,10 @@ const glowTex=(()=>{ const c=document.createElement('canvas'); c.width=64; c.hei
   const g=c.getContext('2d'); const gr=g.createRadialGradient(32,32,2,32,32,32);
   gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(0.4,'rgba(255,200,120,.55)'); gr.addColorStop(1,'rgba(255,150,60,0)');
   g.fillStyle=gr; g.fillRect(0,0,64,64); return new THREE.CanvasTexture(c); })();
+const beamTex=(()=>{ const c=document.createElement('canvas'); c.width=8; c.height=128;   // loot god-ray: brightest at the chest, fading up into the dark sky
+  const g=c.getContext('2d'); const gr=g.createLinearGradient(0,0,0,128);
+  gr.addColorStop(0,'rgba(255,255,255,0)'); gr.addColorStop(0.5,'rgba(255,255,255,0.45)'); gr.addColorStop(1,'rgba(255,255,255,0.95)');
+  g.fillStyle=gr; g.fillRect(0,0,8,128); return new THREE.CanvasTexture(c); })();
 const skullTex=(()=>{ const c=document.createElement('canvas'); c.width=64; c.height=64;   // bone skull for the piles
   const g=c.getContext('2d'); g.fillStyle='#cabfa2'; g.fillRect(0,0,64,64);
   g.fillStyle='#120c08';
@@ -1625,8 +1760,9 @@ const skullTex=(()=>{ const c=document.createElement('canvas'); c.width=64; c.he
 const skullMat=new THREE.MeshToonMaterial({map:skullTex,gradientMap:gradTex});
 function groundBlob(scaleR){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(2,2),
-    new THREE.MeshBasicMaterial({map:shadowTex,transparent:true,depthWrite:false}));
+    MBM({map:shadowTex,transparent:true,depthWrite:false}));
   m.rotation.x=-Math.PI/2; m.scale.set(scaleR,scaleR,1); m.renderOrder=1;
+  m.userData.noDissolve=true;   // the ground shadow keeps its own look through the death dissolve
   return m;
 }
 const DEMON_EYE={grape:'#ff5a3a',straw:'#ffd23a',lemon:'#c8ff4a',orange:'#ffb03a',melon:'#ff3a2a',slice:'#ff5a4a'};
@@ -1886,6 +2022,7 @@ function _propFit(model){
 }
 let bowlP=null, eyeP=null, chestP=null; const skullP=[];
 let EYE_YAW=0, BOWL_YAW=0, CHEST_YAW=0;   // facing offsets — tune if a prop faces wrong
+let SKULL_MUL=[0.5, 2.0];   // per-variant size: [0]=skull-pile-a (small piles ×0.5), [1]=skull-pile-b (large pile ×2) — swap if backwards
 const _propLoader=new GLTFLoader();
 _propLoader.load('assets/brazier.glb',      g=>{ bowlP =_propFit(g.scene); structsDirty=true; }, undefined, e=>console.error('brazier GLB',e));
 _propLoader.load('assets/eye-staff.glb',    g=>{ eyeP  =_propFit(g.scene); structsDirty=true; }, undefined, e=>console.error('eye-staff GLB',e));
@@ -2106,14 +2243,14 @@ const splatTexes=(()=>{   // irregular splat silhouettes (white; tinted per stai
 })();
 function makeStain(){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(2,2),
-    new THREE.MeshBasicMaterial({map:splatTexes[Math.floor(Math.random()*3)],
+    MBM({map:splatTexes[Math.floor(Math.random()*3)],
       transparent:true,opacity:0.3,depthWrite:false}));
   m.rotation.x=-Math.PI/2; m.renderOrder=1;
   return m;
 }
 function makeExpl(){
   const m=new THREE.Mesh(new THREE.RingGeometry(0.82,1,32),
-    new THREE.MeshBasicMaterial({color:0x2fd6d6,transparent:true,side:THREE.DoubleSide,depthWrite:false}));
+    MBM({color:0x2fd6d6,transparent:true,side:THREE.DoubleSide,depthWrite:false}));
   m.rotation.x=-Math.PI/2; m.position.y=2; m.renderOrder=2;
   return m;
 }
@@ -2146,7 +2283,7 @@ scene.add(points);
 const beamPool=[];
 for(let i=0;i<4;i++){
   const grpB=new THREE.Group(); grpB.visible=false; scene.add(grpB);
-  const mats=new THREE.MeshBasicMaterial({transparent:true,depthWrite:false});
+  const mats=MBM({transparent:true,depthWrite:false});
   grpB.userData.mat=mats;
   for(let k=0;k<10;k++){
     const g=new THREE.CylinderGeometry(2.2,2.2,1,6); g.translate(0,0.5,0);
@@ -2249,7 +2386,7 @@ function gaitLeg(p,reach,push,tuck){      // p = leg-local phase 0..1 (0 = footf
   // cash-charge glow
   cashGlow=new THREE.PointLight(0x39ffa0, 0, 220); cashGlow.position.y=40; uni.add(cashGlow);
   scene.environment=uniEnv;
-  uni.traverse(o=>{ if(o.isMesh) o.layers.enable(CHAR_LAYER); });   // character-only lights brighten the whole rig
+  uni.traverse(o=>{ if(o.isMesh){ o.layers.enable(CHAR_LAYER); o.castShadow=true; } });   // character-only lights brighten the whole rig; hero casts a real ground shadow
 })();
 const paintGroup=new THREE.Group(); uni.add(paintGroup);
 /* ---- HERO: Andrew's rigged + animated GLB replaces the primitive slayer (twin-stick: faces aim, walk/back-pedal/idle/death clips) ---- */
@@ -2270,7 +2407,7 @@ new GLTFLoader().load('assets/hero.glb', gl=>{
   const sz=bb.getSize(new THREE.Vector3()), s=64/(sz.y||1.7);
   gl.scene.scale.setScalar(s);
   gl.scene.position.set(-((bb.min.x+bb.max.x)/2)*s, -bb.min.y*s, -((bb.min.z+bb.max.z)/2)*s);
-  gl.scene.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.layers.enable(CHAR_LAYER);
+  gl.scene.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.layers.enable(CHAR_LAYER); o.castShadow=true;
     if(o.material&&o.material.emissive){ o.material.emissive.setScalar(1); o.material.emissiveIntensity=1.0; } } });
   for(const c of gl.animations) if(/walk|run/i.test(c.name)) stripRootMotion(c);   // in-place
   heroMixer=new THREE.AnimationMixer(gl.scene);
@@ -2293,7 +2430,7 @@ function addPaint(colHex){
 /* ---- health ring / markers / portal / shock ---- */
 let hpArc=null, hpArcF=-1, hpRim=null, hpDmg=null, hpDmgF=-1, hpTier='';
 const hpTrack=new THREE.Mesh(new THREE.RingGeometry(28,46,48),   // 2x thick
-  new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.07,side:THREE.DoubleSide,depthWrite:false}));
+  MBM({color:0xffffff,transparent:true,opacity:0.07,side:THREE.DoubleSide,depthWrite:false}));
 hpTrack.rotation.x=-Math.PI/2; hpTrack.position.y=1.2; hpTrack.renderOrder=2; scene.add(hpTrack);
 function rebuildHpArc(f,fd,tier){
   if(hpArc){ scene.remove(hpArc); hpArc.geometry.dispose(); }
@@ -2303,16 +2440,16 @@ function rebuildHpArc(f,fd,tier){
   const A_END=-Math.PI*5/6;   // arc END pinned at 8 o'clock on screen
   if(f>0.005){
     hpArc=new THREE.Mesh(new THREE.RingGeometry(27,43,48,1,A_END,6.283*f),
-      new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false}));
+      MBM({color:0x000000,transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false}));
     hpArc.rotation.x=-Math.PI/2; hpArc.position.y=1.3; hpArc.renderOrder=2; scene.add(hpArc);
     const tierCol=tier==='hi'?0x78ebff:tier==='mid'?0xffc233:0xff3d6e;
     hpRim=new THREE.Mesh(new THREE.RingGeometry(43,49,48,1,A_END,6.283*f),
-      new THREE.MeshBasicMaterial({color:tierCol,transparent:true,opacity:0.75,side:THREE.DoubleSide,depthWrite:false}));
+      MBM({color:tierCol,transparent:true,opacity:0.75,side:THREE.DoubleSide,depthWrite:false}));
     hpRim.rotation.x=-Math.PI/2; hpRim.position.y=1.3; hpRim.renderOrder=2; scene.add(hpRim);
   }
   if(fd>f+0.004){   // red just-lost segment: sits at the drain edge and empties toward it
     hpDmg=new THREE.Mesh(new THREE.RingGeometry(27,43,48,1,A_END+6.283*f,6.283*(fd-f)),
-      new THREE.MeshBasicMaterial({color:0xff2244,transparent:true,opacity:0.9,side:THREE.DoubleSide,depthWrite:false}));
+      MBM({color:0xff2244,transparent:true,opacity:0.9,side:THREE.DoubleSide,depthWrite:false}));
     hpDmg.rotation.x=-Math.PI/2; hpDmg.position.y=1.35; hpDmg.renderOrder=2; scene.add(hpDmg);
   }
 }
@@ -2329,16 +2466,16 @@ const portal=new THREE.Group(); portal.visible=false; scene.add(portal);
 const portalLight=new THREE.PointLight(0x39ffa0, 0, 400); portal.add(portalLight);
 // slam blast wave: a blue torus half-sunk in the ground (ground occludes the buried half → rising half-donut wave)
 const shock=new THREE.Mesh(new THREE.TorusGeometry(1,0.05,12,56),
-  new THREE.MeshBasicMaterial({color:0xffe08a,transparent:true,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
+  MBM({color:0xffe08a,transparent:true,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
 shock.rotation.x=Math.PI/2; shock.position.y=0; shock.visible=false; shock.renderOrder=2; scene.add(shock);
 // chest scan: a cyan radar fan that sweeps over the chest while it's being read (replaces the headbutt)
 const scanGrp=new THREE.Group(); scanGrp.visible=false; scene.add(scanGrp);
 {
   const fan=new THREE.Mesh(new THREE.CircleGeometry(72,22,0,0.55),
-    new THREE.MeshBasicMaterial({color:0x39d8ff,transparent:true,opacity:0.22,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
+    MBM({color:0x39d8ff,transparent:true,opacity:0.22,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
   fan.rotation.x=-Math.PI/2; fan.position.y=1.4; scanGrp.add(fan);
   const rim=new THREE.Mesh(new THREE.RingGeometry(68,72,44),
-    new THREE.MeshBasicMaterial({color:0x39d8ff,transparent:true,opacity:0.5,side:THREE.DoubleSide,depthWrite:false}));
+    MBM({color:0x39d8ff,transparent:true,opacity:0.5,side:THREE.DoubleSide,depthWrite:false}));
   rim.rotation.x=-Math.PI/2; rim.position.y=1.4; scanGrp.add(rim);
 }
 
@@ -2380,6 +2517,9 @@ function syncScene(dt){
   }
   else { camera.position.set(px+shx, 700, py+520+shz);
     camera.lookAt(px, 0, py); }   // screen-center = the player exactly, so a finger on it means "stand still"
+  // keep the shadow frustum tight around the player — translate the sun by a fixed offset so its
+  // direction never changes, only what the (±1000) shadow map covers
+  sun.position.set(px-760, 470, py+340); sun.target.position.set(px, 0, py); sun.target.updateMatrixWorld();
 
   // unicorn
   const airY=unicornAirY();
@@ -2564,6 +2704,20 @@ function syncScene(dt){
     m.rotation.z=c.shake>0?Math.sin(time*42)*0.1*c.shake:0;
     m.userData.lid.rotation.x=c.opened?-0.9:0;
     m.userData.lid.position.y=c.opened?32:28;
+    const beam=m.userData.beam, pool=m.userData.pool;
+    if(beam){
+      const breathe=0.72+0.28*Math.sin(time*2.2+c.x*0.013);   // slow living pulse, phase-offset per chest
+      if(c.opened){                                           // reward burst: flare up, then fade out
+        const k=Math.max(0,1-c.t2/0.6);
+        beam.material.opacity=1.0*k; pool.material.opacity=0.9*k;
+        beam.scale.set(1+(1-k)*0.6,1+(1-k)*0.5,1+(1-k)*0.6); pool.scale.setScalar(1+(1-k)*1.4);
+      }else{
+        const near=1-Math.min(1,c.t/CFG.chestOpen);           // brightens as proximity works it open
+        beam.material.opacity=breathe*(0.55+0.5*near);
+        pool.material.opacity=breathe*(0.42+0.4*near);
+        beam.scale.set(1,1,1); pool.scale.setScalar(1+0.06*near);
+      }
+    }
   });
   // pickups
   syncSet(pickups,p=>'pk_'+p.kind+'_'+(p.wtype||''),p=>makePickup(p),(p,m)=>{
@@ -2684,6 +2838,7 @@ function overlayDraw(){
     octx.font='700 12px Orbitron'; octx.fillStyle='#8fb6c4'; octx.fillText('SANDBOX — WASD move · Q/E down/up · arrows tilt · ‹ back', cw/2, 26);
     return;
   }
+  if(envSandbox){ octx.font='700 12px Orbitron'; octx.fillStyle='#8fb6c4'; octx.fillText('ENV SANDBOX — drag to roam · ‹ back to exit', cw/2, ch-52); }
   // pops (world → screen)
   for(const p of pops){
     const s=toScreen(p.x,p.y,26+(0.85-p.t)*46); if(!s.ok) continue;
