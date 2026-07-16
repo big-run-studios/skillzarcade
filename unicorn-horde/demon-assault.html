@@ -153,7 +153,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.6.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.7.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1654,28 +1654,74 @@ function alloc(kind,make){
 }
 function release(m){ m.visible=false; (free[m.userData.kind]=free[m.userData.kind]||[]).push(m); }
 const uCone=new THREE.ConeGeometry(1,1,6), uCyl=new THREE.CylinderGeometry(1,1,1,6);   // shared demon-part geoms (mobile draw-call budget)
-/* ---- IMP: Andrew's rigged GLB, baked to a static mesh (no anim clip in the file, so bind pose + a hop) ---- */
+/* ---- IMP: Andrew's rigged GLB — kept skinned + a hand-animated walk (no anim clip in the file) ---- */
 const _impLoader=new GLTFLoader();
-let impTpl=null, IMP_YAW=0;
+let impSrc=null, IMP_MAT=null, IMP_RIG=null, IMP_H=1.7, IMP_MINY=0, IMP_CX=0, IMP_CZ=0, IMP_YAW=0;
+const _dq=new THREE.Quaternion();
+// clone a skinned hierarchy with its own independent skeleton (inline SkeletonUtils.clone)
+function cloneSkinned(src){
+  const map=new Map(), clone=src.clone(true);
+  (function walk(a,b){ map.set(a,b); for(let i=0;i<a.children.length;i++) walk(a.children[i],b.children[i]); })(src,clone);
+  src.traverse(o=>{ if(o.isSkinnedMesh){ const cm=map.get(o), sk=o.skeleton;
+    cm.bind(new THREE.Skeleton(sk.bones.map(b=>map.get(b)), sk.boneInverses), cm.matrixWorld); } });
+  return clone;
+}
 _impLoader.load('assets/imp.glb', gl=>{
   gl.scene.updateWorldMatrix(true,true);
-  let src=null; gl.scene.traverse(o=>{ if(!src && (o.isMesh||o.isSkinnedMesh)) src=o; });
-  if(!src){ console.error('imp: no mesh'); return; }
-  const geo=src.geometry.clone(); geo.applyMatrix4(src.matrixWorld);           // bake rest pose → static geometry
-  geo.computeBoundingBox(); let bb=geo.boundingBox;
-  geo.translate(-(bb.min.x+bb.max.x)/2, -bb.min.y, -(bb.min.z+bb.max.z)/2);    // center X/Z, feet at y=0
-  geo.computeBoundingBox();
-  const mat=Array.isArray(src.material)?src.material[0]:src.material;
-  if(mat.emissive) mat.emissive.setScalar(1); mat.emissiveIntensity=1.3;       // let the molten emissive map glow in the dark scene
-  impTpl={geo, mat, h:geo.boundingBox.max.y};
+  let skin=null; gl.scene.traverse(o=>{ if(!skin && o.isSkinnedMesh) skin=o; });
+  if(!skin){ console.error('imp: no skinned mesh'); return; }
+  impSrc=gl.scene;
+  IMP_MAT=Array.isArray(skin.material)?skin.material[0]:skin.material;
+  if(IMP_MAT.emissive) IMP_MAT.emissive.setScalar(1); IMP_MAT.emissiveIntensity=1.3;   // molten emissive reads in the dark scene
+  const box=new THREE.Box3().setFromObject(gl.scene), sz=box.getSize(new THREE.Vector3());
+  IMP_H=sz.y||1.7; IMP_MINY=box.min.y; IMP_CX=(box.min.x+box.max.x)/2; IMP_CZ=(box.min.z+box.max.z)/2;
+  // hand-rig: [jointIdx, axis(y=hip swivel / x=limb swing), amplitude]. j1 pelvis, j3 spine-counter, j50/55 thighs, j16/34 upper-arms
+  const bones=skin.skeleton.bones;
+  const defs=[[1,'y',0.62],[3,'y',-0.4],[50,'x',0.55],[55,'x',-0.55],[16,'x',-0.42],[34,'x',0.42]];
+  IMP_RIG=defs.map(([ji,ax,amp])=>{
+    const b=bones[ji], pq=new THREE.Quaternion(); (b.parent||skin).getWorldQuaternion(pq);
+    const A=ax==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(1,0,0);
+    return {jointIdx:ji, axis:A.applyQuaternion(pq.invert()).normalize(), rest:b.quaternion.clone(), amp};   // swing axis in the bone's parent frame
+  });
 }, undefined, e=>console.error('imp GLB load', e));
 function makeImpGLB(d){
   const grp=new THREE.Group();
-  const mesh=new THREE.Mesh(impTpl.geo, impTpl.mat.clone());   // per-instance material for hit-flash
-  mesh.scale.setScalar(d.r*2.7/impTpl.h); mesh.rotation.y=IMP_YAW;
-  mesh.layers.enable(CHAR_LAYER);   // lit by the bright character lights so it reads against the dark scene
-  grp.add(mesh); grp.userData.body=mesh; grp.userData.glb=true;
+  const model=cloneSkinned(impSrc), s=d.r*2.7/IMP_H;
+  model.scale.setScalar(s); model.position.set(-IMP_CX*s,-IMP_MINY*s,-IMP_CZ*s); model.rotation.y=IMP_YAW;
+  let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=IMP_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
+  grp.add(model); grp.userData.body=skin; grp.userData.glb=true;
+  grp.userData.walk=IMP_RIG.map(r=>({bone:skin.skeleton.bones[r.jointIdx], axis:r.axis, rest:r.rest, amp:r.amp}));
   grp.add(groundBlob(d.r*1.6));
+  const elite=new THREE.Mesh(new THREE.TorusGeometry(d.r*1.35,1.8,8,24),basic(0xff5a2a));
+  elite.rotation.x=Math.PI/2; elite.position.y=4; grp.add(elite); grp.userData.elite=elite;
+  grp.userData.legs=null; grp.userData.wings=null; grp.userData.tel=null;
+  return grp;
+}
+/* ---- HELLHOUND: Andrew's rigged + ANIMATED GLB (1s in-place walk clip, no root motion) ---- */
+const _hhLoader=new GLTFLoader();
+let hhSrc=null, HH_MAT=null, HH_CLIP=null, HH_FIT=1, HH_MINY=0, HH_CX=0, HH_CZ=0, HH_YAW=0;
+_hhLoader.load('assets/hellhound.glb', gl=>{
+  gl.scene.updateWorldMatrix(true,true);
+  let skin=null; gl.scene.traverse(o=>{ if(!skin && o.isSkinnedMesh) skin=o; });
+  if(!skin){ console.error('hellhound: no skinned mesh'); return; }
+  hhSrc=gl.scene; HH_CLIP=gl.animations[0];
+  HH_MAT=Array.isArray(skin.material)?skin.material[0]:skin.material;
+  if(HH_MAT.emissive) HH_MAT.emissive.setScalar(1); HH_MAT.emissiveIntensity=1.3;
+  const bb=new THREE.Box3(), _v=new THREE.Vector3();   // skinned model: geo bbox is pre-skin/tiny → measure the bone extent instead
+  skin.skeleton.bones.forEach(b=>bb.expandByPoint(b.getWorldPosition(_v)));
+  const sz=bb.getSize(new THREE.Vector3());
+  HH_FIT=Math.max(sz.x,sz.z)||1; HH_MINY=bb.min.y; HH_CX=(bb.min.x+bb.max.x)/2; HH_CZ=(bb.min.z+bb.max.z)/2;
+}, undefined, e=>console.error('hellhound GLB load', e));
+function makeHellhoundGLB(d){
+  const grp=new THREE.Group();
+  const model=cloneSkinned(hhSrc), s=d.r*2.0/HH_FIT;   // fit the footprint (bone extent) to the collision size
+  model.scale.setScalar(s); model.position.set(-HH_CX*s,-HH_MINY*s,-HH_CZ*s); model.rotation.y=HH_YAW;
+  let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=HH_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
+  grp.add(model); grp.userData.body=skin; grp.userData.glb=true;
+  const mixer=new THREE.AnimationMixer(model); mixer.clipAction(HH_CLIP).play();
+  mixer.update(Math.random()*HH_CLIP.duration);   // desync the pack
+  grp.userData.mixer=mixer;
+  grp.add(groundBlob(d.r*2.0));
   const elite=new THREE.Mesh(new THREE.TorusGeometry(d.r*1.35,1.8,8,24),basic(0xff5a2a));
   elite.rotation.x=Math.PI/2; elite.position.y=4; grp.add(elite); grp.userData.elite=elite;
   grp.userData.legs=null; grp.userData.wings=null; grp.userData.tel=null;
@@ -1683,7 +1729,8 @@ function makeImpGLB(d){
 }
 function makeFruit(type){
   const d=FRUIT[type];
-  if(type==='grape' && impTpl) return makeImpGLB(d);   // imp = GLB model when loaded
+  if(type==='grape' && impSrc) return makeImpGLB(d);        // imp = GLB model when loaded
+  if(type==='straw' && hhSrc) return makeHellhoundGLB(d);   // hellhound = animated GLB
   const grp=new THREE.Group();
   const torso=new THREE.Group(); grp.add(torso);   // body + upper parts, lifted so the legs show
   const mDark=toon(d.dark), mBone=toon(0xbfa878);   // charcoal body bits; bronze/bone horns, talons, feet
@@ -2228,9 +2275,12 @@ function syncScene(dt){
     ud.elite.visible=!!e.elite;
     if(ud.tel) ud.tel.visible=(e.type==='melon'&&e.telT>0)&&(Math.sin(time*18)>-0.3);
     const bm=ud.body.material;
-    if(ud.glb){                                   // GLB imp: keep its textured look; flash the emissive on hit + a little hop
+    if(ud.glb){                                   // GLB demon: textured look + emissive hit-flash
       bm.emissiveIntensity = e.hitF>0 ? 3.4 : 1.3;
-      if(active) m.position.y = by + Math.abs(Math.sin(e.ph*1.6))*d.r*0.14;
+      if(ud.mixer){ if(active) ud.mixer.update(dt); }        // baked clip (hellhound)
+      else if(ud.walk){ const ph=e.ph, sw=active?Math.sin(ph):0;   // hand-animated walk (imp)
+        for(const w of ud.walk){ _dq.setFromAxisAngle(w.axis, sw*w.amp); w.bone.quaternion.copy(w.rest).premultiply(_dq); }
+        if(active) m.position.y = by + Math.abs(Math.sin(ph))*d.r*0.08; }
     } else if(e.hitF>0){ bm.emissive.set(0xffffff); bm.emissiveIntensity=0.95; }
     else { bm.emissive.set(d.col); bm.emissiveIntensity=0.5; }   // molten inner-glow: dark body lit from within
   });
