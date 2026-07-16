@@ -154,7 +154,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.8.2</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.8.3</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1759,7 +1759,7 @@ _hhLoader.load('assets/hellhound.glb', gl=>{
 }, undefined, e=>console.error('hellhound GLB load', e));
 function makeHellhoundGLB(d){
   const grp=new THREE.Group();
-  const model=cloneSkinned(hhSrc), s=d.r*2.0/HH_FIT;   // fit the footprint (bone extent) to the collision size
+  const model=cloneSkinned(hhSrc), s=d.r*4.0/HH_FIT;   // 2x bigger (Andrew) — was 2.0
   const wrap=new THREE.Group(); wrap.add(model);   // scale a WRAPPER — the mixer animates the model's root scale and would override a scale set on it
   wrap.scale.setScalar(s); wrap.position.set(-HH_CX*s,-HH_MINY*s,-HH_CZ*s); wrap.rotation.y=HH_YAW;
   let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=HH_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
