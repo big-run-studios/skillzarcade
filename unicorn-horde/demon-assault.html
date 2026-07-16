@@ -155,7 +155,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.21.1</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.23.2</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -222,6 +222,7 @@ const FRUIT={
   slice: {r:24,hp:9,   spd:143,dmg:9, cd:0.9, score:40, xp:3,  col:0x8a8f98, dark:0x3a3e45, juice:'#6a1010'},   // GARGOYLE (ambush)
 };
 const PADX=1500, PADY=1150;   // extraction platform at world centre (walkable — replaces the fountain)
+const GATE_Z=PADY-163;   // gate pushed NORTH (back) so its first arch wraps the portal anchor (~PADY-104) and its body clears the platform; smaller subtraction = gate forward (south)
 /* layout hugs the sidewalks: spokes x∈[1464,1536] & y∈[1114,1186], ring 140-212, perimeter walk 60-132.
    Stalls sit beside a walk with their long side facing it; bin pairs flank the walks too. */
 const BASE_STRUCTS=[
@@ -359,7 +360,7 @@ function buildStructs(){
     const p=openSpot(260,30,120,true);   // keep random trees OFF the sidewalks
     if(p) structs.push({x:p.x-30,y:p.y-24,w:60,h:48,hh:34,kind:'tree'});
   }
-  structs.push({x:PADX-105, y:PADY-104-32, w:210, h:64, hh:210, kind:'gate'});   // solid extraction gate — enemies can't walk through it (sized to the empty-gate GLB)
+  structs.push({x:PADX-105, y:GATE_Z-105, w:210, h:210, hh:210, kind:'gate'});   // solid extraction gate footprint — enemies can't walk through it (follows GATE_Z)
   structsDirty=true;
 }
 // true if the point — or its tree footprint — sits on a baked sidewalk band
@@ -1942,7 +1943,11 @@ function makeHellknightGLB(d){
 }
 /* ---- BILESPAWN: rigged GLB, no clip → static floater (hovers via userData.float) ---- */
 const _bsLoader=new GLTFLoader();
-let bsSrc=null,BS_MAT=null,BS_FIT=1,BS_MINY=0,BS_CX=0,BS_CZ=0,BS_YAW=0;
+let bsSrc=null,BS_MAT=null,BS_FIT=1,BS_MINY=0,BS_CX=0,BS_CZ=0,BS_YAW=0,BS_JAW=null,BS_WINGS=null;
+// hand-animation tuning (rest pose = maw wide open, wings spread):
+const BS_BITE_BASE=0.26, BS_BITE_AMP=0.34, BS_BITE_SPD=7.0;   // lower-jaw chomp (rad): oscillates half-open↔mostly-closed, never all the way
+const BS_FLAP_AMP=0.30, BS_FLAP_SPD=7.0;                       // gentle wing flutter (rad, mirrored L/R)
+const BS_PULSE=0.012, BS_BOB=0.13;                             // calmed idle: scale breathe (was 0.04) + hover bob (was 0.22)
 _bsLoader.load('assets/bilespawn.glb', gl=>{
   gl.scene.updateWorldMatrix(true,true);
   let skin=null; gl.scene.traverse(o=>{ if(!skin&&o.isSkinnedMesh) skin=o; });
@@ -1952,8 +1957,13 @@ _bsLoader.load('assets/bilespawn.glb', gl=>{
   if(BS_MAT.emissive) BS_MAT.emissive.setScalar(1); BS_MAT.emissiveIntensity=1.3;
   const bb=new THREE.Box3(),_v=new THREE.Vector3(); skin.skeleton.bones.forEach(b=>bb.expandByPoint(b.getWorldPosition(_v)));
   const sz=bb.getSize(new THREE.Vector3()); BS_FIT=Math.max(sz.x,sz.z)||1; BS_MINY=bb.min.y; BS_CX=(bb.min.x+bb.max.x)/2; BS_CZ=(bb.min.z+bb.max.z)/2;
-  window.__bsDump=skin.skeleton.bones.map((b,i)=>{ const w=b.getWorldPosition(new THREE.Vector3()); return {i, name:b.name, parent:b.parent&&b.parent.isBone?skin.skeleton.bones.indexOf(b.parent):-1, x:+w.x.toFixed(4), y:+w.y.toFixed(4), z:+w.z.toFixed(4)}; });
-  console.log('BS_DUMP', JSON.stringify(window.__bsDump));
+  // hand-rig (UniRig auto-rig, generic bone names → identified by skin-weight region): lower jaw = bones 8+12 (world-x, + closes the maw), wings = 20/22 (world-z, mirrored flap)
+  const bones=skin.skeleton.bones;
+  const mkRig=(ji,axChar,sign)=>{ const b=bones[ji], pq=new THREE.Quaternion(); (b.parent||skin).getWorldQuaternion(pq);
+    const A=axChar==='y'?new THREE.Vector3(0,1,0):axChar==='z'?new THREE.Vector3(0,0,1):new THREE.Vector3(1,0,0);
+    return {jointIdx:ji, axis:A.applyQuaternion(pq.invert()).normalize(), rest:b.quaternion.clone(), sign}; };   // axis in the bone's parent frame
+  BS_JAW=[[8,'x',1],[12,'x',1]].map(a=>mkRig(...a));         // both mandible bones close together
+  BS_WINGS=[[20,'z',1],[22,'z',-1]].map(a=>mkRig(...a));     // mirrored so both wings beat in unison
 }, undefined, e=>console.error('bilespawn GLB load', e));
 function makeBilespawnGLB(d){
   const grp=new THREE.Group();
@@ -1962,6 +1972,9 @@ function makeBilespawnGLB(d){
   wrap.scale.setScalar(s); wrap.position.set(-BS_CX*s,-BS_MINY*s,-BS_CZ*s); wrap.rotation.y=BS_YAW;
   let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=BS_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
   grp.add(wrap); grp.userData.body=skin; grp.userData.glb=true; grp.userData.float=true;
+  const bones=skin.skeleton.bones;   // resolve the shared rig to THIS clone's bones
+  grp.userData.bite = BS_JAW  ? BS_JAW .map(r=>({bone:bones[r.jointIdx], axis:r.axis, rest:r.rest, sign:r.sign})) : null;
+  grp.userData.flap = BS_WINGS? BS_WINGS.map(r=>({bone:bones[r.jointIdx], axis:r.axis, rest:r.rest, sign:r.sign})) : null;
   grp.add(groundBlob(d.r*1.8));
   const elite=new THREE.Mesh(new THREE.TorusGeometry(d.r*1.35,1.8,8,24),basic(0xff5a2a));
   elite.rotation.x=Math.PI/2; elite.position.y=4; grp.add(elite); grp.userData.elite=elite;
@@ -2143,7 +2156,6 @@ function makeFruit(type){
   return grp;
 }
 const meshMap=new Map();   // sim object → mesh (all kinds)
-window.__meshMap=meshMap;   // TEMP debug
 let frameN=0;
 function syncSet(items,kindOf,make,upd){
   for(const o of items){
@@ -2493,7 +2505,7 @@ const portal=new THREE.Group(); portal.visible=false; scene.add(portal);
 const portalLight=new THREE.PointLight(0x39ffa0, 0, 400); portal.add(portalLight);
 /* ---- EMERALD GATE (always-visible extraction landmark) + PORTAL vortex GLB (fills the gate while extracting) ---- */
 let gateP=null, portalP=null; let GATE_YAW=0, PORTAL_YAW=0, PORTAL_RX=0, PAD_YAW=0;   // facing knobs — tune if a piece faces wrong
-const gateGrp=new THREE.Group(); gateGrp.visible=false; gateGrp.position.set(PADX,0,PADY-104); scene.add(gateGrp);
+const gateGrp=new THREE.Group(); gateGrp.visible=false; gateGrp.position.set(PADX,0,GATE_Z); scene.add(gateGrp);
 _propLoader.load('assets/gate.glb', g=>{
   gateP=_propFit(g.scene);
   const s=210/gateP.fitY, m=gateP.m.clone();                                   // tall emerald archway, feet on the ground
@@ -2688,9 +2700,10 @@ function syncScene(dt){
     const d=FRUIT[e.type], ud=m.userData;
     const rise=e.spawnT>0?Math.max(0,e.spawnT)/0.55:0;   // new demon rises out of the ground
     let by=-d.r*2.6*rise;
-    if(ud.float && rise<=0) by=d.r*0.7+Math.sin(time*3+e.ph)*d.r*0.22;   // bilespawn hovers + bobs
+    if(ud.float && rise<=0) by=d.r*0.7+Math.sin(time*3+e.ph)*d.r*BS_BOB;   // bilespawn hovers + bobs (calmed)
     m.position.set(e.x,by,e.y);
-    const sc=(e.elite?1.15:1)*(e.lunge>0?1.12:1)*(1+Math.sin(e.ph*2)*0.04);
+    const pulse=ud.float?BS_PULSE:0.04;   // floater's idle breathe is much gentler — real motion comes from the jaw/wings
+    const sc=(e.elite?1.15:1)*(e.lunge>0?1.12:1)*(1+Math.sin(e.ph*2)*pulse);
     m.scale.setScalar(sc);
     m.rotation.y = sandbox ? 0 : (-Math.atan2(py-e.y,px-e.x)+Math.PI/2);   // sandbox: all face the camera; else face the player
     if(e.stun>0) m.rotation.z=Math.sin(time*24)*0.09; else m.rotation.z=0;
@@ -2711,6 +2724,10 @@ function syncScene(dt){
       else if(ud.walk){ const ph=e.ph, sw=active?Math.sin(ph):0;   // hand-animated walk (imp)
         for(const w of ud.walk){ _dq.setFromAxisAngle(w.axis, sw*w.amp); w.bone.quaternion.copy(w.rest).premultiply(_dq); }
         if(active) m.position.y = by + Math.abs(Math.sin(ph))*d.r*0.08; }
+      if(ud.bite){ const close=BS_BITE_BASE + BS_BITE_AMP*(0.5-0.5*Math.cos(time*BS_BITE_SPD+e.ph));   // bilespawn: idle chomp (rest maw is open, + closes it)
+        for(const j of ud.bite){ _dq.setFromAxisAngle(j.axis, close*j.sign); j.bone.quaternion.copy(j.rest).premultiply(_dq); } }
+      if(ud.flap){ const fl=Math.sin(time*BS_FLAP_SPD+e.ph)*BS_FLAP_AMP;   // bilespawn: gentle wing flutter
+        for(const w of ud.flap){ _dq.setFromAxisAngle(w.axis, fl*w.sign); w.bone.quaternion.copy(w.rest).premultiply(_dq); } }
     } else if(e.hitF>0){ bm.emissive.set(0xffffff); bm.emissiveIntensity=0.95; }
     else { bm.emissive.set(d.col); bm.emissiveIntensity=0.5; }   // molten inner-glow: dark body lit from within
   });
@@ -2866,7 +2883,7 @@ function syncScene(dt){
   else if(state==='cashing') pf=0.5+Math.min(1,seqT/0.5)*0.5;
   if(pf>0){
     portal.visible=true;
-    portal.position.set(PADX, 105, PADY-104);        // centered in the emerald gate opening at the NORTH edge of the platform
+    portal.position.set(PADX, 98, PADY-104);         // sits on the gate's FRONT ring (gate body is pushed back to GATE_Z)
     portal.scale.setScalar(Math.max(0.05,pf)*2.5);   // radius grows with the extraction bar; 2.5x bigger at max
     portal.rotation.set(0, 0, time*0.5);             // opening faces SOUTH; gentle swirl on the tunnel axis
     portalLight.intensity=pf*110;
