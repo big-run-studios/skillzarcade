@@ -154,7 +154,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.8.1</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.8.2</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -2222,6 +2222,7 @@ function syncScene(dt){
     _rgt.set(1,0,0).applyQuaternion(camera.quaternion); _rgt.y=0; if(_rgt.lengthSq()>1e-6)_rgt.normalize();
     if(keys.has('KeyW'))sbxPos.addScaledVector(_fwd,mv); if(keys.has('KeyS'))sbxPos.addScaledVector(_fwd,-mv);
     if(keys.has('KeyD'))sbxPos.addScaledVector(_rgt,mv); if(keys.has('KeyA'))sbxPos.addScaledVector(_rgt,-mv);
+    if(keys.has('KeyE'))sbxPos.y+=mv; if(keys.has('KeyQ'))sbxPos.y-=mv;   // E up / Q down
     camera.position.copy(sbxPos);
   }
   else { camera.position.set(px+shx, 700, py+520+shz);
@@ -2513,7 +2514,7 @@ function overlayDraw(){
     octx.font='800 13px Orbitron';
     for(const L of sandLabels){ const s=toScreen(L.x,L.z,0); if(!s.ok) continue;
       octx.fillStyle='rgba(6,3,2,.75)'; octx.fillText(L.label,s.x+1,s.y+18); octx.fillStyle='#e8c9a0'; octx.fillText(L.label,s.x,s.y+17); }
-    octx.font='700 12px Orbitron'; octx.fillStyle='#8fb6c4'; octx.fillText('SANDBOX — WASD move · arrows tilt · ‹ back', cw/2, 26);
+    octx.font='700 12px Orbitron'; octx.fillStyle='#8fb6c4'; octx.fillText('SANDBOX — WASD move · Q/E down/up · arrows tilt · ‹ back', cw/2, 26);
     return;
   }
   // pops (world → screen)
