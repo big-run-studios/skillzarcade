@@ -154,7 +154,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.10.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.10.1</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1765,7 +1765,7 @@ _bsLoader.load('assets/bilespawn.glb', gl=>{
 }, undefined, e=>console.error('bilespawn GLB load', e));
 function makeBilespawnGLB(d){
   const grp=new THREE.Group();
-  const model=cloneSkinned(bsSrc), s=d.r*2.6/BS_FIT;
+  const model=cloneSkinned(bsSrc), s=d.r*7.8/BS_FIT;   // 3x bigger (Andrew) — was 2.6
   const wrap=new THREE.Group(); wrap.add(model);
   wrap.scale.setScalar(s); wrap.position.set(-BS_CX*s,-BS_MINY*s,-BS_CZ*s); wrap.rotation.y=BS_YAW;
   let skin=null; model.traverse(o=>{ if(o.isSkinnedMesh){ skin=o; o.material=BS_MAT.clone(); o.layers.enable(CHAR_LAYER); o.frustumCulled=false; } });
