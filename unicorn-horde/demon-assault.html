@@ -155,7 +155,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.20.1</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.21.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -359,7 +359,7 @@ function buildStructs(){
     const p=openSpot(260,30,120,true);   // keep random trees OFF the sidewalks
     if(p) structs.push({x:p.x-30,y:p.y-24,w:60,h:48,hh:34,kind:'tree'});
   }
-  structs.push({x:PADX-90, y:PADY-104-28, w:180, h:56, hh:210, kind:'gate'});   // solid extraction gate — enemies can't walk through it
+  structs.push({x:PADX-105, y:PADY-104-32, w:210, h:64, hh:210, kind:'gate'});   // solid extraction gate — enemies can't walk through it (sized to the empty-gate GLB)
   structsDirty=true;
 }
 // true if the point — or its tree footprint — sits on a baked sidewalk band
@@ -1204,7 +1204,7 @@ function startEnvSandbox(){
 }
 /* ================================================================= SANDBOX (dev review grid) */
 let sandbox=false, sandFloor=null, sandLabels=[], _savedFog=null;
-let sbxYaw=0, sbxPitch=-0.7; const sbxPos=new THREE.Vector3(), _fwd=new THREE.Vector3(), _rgt=new THREE.Vector3();
+let sbxYaw=0, sbxPitch=-0.7; const sbxPos=new THREE.Vector3(), _sbFwd=new THREE.Vector3(), _rgt=new THREE.Vector3();
 const SAND_GX=1500, SAND_GZ=-2600, SAND_SX=470, SAND_SZ=440;
 const SAND_CELLS=[   // [type|'player', col(-1/1), row(0..3), label]
   ['player',-1,0,'SLAYER'], ['grape',1,0,'IMP'],
@@ -2312,6 +2312,9 @@ const uni=new THREE.Group(); scene.add(uni);
 const mArmor=toon(0x3a4550), mArmorD=toon(0x232a33), mSkin=toon(0xc9a07a), mBoot=toon(0x1c2228), mVisor=basic(0x4de3ff), mCyan=basic(0x39d8ff);
 let uniLegs=[], riderArm, riderGrp, headGrp, weapMeshes={}, bodyMesh, cashGlow;
 let heroReady=false, heroModel=null, heroMixer=null, heroAct={}, heroCurAct=null, heroCur=null, HERO_YAW=0, primBody=[];
+// TEMP weapons parented to the hero's right hand — position tracks the hand bone, barrel forced along the aim (see render block)
+let heroHand=null, heroWeapHolder=null, heroWeap={};
+const _wp=new THREE.Vector3(), _fwd=new THREE.Vector3(), _zAx=new THREE.Vector3(), _UP=new THREE.Vector3(0,1,0), _wq=new THREE.Quaternion(), _bq=new THREE.Quaternion(), _bmat=new THREE.Matrix4();
 const NEON3=[0x39ffa0,0xff3d9a,0x4dc3ff];   // (dead legacy palette; kept so the animate forEach stays valid)
 let maneMats=[], tailMats=[], tailNodes=[], tailPrev=[], tailSegs=[], wings=[], wingT=0;
 let tailMesh=null, headBaseX=0, headBaseY=20, uniS=1;   // head rest pose, local to the torso
@@ -2427,6 +2430,13 @@ new GLTFLoader().load('assets/hero.glb', gl=>{
   heroMixer=new THREE.AnimationMixer(gl.scene);
   for(const c of gl.animations) heroAct[c.name]=heroMixer.clipAction(c);
   uni.add(gl.scene); heroModel=gl.scene;
+  // TEMP weapon in-hand: reuse the pickup weapon replicas, parent them under `uni` (world units, scale 1)
+  // and track the RightHand bone each frame (bone lives in scaled GLB space, so parenting under it would need scale math)
+  gl.scene.traverse(o=>{ if(o.isBone && o.name==='RightHand') heroHand=o; });
+  heroWeapHolder=new THREE.Group(); heroWeapHolder.scale.setScalar(0.5);   // shrink the oversized plaza replica to a held size
+  for(const k of WKEYS){ const m=weaponModel(k); m.visible=false; heroWeap[k]=m; heroWeapHolder.add(m); }
+  heroWeapHolder.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.layers.enable(CHAR_LAYER); o.castShadow=true; } });
+  uni.add(heroWeapHolder);
   primBody.forEach(p=>{ p.visible=false; });   // hide the primitive slayer
   heroReady=true;
 }, undefined, e=>console.error('hero GLB load', e));
@@ -2548,9 +2558,9 @@ function syncScene(dt){
     if(keys.has('ArrowUp'))sbxPitch-=tv; if(keys.has('ArrowDown'))sbxPitch+=tv;
     sbxPitch=clamp(sbxPitch,-1.45,0.3);
     camera.rotation.set(sbxPitch,sbxYaw,0);
-    _fwd.set(0,0,-1).applyQuaternion(camera.quaternion); _fwd.y=0; if(_fwd.lengthSq()>1e-6)_fwd.normalize();
+    _sbFwd.set(0,0,-1).applyQuaternion(camera.quaternion); _sbFwd.y=0; if(_sbFwd.lengthSq()>1e-6)_sbFwd.normalize();
     _rgt.set(1,0,0).applyQuaternion(camera.quaternion); _rgt.y=0; if(_rgt.lengthSq()>1e-6)_rgt.normalize();
-    if(keys.has('KeyW'))sbxPos.addScaledVector(_fwd,mv); if(keys.has('KeyS'))sbxPos.addScaledVector(_fwd,-mv);
+    if(keys.has('KeyW'))sbxPos.addScaledVector(_sbFwd,mv); if(keys.has('KeyS'))sbxPos.addScaledVector(_sbFwd,-mv);
     if(keys.has('KeyD'))sbxPos.addScaledVector(_rgt,mv); if(keys.has('KeyA'))sbxPos.addScaledVector(_rgt,-mv);
     if(keys.has('KeyE'))sbxPos.y+=mv; if(keys.has('KeyQ'))sbxPos.y-=mv;   // E up / Q down
     camera.position.copy(sbxPos);
@@ -2578,6 +2588,17 @@ function syncScene(dt){
       else ts=0; }                                 // idle: freeze the walk pose (no idle clip in the set)
     heroPlay(clip); if(heroCurAct) heroCurAct.timeScale=ts;
     if(heroMixer) heroMixer.update(dt);
+    // TEMP in-hand weapon: sit at the right-hand bone, barrel forced along the aim; swap by weap.cur
+    if(heroHand && heroWeapHolder){
+      heroHand.getWorldPosition(_wp);                     // getWorldPosition/Quaternion refresh the matrices they read
+      uni.getWorldQuaternion(_wq);                        // → uni.matrixWorld current, so worldToLocal is valid below
+      heroWeapHolder.position.copy(uni.worldToLocal(_wp));
+      _fwd.set(Math.cos(aimAng),0,Math.sin(aimAng));      // world aim on the ground plane
+      _zAx.crossVectors(_fwd,_UP);                        // right-handed basis: +X barrel, +Y up
+      _bmat.makeBasis(_fwd,_UP,_zAx); _bq.setFromRotationMatrix(_bmat);
+      heroWeapHolder.quaternion.copy(_wq.invert()).multiply(_bq);   // aim orientation, expressed in uni-local space
+      for(const k of WKEYS) heroWeap[k].visible=(weap&&weap.cur===k);
+    }
   } else {
   // legs stay within 90° of the aim; past that he back-pedals (never legs-opposite-torso)
   let gaitDir=1, legT=aimAng;
