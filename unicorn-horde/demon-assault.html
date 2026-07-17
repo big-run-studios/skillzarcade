@@ -156,7 +156,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.27.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.27.1</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1513,7 +1513,7 @@ scene.background=new THREE.Color(0x0e0604);
 const _pmrem=new THREE.PMREMGenerator(renderer); const _envScene=new THREE.Scene();
 _envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50,20,10),MBM({color:0x3a1c14,side:THREE.BackSide})));
 const uniEnv=_pmrem.fromScene(_envScene,0.06).texture;
-scene.fog=new THREE.Fog(0x8a2c12, 1500, 2500);   // warm ember haze MATCHED to the sky's horizon glow so the distance dissolves INTO the glow (hides the world edge / far seams beyond the boundary). near kept out (1500) so enemies just outside the walls stay readable; far pulled back IN (was 3200) to restore the draw-distance hiding
+scene.fog=new THREE.Fog(0x3a1208, 1500, 2500);   // deep-ember fog-of-war murk. now that the sky dome is fogged too, this colour envelops you on ALL sides (radial, not a band) — dark so the world melts into it softly with a red heat rather than a garish orange line. near/far are overridden per-frame by the fog-of-war (see syncScene)
 const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 10, 4200);
 camera.layers.enable(1);   // render layer 1 (character-only lights live here, else the renderer culls them)
 
@@ -1599,7 +1599,7 @@ let fowVis=540;     // FOG OF WAR: player-space visibility radius (≈1.5× shoo
   g.fillStyle=grd; g.fillRect(0,0,16,256);
   const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
   skyDome=new THREE.Mesh(new THREE.SphereGeometry(4000,32,16),
-    MBM({map:tex, side:THREE.BackSide, fog:false, depthWrite:false}));   // fog:false so the glow always shows; fog color matches the horizon so haze blends into it
+    MBM({map:tex, side:THREE.BackSide, fog:true, depthWrite:false}));   // fog:true — the dome sits far beyond the fog-of-war radius, so it reads as solid murk all around (no see-through, no horizon "line"). Only shows its glow gradient when fog is off (sandbox)
   skyDome.position.set(WW/2,0,WH/2); skyDome.renderOrder=-1; scene.add(skyDome);
 })();
 
