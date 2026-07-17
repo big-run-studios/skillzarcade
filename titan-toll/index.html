@@ -247,7 +247,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.7.2</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.8.0</div>
   </div>
 </div>
 
@@ -794,6 +794,10 @@ let shakeAmt=0, shakeT=0;
 let forcedAttack=-1;
 let godMode=false, paused=false;
 let defeatedT=0;
+let enemyKb=0, enemyKbV=0;                 // enemy hit-recoil spring (knockback away from player, scaled by damage)
+let enemyDeathFx=null;                      // active slow red death dissolve
+const E_DEATH_FREEZE=0.45, E_DEATH_DUR=2.2, E_DEATH_HOLD=0.3, E_DEATH_COL=0xff2a1e, E_DEATH_MOTE='#ff6a4a';
+const _edeathBox=new THREE.Box3();
 const hitLog=[];            // {t,kind,err,grade}
 const floaters=[];          // overlay floating text
 const particles=[];         // 3d fx
@@ -849,6 +853,7 @@ function playStinger(a){ stopMusic(); if(muted)return; try{a.currentTime=0;}catc
    ========================================================================= */
 function setEnemy(i){
   if(enemyMesh){scene.remove(enemyMesh);}
+  enemyKb=0; enemyKbV=0; enemyDeathFx=null;
   enemyIdx=i; enemy={...ENEMIES[i], hp:ENEMIES[i].hp, maxHp:ENEMIES[i].hp};
   enemyMesh=ENEMY_BUILD[i](); enemyMesh.position.set(-0.55,0,ENEMY_Z); enemyMesh.scale.setScalar(ENEMY_SCALE[i]||1); scene.add(enemyMesh);
   enemyState='idle'; enemyTimer=CFG.breather[i]*0.6; atk=null; lastAtk=-1; last2Atk=-1; recentFast=0; vulnAction=null;
@@ -876,17 +881,76 @@ function startRun(sd){
 function toMenu(){ state='menu'; document.getElementById('menu').classList.remove('hide'); document.getElementById('result').classList.add('hide'); stopMusic(); try{sfxWin.pause();sfxLose.pause();}catch(e){} }
 
 function defeatEnemy(){
-  score += Math.max(0,enemy.hp*0); // no bonus for overkill
   sfx('enemydown');
-  addFloater(enemyMesh.userData.anchors.core, 'DOWN', '#ffd23a', 1.4, 34);
-  shake(0.5,0.4);
-  if(enemyIdx>=2){ cashOut(true); return; }
-  state='defeated'; defeatedT=0; off=null; atk=null;
+  addFloater(enemyMesh.userData.anchors.core, 'DOWN', '#ff6a4a', 1.4, 34);
+  shake(0.6,0.5);
+  spawnEnemyDeath();                     // slow, red death dissolve — plays out before the next foe / result
+  state='defeated'; defeatedT=0; off=null; atk=null; queuedAction=null;
+}
+function tickDefeated(dt){ defeatedT+=dt; updateEnemyDeath(dt); if(defeatedT>=E_DEATH_DUR+E_DEATH_HOLD) finishDefeat(); }
+function finishDefeat(){
+  const fx=enemyDeathFx; enemyDeathFx=null;
+  if(enemyIdx>=2){ cashOut(true); } else { proceedNext(); }
+  if(fx){ for(const s of fx.swaps) for(const cm of s.clones) cm.dispose(); }   // free the dissolve clones (old mesh already gone)
 }
 function proceedNext(){
   setEnemy(enemyIdx+1);
   state='combat';
   updateHudStatic();
+}
+
+/* ---- death dissolve (ported from demon-assault, slowed + red hue) ----
+   Freeze the pose + tint red, then disintegrate top-to-bottom with a glowing red edge + red motes.
+   One shared uniform set for the whole enemy (all parts dissolve together); per-base-type program. */
+function eDissolveMat(src, u){
+  const m=src.clone();
+  m.onBeforeCompile=sh=>{
+    Object.assign(sh.uniforms,u);
+    sh.vertexShader=sh.vertexShader
+      .replace('#include <common>','#include <common>\nvarying float vDisY;\nvarying vec3 vDisP;')
+      .replace('#include <project_vertex>','#include <project_vertex>\nvec4 _dwp=modelMatrix*vec4(transformed,1.0);\nvDisY=_dwp.y; vDisP=_dwp.xyz;');
+    sh.fragmentShader=sh.fragmentShader
+      .replace('#include <common>','#include <common>\nuniform float uDis;\nuniform float uFreeze;\nuniform float uCutTop;\nuniform float uCutBot;\nuniform float uNoise;\nuniform vec3 uEdge;\nvarying float vDisY;\nvarying vec3 vDisP;\nfloat _dhash(vec3 p){return fract(sin(dot(floor(p),vec3(12.9898,78.233,37.719)))*43758.5453123);}')
+      .replace('#include <tonemapping_fragment>',
+        '{ float _cut=mix(uCutTop,uCutBot,uDis);\n'+
+        '  float _nz=_dhash(vDisP*0.16);\n'+
+        '  float _edge=vDisY+(_nz*2.0-1.0)*uNoise;\n'+
+        '  if(_edge>_cut) discard;\n'+
+        '  gl_FragColor.rgb=mix(gl_FragColor.rgb,uEdge,uFreeze*0.9);\n'+
+        '  float _rim=smoothstep(_cut-uNoise*2.2,_cut,_edge);\n'+
+        '  gl_FragColor.rgb+=uEdge*(_rim*0.75+uFreeze*0.35);\n'+
+        '}\n#include <tonemapping_fragment>');
+  };
+  m.customProgramCacheKey=()=>'tgDeath_'+src.type;
+  m.needsUpdate=true;
+  return m;
+}
+function spawnEnemyDeath(){
+  if(!enemyMesh) return;
+  enemyMesh.updateWorldMatrix(true,true);
+  _edeathBox.setFromObject(enemyMesh);
+  const top=_edeathBox.max.y, bot=_edeathBox.min.y, noise=Math.max(0.3,(top-bot)*0.12);
+  const cutTop=top+noise+0.6, cutBot=bot-noise-0.6;
+  const u={uDis:{value:0},uFreeze:{value:0},uCutTop:{value:cutTop},uCutBot:{value:cutBot},uNoise:{value:noise},uEdge:{value:new THREE.Color(E_DEATH_COL)}};
+  const swaps=[];
+  enemyMesh.traverse(o=>{ if(o.isMesh && o.material){
+    const arr=Array.isArray(o.material)?o.material:[o.material];
+    const clones=arr.map(mm=>eDissolveMat(mm,u));
+    swaps.push({mesh:o, orig:o.material, clones});
+    o.material=Array.isArray(o.material)?clones:clones[0];
+  }});
+  enemyDeathFx={swaps,u,t:0,top,bot,cx:enemyMesh.position.x,cz:enemyMesh.position.z};
+}
+function updateEnemyDeath(dt){
+  if(!enemyDeathFx) return;
+  const fx=enemyDeathFx; fx.t+=dt;
+  fx.u.uFreeze.value=Math.min(1, fx.t/E_DEATH_FREEZE);
+  const dis=fx.t<=E_DEATH_FREEZE?0:Math.min(1,(fx.t-E_DEATH_FREEZE)/(E_DEATH_DUR-E_DEATH_FREEZE));
+  fx.u.uDis.value=dis;
+  if(dis>0 && dis<1 && Math.random()<0.55){        // shed red motes along the descending dissolve edge
+    const cy=fx.top - dis*(fx.top-fx.bot);
+    burst(new THREE.Vector3(fx.cx+rf(-1.8,1.8), cy+rf(-0.4,0.4), fx.cz+rf(-1.2,1.2)), E_DEATH_MOTE, 2);
+  }
 }
 
 function cashOut(fullClear){
@@ -1018,6 +1082,7 @@ function resolveTarget(tg, grade, err){
   // apply
   if(dmg>0){
     enemy.hp-=dmg; score+=dmg*mult;
+    enemyKbV -= Math.min(24, dmg*0.18);   // hit-recoil impulse, shoved back away from the player, ∝ damage
     blitz=Math.min(CFG.blitzMax, blitz + dmg*CFG.blitzPerDmg + (crit?CFG.blitzCrit:0));
     addXP(dmg*CFG.xpPerDmg + CFG.xpAction*0.15 + (off.action==='blitz'?CFG.xpBlitz*0.11:0), off.action, dmg);
   }
@@ -1330,7 +1395,7 @@ function update(rdt){
   heroFlashT=Math.max(0,heroFlashT-rdt);
   poseT+=rdt;
 
-  if(state==='defeated'){ defeatedT+=rdt; if(defeatedT>1.3) proceedNext(); return; }
+  if(state==='defeated'){ tickDefeated(rdt); return; }
   if(state!=='combat') return;
   if(paused) return;
 
@@ -1414,8 +1479,12 @@ function animatePlayer(rdt){
 }
 function animateEnemy(rdt){
   if(!enemyMesh)return; const u=enemyMesh.userData; const t=performance.now()/1000;
-  // idle breathing / bob
-  enemyMesh.position.y=lerp(enemyMesh.position.y,Math.sin(t*1.3)*0.15,0.1);
+  if(enemyDeathFx) return;                 // pose frozen during the death dissolve
+  // hit-recoil spring: shoved back (−z, away from player) then settles; magnitude set by damage
+  enemyKbV += (-enemyKb*120 - enemyKbV*15)*rdt; enemyKb += enemyKbV*rdt;
+  // idle breathing / bob (+ a small hop when shoved back)
+  enemyMesh.position.y=Math.sin(t*1.3)*0.15 + Math.max(0,-enemyKb)*0.25;
+  enemyMesh.position.z=ENEMY_Z+enemyKb;
   enemyMesh.rotation.z=lerp(enemyMesh.rotation.z,0,0.1);
   let telAmt=0, strikeAmt=0, curHit=null;
   if(atk && (enemyState==='telegraph'||enemyState==='active')){
@@ -1437,8 +1506,9 @@ function animateEnemy(rdt){
   const rage = enemy && (enemy.hp/enemy.maxHp<0.4);
   if(u.eyes){ for(const e of u.eyes){ e.material.color.setHex( strikeAmt>0.5?0xff3b5c : (telAmt>0.3?0xffa53c:(rage?0xff5c5c:0xffd23a)) ); } }
   if(u.gemMat){ u.gemMat.color.setHex( vulnAction==='cast'?0xc07bff : vulnAction==='shoot'?0x5fe0ff : vulnAction==='strike'?0xffb648 : 0xffd870 ); }
-  // lean on strike
-  enemyMesh.rotation.x=lerp(enemyMesh.rotation.x, strikeAmt*0.06, 0.3);
+  // lean on strike (+ hit-recoil lean)
+  u._rx=lerp(u._rx||0, strikeAmt*0.06, 0.3);
+  enemyMesh.rotation.x=u._rx + enemyKb*0.03;
 }
 
 let last=performance.now(), fps=60;
@@ -1681,7 +1751,7 @@ window.__game={
     enemyState, atk:atk?atk.set.name:null, atkLeft:atk?atk.hits.filter(h=>!h.resolved).length:0, vuln:vulnAction, lock:+resolveLockT.toFixed(2),
     runClock:+runClock.toFixed(2), ragePhase, bank:bankValue(),
     cd:{strike:+cooldown.strike.toFixed(1),shoot:+cooldown.shoot.toFixed(1),cast:+cooldown.cast.toFixed(1)}, draws:renderer.info.render.calls }; },
-  step:d=>{ try{ if(state==='combat')step(d); else if(state==='defeated'){defeatedT+=d; if(defeatedT>1.3)proceedNext();} }catch(e){console.error(e);} },
+  step:d=>{ try{ if(state==='combat')step(d); else if(state==='defeated'){ tickDefeated(d); } }catch(e){console.error(e);} },
   start:sd=>startRun(sd), toMenu,
   commit, cashout:()=>cashOut(false),
   // deterministic input helpers
