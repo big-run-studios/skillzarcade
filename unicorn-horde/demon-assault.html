@@ -156,7 +156,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.25.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.26.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1513,7 +1513,7 @@ scene.background=new THREE.Color(0x0e0604);
 const _pmrem=new THREE.PMREMGenerator(renderer); const _envScene=new THREE.Scene();
 _envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50,20,10),MBM({color:0x3a1c14,side:THREE.BackSide})));
 const uniEnv=_pmrem.fromScene(_envScene,0.06).texture;
-scene.fog=new THREE.Fog(0x1a0805, 900, 2200);
+scene.fog=new THREE.Fog(0x3a1008, 1500, 3200);   // ember-red haze. near pushed OUT (was 900) so enemies spawning just outside the walls stay readable; dense only further out (far 3200) → the far scatter dissolves into the red glow
 const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 10, 4200);
 camera.layers.enable(1);   // render layer 1 (character-only lights live here, else the renderer culls them)
 
@@ -1546,11 +1546,12 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
 /* ---- ground (authored lava-field texture: assets/ground.jpg — calmer center, hotter edges) ---- */
 (function buildGround(){
   const mat=MBM({color:0x14161b});   // dark charcoal until the texture streams in (no white flash)
-  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH), mat);
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(WW*3,WH*3), mat);   // 3×3: the arena tile sits in the centre, one arena-width of floor beyond every wall
   mesh.rotation.x=-Math.PI/2; mesh.position.set(WW/2,0,WH/2);
   scene.add(mesh);
   new THREE.TextureLoader().load('assets/ground.jpg', tex=>{
     tex.colorSpace=THREE.SRGBColorSpace;
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(3,3);   // tile 3×3 — the centre tile lands exactly on the arena; the hot painted edges meet as lava cracks between plates
     tex.anisotropy=renderer.capabilities.getMaxAnisotropy();   // crisp at grazing camera angles
     mat.map=tex; mat.color.set(0xffffff); mat.needsUpdate=true;   // show the texture as authored (untinted)
   });
@@ -1580,6 +1581,46 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
   wall(WW/2,WH-WALL/2,WW,WALL);
   wall(WALL/2,WH/2,WALL,WH);
   wall(WW-WALL/2,WH/2,WALL,WH);
+})();
+
+/* ---- far world: an eerie lava-red sky glow beyond the fog line ---- */
+(function buildSky(){
+  const c=document.createElement('canvas'); c.width=16; c.height=256; const g=c.getContext('2d');
+  const grd=g.createLinearGradient(0,0,0,256);   // canvas top→bottom maps to zenith→nadir on the dome
+  grd.addColorStop(0.00,'#0a0302');   // zenith — near black
+  grd.addColorStop(0.30,'#1a0604');
+  grd.addColorStop(0.44,'#4a1206');
+  grd.addColorStop(0.50,'#d8481a');   // horizon — hot lava glow
+  grd.addColorStop(0.53,'#a83413');
+  grd.addColorStop(0.64,'#4a1207');
+  grd.addColorStop(1.00,'#280a05');   // nadir (below the floor)
+  g.fillStyle=grd; g.fillRect(0,0,16,256);
+  const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(4000,32,16),
+    MBM({map:tex, side:THREE.BackSide, fog:false, depthWrite:false}));   // fog:false so the glow always shows; fog color matches the horizon so haze blends into it
+  sky.position.set(WW/2,0,WH/2); sky.renderOrder=-1; scene.add(sky);
+})();
+
+/* ---- far world: dark jagged silhouettes ringing the arena, dense near the walls, thinning into the fog ---- */
+(function scatterFar(){
+  const N_SPIRE=150, N_ROCK=90, BEYOND=1900;   // BEYOND kept inside the 3×3 floor so every prop sits on textured ground
+  const mat=MBM({color:0x160b09});   // near-black warm rock; fog tints it toward the red haze with distance → reads as a silhouette
+  const spireGeo=new THREE.ConeGeometry(1,1,5), rockGeo=new THREE.IcosahedronGeometry(1,0);
+  const spires=new THREE.InstancedMesh(spireGeo,mat,N_SPIRE), rocks=new THREE.InstancedMesh(rockGeo,mat,N_ROCK);
+  spires.castShadow=spires.receiveShadow=rocks.castShadow=rocks.receiveShadow=false;   // beyond the tight shadow frustum anyway
+  const d=new THREE.Object3D();
+  const pos=()=>{ const depth=120+Math.pow(Math.random(),1.7)*BEYOND, s=Math.floor(Math.random()*4);   // depth biased toward the wall
+    if(s===0) return {x:R(-BEYOND,WW+BEYOND), z:-depth};        // north band
+    if(s===1) return {x:R(-BEYOND,WW+BEYOND), z:WH+depth};      // south band
+    if(s===2) return {x:-depth, z:R(-BEYOND,WH+BEYOND)};        // west band
+    return {x:WW+depth, z:R(-BEYOND,WH+BEYOND)};                // east band
+  };
+  for(let i=0;i<N_SPIRE;i++){ const p=pos(), h=R(120,520), r=R(18,55);
+    d.position.set(p.x,h*0.5-6,p.z); d.rotation.set(0,R(0,6.283),R(-0.12,0.12)); d.scale.set(r,h,r); d.updateMatrix(); spires.setMatrixAt(i,d.matrix); }
+  for(let i=0;i<N_ROCK;i++){ const p=pos(), s=R(40,150);
+    d.position.set(p.x,s*0.35,p.z); d.rotation.set(R(0,6.283),R(0,6.283),R(0,6.283)); d.scale.set(s*R(1,1.6),s*R(0.6,1),s*R(1,1.6)); d.updateMatrix(); rocks.setMatrixAt(i,d.matrix); }
+  spires.instanceMatrix.needsUpdate=true; rocks.instanceMatrix.needsUpdate=true;
+  scene.add(spires,rocks);
 })();
 
 /* ---- structures (rebuilt each run — 3 random crates vary) ---- */
