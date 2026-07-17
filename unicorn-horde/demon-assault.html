@@ -156,7 +156,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.26.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.26.1</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1584,6 +1584,7 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
 })();
 
 /* ---- far world: an eerie lava-red sky glow beyond the fog line ---- */
+let skyDome=null;   // recentred on the camera each frame (see syncScene) so its far side never clips the far plane
 (function buildSky(){
   const c=document.createElement('canvas'); c.width=16; c.height=256; const g=c.getContext('2d');
   const grd=g.createLinearGradient(0,0,0,256);   // canvas top→bottom maps to zenith→nadir on the dome
@@ -1596,9 +1597,9 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
   grd.addColorStop(1.00,'#280a05');   // nadir (below the floor)
   g.fillStyle=grd; g.fillRect(0,0,16,256);
   const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
-  const sky=new THREE.Mesh(new THREE.SphereGeometry(4000,32,16),
+  skyDome=new THREE.Mesh(new THREE.SphereGeometry(4000,32,16),
     MBM({map:tex, side:THREE.BackSide, fog:false, depthWrite:false}));   // fog:false so the glow always shows; fog color matches the horizon so haze blends into it
-  sky.position.set(WW/2,0,WH/2); sky.renderOrder=-1; scene.add(sky);
+  skyDome.position.set(WW/2,0,WH/2); skyDome.renderOrder=-1; scene.add(skyDome);
 })();
 
 /* ---- far world: dark jagged silhouettes ringing the arena, dense near the walls, thinning into the fog ---- */
@@ -2649,6 +2650,9 @@ function syncScene(dt){
     camera.lookAt(px, 0, py); }   // screen-center = the player exactly, so a finger on it means "stand still"
   // keep the shadow frustum tight around the player — translate the sun by a fixed offset so its
   // direction never changes, only what the (±1000) shadow map covers
+  // sky follows the camera (XZ; Y stays 0 so the glow sits on the true horizon) — keeps the whole dome
+  // inside the far-clip plane from any position, killing the growing black arc when you move off-centre
+  if(skyDome) skyDome.position.set(camera.position.x, 0, camera.position.z);
   sun.position.set(px-760, 470, py+340); sun.target.position.set(px, 0, py); sun.target.updateMatrixWorld();
 
   // unicorn
