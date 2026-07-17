@@ -247,7 +247,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.7.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.7.1</div>
   </div>
 </div>
 
@@ -289,7 +289,7 @@ const CFG={
   goodWin:0.115, perfectWin:0.05, centerWin:0.022,
   winPerLv:0.004,          // +good window per ability level
   closurePerLv:0.25,       // +25% ring-closure speed per ability level (tighter timing at higher levels)
-  cdPerLevel:5,            // ability cooldown grows 5s/level beyond the action bar; starts at level 2
+  cdPerLevel:3,            // ability cooldown grows 3s/level beyond the action bar; starts at level 2
   // grade -> damage
   dmgMiss:0.18, dmgGood:1.0, dmgPerfect:1.55,
   critMult:1.9,
@@ -303,8 +303,8 @@ const CFG={
   blitzMax:100, blitzPerDmg:0.052, blitzCrit:3, blitzDodge:4.5, blitzPerfDodge:8, blitzOnHit:0.06,
   // xp
   xpPerDmg:0.55, xpAction:6, xpBlitz:48,
-  xpThresh:[210,290,380,480,590,710,850,1000],
-  maxLevelUps:8,
+  xpThresh:[95,130,175,225,285,350,420,500,590,690,800,920],  // easier + faster level-ups (12 entries)
+  maxLevelUps:12,          // more upgrades per run so milestones/cooldowns/closure come to life
   usageBase:0.55, usageWeight:3.2,       // level-up ability weighting
   // scoring
   clearBonus:0.30,
