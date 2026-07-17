@@ -247,7 +247,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.9.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.9.1</div>
   </div>
 </div>
 
@@ -1570,41 +1570,36 @@ function drawReticle(cx,cy,R0,dt,win,perfWin,app,col,Rmax,glyph,next){
    dodge=chevron sweeping in from the left, strike=arrow rotating 90° into place, cast=star falling in,
    shoot=ring (unchanged). Blitz combines them by choosing the shape from each sub-target's weapon form. */
 function _chevron(size){ const w=size*0.72,h=size; octx.beginPath(); octx.moveTo(-w,-h); octx.lineTo(w,0); octx.lineTo(-w,h); }
-function _arrow(len){ const L=len,hw=len*0.36; octx.beginPath(); octx.moveTo(-L,0); octx.lineTo(L*0.28,0); octx.moveTo(L*0.28,-hw); octx.lineTo(L,0); octx.lineTo(L*0.28,hw); }
+function _arrow(len){ const hw=len*0.32, hd=len*0.70; octx.beginPath(); octx.moveTo(0,0); octx.lineTo(hd,0); octx.moveTo(hd,-hw); octx.lineTo(len,0); octx.lineTo(hd,hw); } // base(tail) at origin -> pivots from the base
 function _star(ro,ri){ octx.beginPath(); for(let i=0;i<10;i++){ const r=i%2?ri:ro, a=-Math.PI/2+i*Math.PI/5, x=Math.cos(a)*r, y=Math.sin(a)*r; i?octx.lineTo(x,y):octx.moveTo(x,y);} octx.closePath(); }
-function shapeForKind(k){
-  if(k==='glyph'||k==='detonate') return 'star';                 // magic
-  if(k==='thrust'||k==='launch'||k==='heavy') return 'arrow';    // melee
-  return 'ring';                                                 // reticle/charge = shooting
+function actionShape(a){ return a==='strike'?'arrow': a==='cast'?'star':'ring'; }   // normal actions: shape by action (fixes cast=star at every level)
+function shapeForKind(k){                                                            // Blitz only: shape per weapon form so it combines all three
+  if(k==='glyph'||k==='detonate'||k==='cast') return 'star';    // magic
+  if(k==='thrust'||k==='launch'||k==='heavy') return 'arrow';   // melee
+  return 'ring';                                                // reticle/charge/shoot = shooting
 }
 function drawTiming(shape,cx,cy,R0,dt,win,perfWin,app,col,Rmax,glyph,next){
   if(shape==='ring'||!shape){ drawReticle(cx,cy,R0,dt,win,perfWin,app,col,Rmax,glyph,next); return; }
   const K=Rmax/app, band=clamp(K*win,7,R0*0.85), off=K*dt;       // identical timing/thickness to the ring
   const inApp = dt>-win*1.6 && dt<app*1.06, aligned=Math.abs(dt)<=win, perfect=Math.abs(dt)<=perfWin, tA=next?1:0.4;
-  const edge=(fn)=>{ octx.strokeStyle=col; octx.globalAlpha=tA*0.26; octx.lineWidth=5; for(const e of [-band,band]){ octx.save(); fn(e); octx.stroke(); octx.restore(); } };
-  const pulse=()=>{ if(next&&aligned){ octx.globalAlpha=perfect?0.95:0.55; octx.fillStyle='#fff'; octx.beginPath(); octx.arc(0,0,band*0.55,0,Math.PI*2); octx.fill(); } };
+  // success band == the ring's band*2 thickness, so every shape reads with the same weight
+  const target=(pathfn)=>{ octx.strokeStyle=col; octx.globalAlpha=tA*0.5; octx.lineWidth=band*2; pathfn(); octx.stroke();
+    octx.strokeStyle='#fff'; octx.globalAlpha=tA*0.7; octx.lineWidth=2; pathfn(); octx.stroke(); };
+  const mover=(pathfn,setup)=>{ if(!(next&&inApp))return; octx.save(); setup(); octx.strokeStyle=col; octx.globalAlpha=1; octx.lineWidth=3.5; pathfn(); octx.stroke();
+    octx.strokeStyle='#fff'; octx.globalAlpha=0.85; octx.lineWidth=1.5; pathfn(); octx.stroke(); octx.restore(); };
+  const pulse=()=>{ if(next&&aligned){ octx.globalAlpha=perfect?0.95:0.55; octx.fillStyle='#fff'; octx.beginPath(); octx.arc(shape==='arrow'?0:0,0,band*0.6,0,Math.PI*2); octx.fill(); } };
   octx.save(); octx.translate(cx,cy); octx.lineJoin='round'; octx.lineCap='round';
-  if(shape==='chevron'){
-    const S=R0*0.86;
-    edge(e=>{ octx.translate(e,0); _chevron(S); });                        // success band edges (±band in x)
-    octx.globalAlpha=tA*0.9; octx.lineWidth=clamp(band,6,14); octx.strokeStyle=col; _chevron(S); octx.stroke();
-    octx.globalAlpha=tA; octx.strokeStyle='#fff'; octx.lineWidth=2; _chevron(S); octx.stroke();
-    if(next&&inApp){ octx.save(); octx.translate(-off,0); octx.strokeStyle=col; octx.globalAlpha=1; octx.lineWidth=3.5; _chevron(S); octx.stroke();
-      octx.strokeStyle='#fff'; octx.globalAlpha=0.85; octx.lineWidth=1.5; _chevron(S); octx.stroke(); octx.restore(); }
+  if(shape==='chevron'){ const S=R0*0.86;
+    target(()=>_chevron(S));
+    mover(()=>_chevron(S), ()=>octx.translate(-off,0));          // sweeps in from the character side
     pulse();
-  } else if(shape==='arrow'){
-    const S=R0*0.98, ang=(dt/app)*(Math.PI/2);                             // rotates 90° into place
-    octx.globalAlpha=tA*0.9; octx.lineWidth=clamp(band,6,13); octx.strokeStyle=col; _arrow(S); octx.stroke();
-    octx.globalAlpha=tA; octx.strokeStyle='#fff'; octx.lineWidth=2; _arrow(S); octx.stroke();
-    if(next&&inApp){ octx.save(); octx.rotate(ang); octx.strokeStyle=col; octx.globalAlpha=1; octx.lineWidth=3.5; _arrow(S); octx.stroke();
-      octx.strokeStyle='#fff'; octx.globalAlpha=0.85; octx.lineWidth=1.5; _arrow(S); octx.stroke(); octx.restore(); }
+  } else if(shape==='arrow'){ const S=R0*1.45, ang=(dt/app)*(Math.PI/2);
+    target(()=>_arrow(S));
+    mover(()=>_arrow(S), ()=>octx.rotate(ang));                  // rotates 90° into place, pivoting at the base
     pulse();
-  } else if(shape==='star'){
-    const ro=R0*0.98, ri=R0*0.44;
-    edge(e=>{ octx.translate(0,e); _star(ro,ri); });                        // success band edges (±band in y)
-    octx.globalAlpha=tA*0.9; octx.lineWidth=clamp(band*0.85,5,12); octx.strokeStyle=col; _star(ro,ri); octx.stroke();
-    octx.globalAlpha=tA; octx.strokeStyle='#fff'; octx.lineWidth=2; _star(ro,ri); octx.stroke();
-    if(next&&inApp){ octx.save(); octx.translate(0,-off); octx.rotate(off*0.008); octx.strokeStyle=col; octx.globalAlpha=1; octx.lineWidth=3; _star(ro,ri); octx.stroke(); octx.restore(); }   // falls in from above
+  } else if(shape==='star'){ const ro=R0*0.98, ri=R0*0.44;
+    target(()=>_star(ro,ri));
+    mover(()=>_star(ro,ri), ()=>{ octx.translate(0,-off); octx.rotate(off*0.008); });   // falls in from above
     pulse();
   }
   octx.restore();
@@ -1646,12 +1641,13 @@ function overlayDraw(){
       octx.strokeStyle=grad; octx.lineWidth=3.5; octx.globalAlpha=a; octx.beginPath(); octx.moveTo(base.x,base.y); octx.lineTo(top.x,top.y); octx.stroke(); }
     octx.restore(); } }
 
-  // dodge cue — incoming enemy hit (thin ring converging onto the thick success band, over the player)
+  // dodge cue — incoming enemy hit (chevron sweeping in, to the RIGHT of the hero, not over his head)
   if(enemyAttacking() && playerMesh){
     let best=null,bd=1e9; for(const h of atk.hits){ if(h.resolved)continue; const d=(atk.startT+h.at)-T; if(d>-dwin()*1.6 && d<bd){bd=d;best=h;} }
     if(best){
       const dt=(atk.startT+best.at)-T;
-      const ps=toScreen(playerMesh.position.clone().setY(2.7));
+      const base=toScreen(playerMesh.position.clone().setY(1.55));   // hero's side (body height), not his head
+      const ps={x:base.x+96, y:base.y, ok:base.ok};                  // one chevron to the hero's right
       const spd=best.sp; const col= spd==='fast'?'#ffe14d':spd==='med'?'#ff9a3c':'#ff3b5c';
       drawTiming('chevron',ps.x,ps.y,52,dt,dwin(),pdwin(),LD(spd),col,118,null,true);
       if(Math.abs(dt)<=dwin()){ octx.save(); octx.globalAlpha=0.95; octx.fillStyle=col; octx.font='800 20px Orbitron,sans-serif'; octx.textAlign='center'; octx.lineWidth=4; octx.strokeStyle='rgba(0,0,0,.5)'; octx.strokeText('DODGE!',ps.x,ps.y-78); octx.fillText('DODGE!',ps.x,ps.y-78); octx.restore(); }
@@ -1662,14 +1658,19 @@ function overlayDraw(){
   if(off){
     let firstUnres=-1; for(let i=0;i<off.targets.length;i++){ if(!off.targets[i].resolved){firstUnres=i;break;} }
     const col= off.action==='strike'?'#ffb648': off.action==='shoot'?'#5fe0ff': off.action==='cast'?'#c07bff':'#ffd23a';
+    const drawn=[];   // already-drawn screen positions — skip overlaps (never overlap, esp. in Blitz)
     for(let i=0;i<off.targets.length;i++){
       const tg=off.targets[i]; if(tg.resolved) continue;
       const wp=offAnchor(tg); if(tg.mv==='drift'){ wp.x+=Math.sin((T-off.startT+i)*4)*1.4; }
       const s=toScreen(wp); if(!s.ok)continue;
       const R0=tg.fin?42:32;
+      // the live target is reached first (earlier ones are resolved), so it always wins; later ones that would overlap are skipped
+      if(i!==firstUnres && drawn.some(d=>Math.hypot(d.x-s.x,d.y-s.y) < (d.R0+R0)*0.95)) continue;
+      drawn.push({x:s.x,y:s.y,R0});
       const sym = tg.k==='reticle'?'◎': tg.k==='charge'?'✦':'';   // glyph only used by the ring (shoot) shape
-      // shape per weapon form: melee=arrow, magic=star, shoot=ring — so Blitz (mixed kinds) combines them
-      drawTiming(shapeForKind(tg.k),s.x,s.y,R0,(off.startT+tg.t)-T,lvGood(off.level),CFG.perfectWin,0.85*CFG.timeScale/closureSpeed(off.level),col,120,sym,i===firstUnres);
+      // normal actions: shape by ACTION (cast=star at every level); Blitz: shape per weapon form so it combines all three
+      const shape = off.action==='blitz' ? shapeForKind(tg.k) : actionShape(off.action);
+      drawTiming(shape,s.x,s.y,R0,(off.startT+tg.t)-T,lvGood(off.level),CFG.perfectWin,0.85*CFG.timeScale/closureSpeed(off.level),col,120,sym,i===firstUnres);
       if(off.action==='cast'||off.action==='blitz'){ octx.save(); octx.font='700 11px Orbitron,sans-serif'; octx.textAlign='center'; octx.globalAlpha=i===firstUnres?0.9:0.4; octx.fillStyle='#fff'; octx.fillText((i+1),s.x,s.y+R0+14); octx.restore(); }
     }
   }
