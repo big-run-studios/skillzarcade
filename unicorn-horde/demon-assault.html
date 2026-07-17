@@ -156,7 +156,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.27.1</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.27.2</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1543,9 +1543,28 @@ function basic(color,opts){ return MBM(Object.assign({color},opts||{})); }
 const colCache={};
 function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
 
+/* ---- PLAYER-CENTRED fog of war: fade a material by world-distance from the HERO (not the camera),
+   so the murk is a stable circle around you. Camera-based THREE.Fog is centred behind the hero, so
+   it swings/curves when you orbit — this keeps the ground + scatter boundary locked to the world. ---- */
+const fowU={ player:{value:new THREE.Vector3(WW/2,0,WH/2)}, near:{value:400}, far:{value:600}, col:{value:new THREE.Color(0x3a1208)} };
+function playerFog(mat){
+  mat.fog=false;   // opt out of camera-based scene fog; we do our own radial fade
+  mat.onBeforeCompile=(sh)=>{
+    sh.uniforms.uPlayer=fowU.player; sh.uniforms.uFogNear=fowU.near; sh.uniforms.uFogFar=fowU.far; sh.uniforms.uFogCol=fowU.col;
+    sh.vertexShader='varying vec3 vWPos;\n'+sh.vertexShader.replace('#include <worldpos_vertex>',
+      'vec4 _wp=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\n_wp=instanceMatrix*_wp;\n#endif\n_wp=modelMatrix*_wp;\nvWPos=_wp.xyz;');
+    sh.fragmentShader=('varying vec3 vWPos;\nuniform vec3 uPlayer;\nuniform float uFogNear;\nuniform float uFogFar;\nuniform vec3 uFogCol;\n'+sh.fragmentShader)
+      .replace('#include <dithering_fragment>',
+      'float _fd=distance(vWPos.xz,uPlayer.xz);\nfloat _ff=smoothstep(uFogNear,uFogFar,_fd);\ngl_FragColor.rgb=mix(gl_FragColor.rgb,uFogCol.rgb,_ff);\n#include <dithering_fragment>');
+  };
+  mat.customProgramCacheKey=()=>'playerFog';   // don't share a compiled program with un-patched materials
+  mat.needsUpdate=true;
+}
+
 /* ---- ground (authored lava-field texture: assets/ground.jpg — calmer center, hotter edges) ---- */
 (function buildGround(){
   const mat=MBM({color:0x14161b});   // dark charcoal until the texture streams in (no white flash)
+  playerFog(mat);                    // ground fades in a stable circle around the hero (not the camera)
   const mesh=new THREE.Mesh(new THREE.PlaneGeometry(WW*3,WH*3), mat);   // 3×3: the arena tile sits in the centre, one arena-width of floor beyond every wall
   mesh.rotation.x=-Math.PI/2; mesh.position.set(WW/2,0,WH/2);
   scene.add(mesh);
@@ -1606,7 +1625,8 @@ let fowVis=540;     // FOG OF WAR: player-space visibility radius (≈1.5× shoo
 /* ---- far world: dark jagged silhouettes ringing the arena, dense near the walls, thinning into the fog ---- */
 (function scatterFar(){
   const N_SPIRE=150, N_ROCK=90, BEYOND=1900;   // BEYOND kept inside the 3×3 floor so every prop sits on textured ground
-  const mat=MBM({color:0x160b09});   // near-black warm rock; fog tints it toward the red haze with distance → reads as a silhouette
+  const mat=MBM({color:0x160b09});   // near-black warm rock; fades into the murk with distance → reads as a silhouette
+  playerFog(mat);                    // scatter uses the same player-centred fade as the ground so the boundary is one consistent circle
   const spireGeo=new THREE.ConeGeometry(1,1,5), rockGeo=new THREE.IcosahedronGeometry(1,0);
   const spires=new THREE.InstancedMesh(spireGeo,mat,N_SPIRE), rocks=new THREE.InstancedMesh(rockGeo,mat,N_ROCK);
   spires.castShadow=spires.receiveShadow=rocks.castShadow=rocks.receiveShadow=false;   // beyond the tight shadow frustum anyway
@@ -2660,9 +2680,9 @@ function syncScene(dt){
     const rng=CFG.aimRange[weap.cur]||360; fowVis=rng*1.5;
     const cdx=camera.position.x-px, cdy=camera.position.y, cdz=camera.position.z-py;
     const camD=Math.sqrt(cdx*cdx+cdy*cdy+cdz*cdz);   // camera → hero
-    scene.fog.near=camD+rng*0.7;    // crisp out to ~0.7× range
-    scene.fog.far =camD+fowVis;     // fully swallowed by 1.5× range
-  }
+    scene.fog.near=camD+rng*0.7; scene.fog.far=camD+fowVis;   // camera-based fog: enemies, models, and the sky murk
+    fowU.player.value.set(px,0,py); fowU.near.value=rng*0.7; fowU.far.value=fowVis;   // PLAYER-centred fog: ground + scatter → a stable circle around the hero, so orbiting the camera feels natural
+  } else { fowU.far.value=1e9; }   // fog off (sandbox) → ground fully visible
   sun.position.set(px-760, 470, py+340); sun.target.position.set(px, 0, py); sun.target.updateMatrixWorld();
 
   // unicorn
