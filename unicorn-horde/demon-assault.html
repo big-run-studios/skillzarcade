@@ -156,7 +156,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.27.2</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.27.3</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1513,7 +1513,7 @@ scene.background=new THREE.Color(0x0e0604);
 const _pmrem=new THREE.PMREMGenerator(renderer); const _envScene=new THREE.Scene();
 _envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50,20,10),MBM({color:0x3a1c14,side:THREE.BackSide})));
 const uniEnv=_pmrem.fromScene(_envScene,0.06).texture;
-scene.fog=new THREE.Fog(0x3a1208, 1500, 2500);   // deep-ember fog-of-war murk. now that the sky dome is fogged too, this colour envelops you on ALL sides (radial, not a band) — dark so the world melts into it softly with a red heat rather than a garish orange line. near/far are overridden per-frame by the fog-of-war (see syncScene)
+scene.fog=new THREE.Fog(0x5a2414, 1500, 2500);   // camera fog for enemies/hero only (the environment uses player-centred playerFog). colour matches fowU so everything fades into the same warm haze. near/far overridden per-frame (see syncScene)
 const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 10, 4200);
 camera.layers.enable(1);   // render layer 1 (character-only lights live here, else the renderer culls them)
 
@@ -1546,7 +1546,7 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
 /* ---- PLAYER-CENTRED fog of war: fade a material by world-distance from the HERO (not the camera),
    so the murk is a stable circle around you. Camera-based THREE.Fog is centred behind the hero, so
    it swings/curves when you orbit — this keeps the ground + scatter boundary locked to the world. ---- */
-const fowU={ player:{value:new THREE.Vector3(WW/2,0,WH/2)}, near:{value:400}, far:{value:600}, col:{value:new THREE.Color(0x3a1208)} };
+const fowU={ player:{value:new THREE.Vector3(WW/2,0,WH/2)}, near:{value:400}, far:{value:600}, col:{value:new THREE.Color(0x5a2414)} };   // mid-tone warm haze: things dissolve INTO it (mist) rather than fade to black
 function playerFog(mat){
   mat.fog=false;   // opt out of camera-based scene fog; we do our own radial fade
   mat.onBeforeCompile=(sh)=>{
@@ -1558,7 +1558,19 @@ function playerFog(mat){
       'float _fd=distance(vWPos.xz,uPlayer.xz);\nfloat _ff=smoothstep(uFogNear,uFogFar,_fd);\ngl_FragColor.rgb=mix(gl_FragColor.rgb,uFogCol.rgb,_ff);\n#include <dithering_fragment>');
   };
   mat.customProgramCacheKey=()=>'playerFog';   // don't share a compiled program with un-patched materials
-  mat.needsUpdate=true;
+  mat.needsUpdate=true; mat.userData._pfog=true;
+}
+// patch every (non-FX) material under a subtree so the WHOLE environment fades into the same haze
+function playerFogTree(root){
+  root.traverse(o=>{
+    if(!(o.isMesh||o.isInstancedMesh||o.isSkinnedMesh)) return;
+    const mats=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of mats){
+      if(!m || m.userData._pfog!==undefined) continue;                 // already handled (patched, or a clone that inherited the flag)
+      if(m.blending===THREE.AdditiveBlending){ m.userData._pfog=false; continue; }   // leave glow/FX alone
+      playerFog(m);
+    }
+  });
 }
 
 /* ---- ground (authored lava-field texture: assets/ground.jpg — calmer center, hotter edges) ---- */
@@ -1590,6 +1602,7 @@ function playerFog(mat){
 /* ---- walls ---- */
 (function buildWalls(){
   const wallMat=toon(0x241512), trimMat=basic(0xff5a2a);
+  playerFog(wallMat); playerFog(trimMat);   // walls fade into the haze with the ground
   function wall(x,z,w,d){
     const m=new THREE.Mesh(new THREE.BoxGeometry(w,WALLH,d),wallMat);
     m.position.set(x,WALLH/2,z); scene.add(m);
@@ -1618,7 +1631,8 @@ let fowVis=540;     // FOG OF WAR: player-space visibility radius (≈1.5× shoo
   g.fillStyle=grd; g.fillRect(0,0,16,256);
   const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
   skyDome=new THREE.Mesh(new THREE.SphereGeometry(4000,32,16),
-    MBM({map:tex, side:THREE.BackSide, fog:true, depthWrite:false}));   // fog:true — the dome sits far beyond the fog-of-war radius, so it reads as solid murk all around (no see-through, no horizon "line"). Only shows its glow gradient when fog is off (sandbox)
+    MBM({map:tex, side:THREE.BackSide, depthWrite:false}));
+  playerFog(skyDome.material);   // player-centred like the ground: the dome sits far beyond the fog radius → uniform haze all around (shows its glow gradient only when fog is off, e.g. sandbox)
   skyDome.position.set(WW/2,0,WH/2); skyDome.renderOrder=-1; scene.add(skyDome);
 })();
 
@@ -1745,6 +1759,7 @@ function rebuildStructMeshes(){
   }
   // solid structure parts cast real shadows (skip transparent glow pools / fire / ember halos)
   structGroup.traverse(o=>{ if(o.isMesh && o.material && !o.material.transparent) o.castShadow=true; });
+  playerFogTree(structGroup);   // stalls/fountains/eye-stalks + GLB prop clones all fade into the same haze (glow/FX skipped)
   scene.add(structGroup);
   structsDirty=false;
 }
@@ -2124,7 +2139,8 @@ function makeGargoyleGLB(d){
 /* ---- ENVIRONMENT PROPS: static (non-skinned) GLBs — brazier, eye-staff, chest, 2× skull pile ---- */
 function _propFit(model){
   model.traverse(o=>{ if(o.isMesh){ o.layers.enable(CHAR_LAYER); o.frustumCulled=false;   // lit by the character lights so PBR reads in the dark scene
-    const m=o.material; if(m&&m.emissive){ m.emissiveIntensity=m.emissiveMap?1.0:0.5; if(!m.emissiveMap) m.emissive.set(0x24110a); } } });
+    const m=o.material; if(m&&m.emissive){ m.emissiveIntensity=m.emissiveMap?1.0:0.5; if(!m.emissiveMap) m.emissive.set(0x24110a); }
+    if(m){ (Array.isArray(m)?m:[m]).forEach(mm=>{ if(mm && mm.userData._pfog===undefined) playerFog(mm); }); } } });   // props fade into the haze (clones inherit the patch)
   const box=new THREE.Box3().setFromObject(model), sz=box.getSize(new THREE.Vector3());
   return { m:model, fitXZ:Math.max(sz.x,sz.z)||1, fitY:sz.y||1, lx:sz.x, lz:sz.z,
            cx:(box.min.x+box.max.x)/2, cz:(box.min.z+box.max.z)/2, miny:box.min.y };
@@ -2677,12 +2693,12 @@ function syncScene(dt){
   // FOG OF WAR: visibility ≈ 1.5× your shoot range, measured from the HERO. Fog is camera-based, so
   // add the live camera→hero distance (differs per mode) → the bubble is the same size in both cameras.
   if(scene.fog && weap){
-    const rng=CFG.aimRange[weap.cur]||360; fowVis=rng*1.5;
+    const rng=CFG.aimRange[weap.cur]||360; fowVis=rng*1.6;
     const cdx=camera.position.x-px, cdy=camera.position.y, cdz=camera.position.z-py;
     const camD=Math.sqrt(cdx*cdx+cdy*cdy+cdz*cdz);   // camera → hero
-    scene.fog.near=camD+rng*0.7; scene.fog.far=camD+fowVis;   // camera-based fog: enemies, models, and the sky murk
-    fowU.player.value.set(px,0,py); fowU.near.value=rng*0.7; fowU.far.value=fowVis;   // PLAYER-centred fog: ground + scatter → a stable circle around the hero, so orbiting the camera feels natural
-  } else { fowU.far.value=1e9; }   // fog off (sandbox) → ground fully visible
+    scene.fog.near=camD+rng*0.5; scene.fog.far=camD+fowVis;   // camera-based fog: enemies + hero only (colour matches the haze)
+    fowU.player.value.set(px,0,py); fowU.near.value=rng*0.5; fowU.far.value=fowVis;   // PLAYER-centred fog: the WHOLE environment → a stable haze circle around the hero; soft gradient 0.5→1.6× range so haze builds gradually (not a hard vignette)
+  } else { fowU.far.value=1e9; }   // fog off (sandbox) → environment fully visible
   sun.position.set(px-760, 470, py+340); sun.target.position.set(px, 0, py); sun.target.updateMatrixWorld();
 
   // unicorn
