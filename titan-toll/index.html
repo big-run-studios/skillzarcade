@@ -96,6 +96,13 @@
   #levelToast.show{animation:levelToast 1.7s ease-out;}
   @keyframes levelToast{0%{opacity:0;transform:translate(-50%,-45%) scale(.6);}16%{opacity:1;transform:translate(-50%,-54%) scale(1.1);}68%{opacity:1;transform:translate(-50%,-58%) scale(1);}100%{opacity:0;transform:translate(-50%,-70%) scale(1);}}
 
+  /* ---------- rage escalation flyout ---------- */
+  #rageToast{position:absolute;left:50%;top:27%;transform:translate(-50%,-50%);opacity:0;pointer-events:none;text-align:center;z-index:16;}
+  #rageToast .sm{font-family:var(--display);font-weight:800;font-size:14px;letter-spacing:4px;color:#fff;text-shadow:0 0 10px rgba(255,80,80,.85);}
+  #rageToast .big{font-family:var(--display);font-weight:900;font-size:40px;letter-spacing:2px;margin-top:2px;text-shadow:0 2px 0 rgba(60,0,0,.6),0 0 28px rgba(255,60,60,.95);}
+  #rageToast.show{animation:rageToast 2.1s ease-out;}
+  @keyframes rageToast{0%{opacity:0;transform:translate(-50%,-40%) scale(.5);}12%{opacity:1;transform:translate(-50%,-53%) scale(1.2);}30%{transform:translate(-50%,-50%) scale(1);}72%{opacity:1;}100%{opacity:0;transform:translate(-50%,-60%) scale(1);}}
+
   /* ---------- corner buttons (match hub / other games: panel circle, themed border, blur) ---------- */
   .corner{position:absolute;z-index:40;width:37px;height:37px;border-radius:50%;display:flex;align-items:center;justify-content:center;
     font-family:var(--display);font-weight:800;line-height:1;cursor:pointer;color:#fff;
@@ -180,6 +187,8 @@
 
     <!-- level-up flyout -->
     <div id="levelToast"></div>
+    <!-- rage escalation flyout -->
+    <div id="rageToast"></div>
 
     <div id="backBtn" class="corner" title="Arcade">‹</div>
     <div id="dbgBtn" class="corner" title="Debug">⚙</div>
@@ -228,7 +237,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.5.2</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.6.0</div>
   </div>
 </div>
 
@@ -294,6 +303,12 @@ const CFG={
   breather:[1.45,1.05,0.62],// idle gap before next enemy telegraph, per enemy
   staggerTime:1.4,         // blitz stagger: enemy can't start a set for this long
   timeScale:2,             // global slowdown for telegraphs + attack/sequence pacing (higher = easier to read)
+  timeBonusPerSec:10,      // +10 score for every second survived (at risk until cashout)
+  angryAt:60, enrageAt:120,// rage phase thresholds (seconds of total run time)
+  rageTele:[1,0.5,0.375],  // telegraph-lead multiplier:  calm / angry(½) / enraged(−25% more)
+  rageWin:[1,0.75,0.675],  // dodge-window multiplier:     calm / angry(−25%) / enraged(−10% more)
+  dodgeScorePerfect:1000, dodgeScoreGoodHi:750, dodgeScoreGoodLo:300, // dodge score by quality
+  dmgFontMax:300,          // damage >= this draws at the 4x max size
 };
 
 /* action base damage units + per-action character */
@@ -345,8 +360,12 @@ const SEQ={
    hit = {sp:'slow'|'med'|'fast', dmg, at}  at = impact time from set start (s)
    dodge windows never overlap (all gaps >= 0.24s > 2*dodgeWin)
    ========================================================================= */
+let runClock=0, ragePhase=0;                   // total combat time (s) + rage phase (0 calm / 1 angry / 2 enraged)
 const LEAD={slow:0.9, med:0.58, fast:0.34};   // telegraph lead per speed (base; scaled by CFG.timeScale)
-const LD=sp=>LEAD[sp]*CFG.timeScale;           // effective telegraph lead
+const LD=sp=>LEAD[sp]*CFG.timeScale*CFG.rageTele[ragePhase];  // telegraph lead (rage shortens it)
+const dwin=()=>CFG.dodgeWin*CFG.rageWin[ragePhase];           // current dodge (good) window
+const pdwin=()=>CFG.perfectDodgeWin*CFG.rageWin[ragePhase];   // current perfect-dodge window
+const bankValue=()=>Math.round(score)+Math.floor(runClock*CFG.timeBonusPerSec);  // at-risk total = score + survival bonus
 const H=(sp,dmg,at)=>({sp,dmg,at});
 
 const ENEMIES=[
@@ -576,6 +595,8 @@ function updateBlitzRibbons(rdt){
 // hero glow that flashes when Blitz activates
 let heroFlashT=0;
 const heroLight=new THREE.PointLight(0xffd76a,0,16); scene.add(heroLight);
+// enemy anger glow — ramps red with rage phase
+const enemyRageLight=new THREE.PointLight(0xff3020,0,34); scene.add(enemyRageLight);
 
 /* =========================================================================
    PLAYER — low-poly warrior with a transforming pike
@@ -823,7 +844,7 @@ function startRun(sd){
   document.getElementById('dSeed').value=seed;
   hp=CFG.playerHP; score=0; mult=1; multMeter=0; blitz=0; xp=0; levelUps=0;
   lv={strike:1,shoot:1,cast:1,blitz:1}; use={strike:1,shoot:1,cast:1,blitz:1};
-  actBar=0; off=null; queuedAction=null; T=0; resolveLockT=0; castStreak=0; staggerT=0; forcedAttack=-1;
+  actBar=0; off=null; queuedAction=null; T=0; runClock=0; ragePhase=0; resolveLockT=0; castStreak=0; staggerT=0; forcedAttack=-1;
   hitLog.length=0; floaters.length=0; particles.length=0; paused=false;
   if(!playerMesh){playerMesh=buildPlayer(); scene.add(playerMesh);}
   playerPose='idle'; poseT=0;
@@ -853,14 +874,15 @@ function proceedNext(){
 function cashOut(fullClear){
   if(state!=='combat' && !fullClear) return;
   if(resolveLockT>0 && !fullClear) return;
-  let s=Math.round(score);
+  const base=Math.round(score), tb=Math.floor(runClock*CFG.timeBonusPerSec);
+  let s=base+tb;
   let br='';
   if(fullClear){
     const bonus=Math.round(s*CFG.clearBonus);
-    br=`SCORE  ${s.toLocaleString()}\nFULL-CLEAR BONUS  +${bonus.toLocaleString()}  (+${Math.round(CFG.clearBonus*100)}%)`;
+    br=`SCORE ${base.toLocaleString()}  ·  TIME +${tb.toLocaleString()}\nFULL-CLEAR BONUS  +${bonus.toLocaleString()}  (+${Math.round(CFG.clearBonus*100)}%)`;
     s+=bonus; resultTitle='TITANS FELLED';
   }else{
-    br=`BANKED  ${s.toLocaleString()}\nFoe ${enemyIdx+1}/3 · ${Math.round(hp)} HP left`;
+    br=`SCORE ${base.toLocaleString()}  ·  TIME +${tb.toLocaleString()}\nFoe ${enemyIdx+1}/3 · ${Math.round(hp)} HP left`;
     resultTitle='CASHED OUT';
   }
   finalScore=s; resultBreak=br;
@@ -990,7 +1012,7 @@ function resolveTarget(tg, grade, err){
   if(grade==='perfect'){ sfx(crit?'crit':'perfect'); addFloater(anchor,crit?'CRITICAL':'PERFECT',crit?'#ff5cc8':'#ffd23a',crit?1.2:1.0,crit?30:24); hitPauseT=CFG.hitPause*(crit?1.6:1); shake(crit?0.5:0.28,0.28); burst(anchor,crit?'#ff5cc8':'#ffd23a',crit?18:10);}
   else if(grade==='good'){ sfx(crit?'crit':'good'); addFloater(anchor,crit?'CRITICAL':'GOOD',crit?'#ff5cc8':'#7bd0ff',crit?1.1:0.85,crit?28:20); if(crit){hitPauseT=CFG.hitPause*1.4;shake(0.4,0.24);} burst(anchor,crit?'#ff5cc8':'#7bd0ff',crit?14:7);}
   else { sfx('miss'); addFloater(anchor,'MISS','#8a99b8',0.8,18); }
-  if(dmg>0) addFloater(anchor.clone().add(new THREE.Vector3(0,-1.0,0)), '-'+dmg, crit?'#ff9ad8':'#ffffff', 0.9, crit?20:15);
+  if(dmg>0) addDmgFloater(anchor.clone().add(new THREE.Vector3(0,-0.6,0)), dmg, crit?'#ff9ad8':'#ffffff', crit);
   hitLog.push({t:+T.toFixed(3),kind:'atk:'+off.action,grade,err:err==null?null:+err.toFixed(3)});
   if(hitLog.length>60)hitLog.shift();
   poseT=0;
@@ -1030,17 +1052,21 @@ function tapDodge(now, offset, forcedHit){
     if(hit.resolved) continue;
     const imp=atk.startT+hit.at;
     const err=(offset!=null?offset:(now-imp));
-    if(Math.abs(err)<=CFG.dodgeWin && Math.abs(err)<bestErr){ best=hit; bestErr=Math.abs(err); best._err=err; }
+    if(Math.abs(err)<=dwin() && Math.abs(err)<bestErr){ best=hit; bestErr=Math.abs(err); best._err=err; }
   }
   if(!best){ return; }   // early/late = fail (hit will still land)
   best.resolved=true; best.dodged=true;
-  const perfect=bestErr<=CFG.perfectDodgeWin;
+  const perfect=bestErr<=pdwin();
+  // dodge score by quality: perfect => 1000; good scales GoodHi..GoodLo by precision
+  const pts = perfect ? CFG.dodgeScorePerfect
+    : Math.round(lerp(CFG.dodgeScoreGoodHi, CFG.dodgeScoreGoodLo, clamp((bestErr-pdwin())/Math.max(1e-4,dwin()-pdwin()),0,1)));
+  score += pts;
   addMult(perfect?CFG.mPerfDodge:CFG.mDodge);
   blitz=Math.min(CFG.blitzMax, blitz+(perfect?CFG.blitzPerfDodge:CFG.blitzDodge));
   addXP(CFG.xpAction*0.3,'blitz',6);   // small xp toward blitz for dodging well
   sfx(perfect?'pdodge':'dodge');
   const p=playerMesh.position.clone().setY(2.4);
-  addFloater(p,perfect?'PERFECT DODGE':'DODGE',perfect?'#eafcff':'#bfe6ff',perfect?1.05:0.85,perfect?24:18);
+  addFloater(p,(perfect?'PERFECT DODGE':'DODGE')+'  +'+pts,perfect?'#eafcff':'#bfe6ff',perfect?1.05:0.85,perfect?24:18);
   groundBeams(perfect?'#eafcff':'#9fd8ff');
   hitPauseT=CFG.hitPause*(perfect?1.1:0.7);
   hitLog.push({t:+T.toFixed(3),kind:'dodge',grade:perfect?'perfect':'good',err:+best._err.toFixed(3)});
@@ -1101,18 +1127,18 @@ function updateEnemy(dt){
   if(enemyState==='telegraph'||enemyState==='active'){
     const rel=T-atk.startT;
     // 'active' must open no later than the dodge window's early edge, so the first hit's full ±dodgeWin is dodgeable.
-    enemyState = rel<atk.hits[0].at-Math.max(LD(atk.hits[0].sp)*0.15, CFG.dodgeWin) ? 'telegraph':'active';
+    enemyState = rel<atk.hits[0].at-Math.max(LD(atk.hits[0].sp)*0.15, dwin()) ? 'telegraph':'active';
     // per-hit telegraph audio
     for(const hit of atk.hits){
       if(!hit.tele){ const lead=LD(hit.sp); if(rel>=hit.at-lead){ hit.tele=true; } }
       // resolve at window close if undodged
       if(!hit.resolved){
         const imp=hit.at;
-        if(rel>=imp+CFG.dodgeWin){ hit.resolved=true; landHit(hit); }
+        if(rel>=imp+dwin()){ hit.resolved=true; landHit(hit); }
       }
     }
     const last=atk.hits[atk.hits.length-1];
-    if(rel>=last.at+CFG.dodgeWin+0.02 && atk.hits.every(h=>h.resolved)){
+    if(rel>=last.at+dwin()+0.02 && atk.hits.every(h=>h.resolved)){
       enemyState='recovery'; enemyTimer=0; recDur=atk.set.rec; vulnAction=pickVuln();
     }
     return;
@@ -1184,6 +1210,28 @@ function doLevelUp(){
 function shake(a,t){ shakeAmt=Math.max(shakeAmt,a); shakeT=Math.max(shakeT,t); }
 function addFloater(worldPos,text,color,scale,size){
   floaters.push({p:worldPos.clone(),text,color,scale:scale||1,size:size||18,life:0,max:0.95,vy:1.6});
+}
+// damage number: size scales with the hit (<50 = base, up to 4x); digits fade in + drop one at a time
+function addDmgFloater(worldPos,dmg,color,crit){
+  const sz=clamp(1+(dmg-50)/(CFG.dmgFontMax-50)*3,1,4);
+  floaters.push({p:worldPos.clone(),kind:'dmg',text:String(dmg),color,sizeScale:sz,crit:!!crit,life:0,max:1.35,vy:0.9});
+}
+const DMG_STAGGER=0.055, DMG_REVEAL=0.16, DMG_BASEPX=26;
+function drawDmgFloater(f,s){
+  const fs=DMG_BASEPX*f.sizeScale;
+  octx.save(); octx.font='900 '+fs.toFixed(1)+'px Orbitron,sans-serif'; octx.textAlign='center'; octx.textBaseline='middle'; octx.lineWidth=Math.max(4,fs*0.13);
+  const digits=('-'+f.text).split('');
+  const widths=digits.map(d=>octx.measureText(d).width); const totalW=widths.reduce((a,b)=>a+b,0);
+  const revealDone=(digits.length-1)*DMG_STAGGER+DMG_REVEAL;
+  const floatUp=Math.max(0,f.life-revealDone)*46;
+  const gFade=f.life>f.max-0.3?clamp((f.max-f.life)/0.3,0,1):1;
+  let x=s.x-totalW/2;
+  for(let i=0;i<digits.length;i++){ const t=f.life-i*DMG_STAGGER; let a=0,yoff=0;
+    if(t>0){ if(t<DMG_REVEAL){ a=t/DMG_REVEAL; yoff=-(1-t/DMG_REVEAL)*fs*0.55; } else a=1; }
+    a*=gFade; const cx=x+widths[i]/2, cy=s.y+yoff-floatUp;
+    octx.globalAlpha=a; octx.strokeStyle='rgba(0,0,0,.6)'; octx.strokeText(digits[i],cx,cy);
+    octx.fillStyle=f.color; octx.fillText(digits[i],cx,cy); x+=widths[i]; }
+  octx.restore();
 }
 function burst(worldPos,color,n){
   for(let i=0;i<n;i++){
@@ -1274,7 +1322,8 @@ function update(rdt){
   step(dt);
 }
 function step(dt){
-  T+=dt;
+  T+=dt; runClock+=dt;
+  { const rp = runClock>=CFG.enrageAt?2 : runClock>=CFG.angryAt?1 : 0; if(rp>ragePhase){ ragePhase=rp; onRageChange(rp); } }
   resolveLockT=Math.max(0,resolveLockT-dt);
   if(!off && !queuedAction && actBar<1){ actBar=Math.min(1, actBar+dt/CFG.actionFill); }
   if(off){
@@ -1379,6 +1428,7 @@ function frame(nw){
   try{ update(rdt); }catch(err){ console.error('update',err); }
   try{ if(playerMesh)animatePlayer(rdt); if(enemyMesh)animateEnemy(rdt); updateBlitzRibbons(rdt); }catch(err){ console.error('anim',err); }
   if(playerMesh){ heroLight.position.set(playerMesh.position.x,1.7,playerMesh.position.z); heroLight.intensity = heroFlashT>0 ? (heroFlashT/0.5)*14 : 0; }
+  if(enemyMesh && ragePhase>0){ enemyMesh.userData.anchors.core.getWorldPosition(enemyRageLight.position); enemyRageLight.intensity=(ragePhase===1?1.4:2.8)*(0.8+0.2*Math.sin(performance.now()/140)); } else enemyRageLight.intensity=0;
   // camera shake
   const sx=(Math.random()-0.5)*shakeAmt*0.5, sy=(Math.random()-0.5)*shakeAmt*0.5;
   camera.position.set(CAM.pos.x+sx,CAM.pos.y+sy,CAM.pos.z); camera.lookAt(CAM.look.x+sx,CAM.look.y+sy,CAM.look.z);
@@ -1464,13 +1514,13 @@ function overlayDraw(){
 
   // dodge cue — incoming enemy hit (thin ring converging onto the thick success band, over the player)
   if(enemyAttacking() && playerMesh){
-    let best=null,bd=1e9; for(const h of atk.hits){ if(h.resolved)continue; const d=(atk.startT+h.at)-T; if(d>-CFG.dodgeWin*1.6 && d<bd){bd=d;best=h;} }
+    let best=null,bd=1e9; for(const h of atk.hits){ if(h.resolved)continue; const d=(atk.startT+h.at)-T; if(d>-dwin()*1.6 && d<bd){bd=d;best=h;} }
     if(best){
       const dt=(atk.startT+best.at)-T;
       const ps=toScreen(playerMesh.position.clone().setY(2.7));
       const spd=best.sp; const col= spd==='fast'?'#ffe14d':spd==='med'?'#ff9a3c':'#ff3b5c';
-      drawReticle(ps.x,ps.y,52,dt,CFG.dodgeWin,CFG.perfectDodgeWin,LD(spd),col,118,null,true);
-      if(Math.abs(dt)<=CFG.dodgeWin){ octx.save(); octx.globalAlpha=0.95; octx.fillStyle=col; octx.font='800 20px Orbitron,sans-serif'; octx.textAlign='center'; octx.lineWidth=4; octx.strokeStyle='rgba(0,0,0,.5)'; octx.strokeText('DODGE!',ps.x,ps.y-78); octx.fillText('DODGE!',ps.x,ps.y-78); octx.restore(); }
+      drawReticle(ps.x,ps.y,52,dt,dwin(),pdwin(),LD(spd),col,118,null,true);
+      if(Math.abs(dt)<=dwin()){ octx.save(); octx.globalAlpha=0.95; octx.fillStyle=col; octx.font='800 20px Orbitron,sans-serif'; octx.textAlign='center'; octx.lineWidth=4; octx.strokeStyle='rgba(0,0,0,.5)'; octx.strokeText('DODGE!',ps.x,ps.y-78); octx.fillText('DODGE!',ps.x,ps.y-78); octx.restore(); }
     }
   }
 
@@ -1495,7 +1545,9 @@ function overlayDraw(){
   }
 
   // floaters
-  for(const f of floaters){ const s=toScreen(f.p); if(!s.ok)continue; const a=1-f.life/f.max;
+  for(const f of floaters){ const s=toScreen(f.p); if(!s.ok)continue;
+    if(f.kind==='dmg'){ drawDmgFloater(f,s); continue; }
+    const a=1-f.life/f.max;
     octx.save(); octx.globalAlpha=a; octx.font='800 '+(f.size*f.scale)+'px Orbitron,sans-serif'; octx.textAlign='center'; octx.textBaseline='middle';
     octx.lineWidth=4; octx.strokeStyle='rgba(0,0,0,.55)'; octx.strokeText(f.text,s.x,s.y); octx.fillStyle=f.color; octx.fillText(f.text,s.x,s.y); octx.restore(); }
 }
@@ -1518,7 +1570,7 @@ function syncHud(){
   // mult + score/cashout (left container)
   el('multBadge').textContent='×'+mult+(mult>=CFG.multMax?' MAX':'');
   el('multFill').style.transform=`scaleX(${mult>=CFG.multMax?1:multMeter})`;
-  el('cashVal').textContent=Math.round(score).toLocaleString();
+  el('cashVal').textContent=bankValue().toLocaleString();
   el('cashBtn').classList.toggle('lock',resolveLockT>0||state!=='combat');
   // radial: shown only when a selection is available (or one is queued)
   const canAct=!off&&!queuedAction&&actBar>=1&&state==='combat';
@@ -1538,6 +1590,18 @@ function updateHudStatic(){
   const ms=l=>(l>=3?(l>=6?(l>=9?'★':'✦'):'•'):'');   // milestone marker on the level badge
   el('btnStrikeLv').textContent='LVL '+lv.strike; el('btnShootLv').textContent='LVL '+lv.shoot;
   el('btnCastLv').textContent='LVL '+lv.cast; el('btnBlitzLv').textContent='LVL '+lv.blitz;
+}
+// rage escalation: dramatic centered flyout + shake + growl (enemy red glow handled in the loop)
+function rageCallout(word,color){
+  const rt=el('rageToast'); if(!rt) return;
+  rt.innerHTML='<div class="sm">THE ENEMY BECOMES</div><div class="big" style="color:'+color+'">'+word+'</div>';
+  rt.classList.remove('show'); void rt.offsetWidth; rt.classList.add('show');
+}
+function onRageChange(rp){
+  if(rp<=0) return;
+  rageCallout(rp===1?'ANGRY!':'ENRAGED!', rp===1?'#ffb648':'#ff3b5c');
+  shake(rp===1?0.7:0.95, 0.6); sfx('blitz');
+  if(enemyMesh) burst(enemyMesh.userData.anchors.core.getWorldPosition(new THREE.Vector3()), rp===1?'#ffb648':'#ff3b5c', 18);
 }
 // level-up notification: text flyout + golden beams around the hero
 function levelUpFX(pick, level){
@@ -1589,7 +1653,8 @@ window.__game={
     enemyHP:enemy?Math.round(enemy.hp):0, enemyMax:enemy?enemy.maxHp:0, hp:Math.round(hp), score:Math.round(score),
     mult, multMeter:+multMeter.toFixed(2), blitz:Math.round(blitz), blitzReady:blitz>=CFG.blitzMax, xp:Math.round(xp), levelUps, lv:{...lv}, use:{strike:+use.strike.toFixed(0),shoot:+use.shoot.toFixed(0),cast:+use.cast.toFixed(0),blitz:+use.blitz.toFixed(0)},
     actBar:+actBar.toFixed(2), off:off?{action:off.action,tier:off.tier,left:off.targets.filter(t=>!t.resolved).length}:null, queued:queuedAction,
-    enemyState, atk:atk?atk.set.name:null, atkLeft:atk?atk.hits.filter(h=>!h.resolved).length:0, vuln:vulnAction, lock:+resolveLockT.toFixed(2), draws:renderer.info.render.calls }; },
+    enemyState, atk:atk?atk.set.name:null, atkLeft:atk?atk.hits.filter(h=>!h.resolved).length:0, vuln:vulnAction, lock:+resolveLockT.toFixed(2),
+    runClock:+runClock.toFixed(2), ragePhase, bank:bankValue(), draws:renderer.info.render.calls }; },
   step:d=>{ try{ if(state==='combat')step(d); else if(state==='defeated'){defeatedT+=d; if(defeatedT>1.3)proceedNext();} }catch(e){console.error(e);} },
   start:sd=>startRun(sd), toMenu,
   commit, cashout:()=>cashOut(false),
