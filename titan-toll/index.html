@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Titan Guard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Fredoka:wght@500;600;700&family=Orbitron:wght@600;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Orbitron:wght@600;700;900&display=swap" rel="stylesheet">
 <style>
   :root{
-    --display:'Orbitron',sans-serif; --epic:'Cinzel',serif; --body:'Fredoka','Arial Rounded MT Bold',sans-serif;
+    /* brand fonts (match the hub + other games): Orbitron display, Fredoka body */
+    --display:'Orbitron',sans-serif; --epic:'Orbitron',sans-serif; --body:'Fredoka','Arial Rounded MT Bold',sans-serif;
     --strike:#ffb648; --shoot:#5fe0ff; --cast:#c07bff; --blitz:#ffd23a;
     --danger:#ff3b5c; --good:#7bd0ff; --perfect:#ffd23a; --crit:#ff5cc8; --dodge:#eafcff;
     --hp:#ff5566; --ehp:#ffcf6b; --xp:#7be0a8; --cash:#5effa8;
-    --txt:#f2f7ff; --dim:#9fb2d8; --ink:#0b1226;
+    --txt:#f2f7ff; --dim:#9fb2d8; --ink:#0b1226; --panel:#111a40;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}
   html,body{height:100%;overflow:hidden;background:#8fbfe8;touch-action:none;}
@@ -62,7 +63,7 @@
   #hpVal{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-family:var(--display);font-weight:800;font-size:12px;color:#fff;text-shadow:0 1px 2px #000;z-index:2;}
 
   /* ---------- radial action menu (lower-right, shown only when selectable) ---------- */
-  #radial{position:absolute;right:0;bottom:0;width:240px;height:255px;pointer-events:none;opacity:0;transform:scale(.82);transition:opacity .16s,transform .16s;}
+  #radial{position:absolute;right:0;bottom:0;width:252px;height:300px;pointer-events:none;opacity:0;transform:scale(.85);transition:opacity .16s,transform .16s;}
   #radial.show{opacity:1;transform:scale(1);}
   .rbtn{position:absolute;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;pointer-events:auto;color:#fff;
     display:flex;align-items:center;justify-content:center;
@@ -70,8 +71,8 @@
     box-shadow:0 3px 12px rgba(0,0,0,.5),inset 0 0 0 2px rgba(255,255,255,.12);
     opacity:.38;filter:grayscale(.6);transition:transform .08s,opacity .12s,filter .12s;}
   .rbtn .ic{font-size:25px;line-height:1;color:currentColor;text-shadow:0 0 8px currentColor;}
-  .rbtn .rlv{position:absolute;bottom:-3px;right:-3px;min-width:19px;height:19px;border-radius:10px;padding:0 4px;
-    font-family:var(--display);font-weight:800;font-size:10px;color:#0b1226;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.5);}
+  .rbtn .rlv{position:absolute;bottom:-11px;left:50%;transform:translateX(-50%);white-space:nowrap;padding:2px 7px;border-radius:999px;
+    font-family:var(--display);font-weight:800;font-size:9px;letter-spacing:.5px;color:#0b1226;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.55);}
   .rbtn.strike{color:var(--strike);} .rbtn.shoot{color:var(--shoot);} .rbtn.cast{color:var(--cast);} .rbtn.blitz{color:var(--blitz);}
   .rbtn.on{opacity:1;filter:none;} .rbtn.on:active{transform:scale(.9);}
   /* per-level milestone states (Lv3 / Lv6 / Lv9) — escalating ring + glow */
@@ -95,12 +96,14 @@
   #levelToast.show{animation:levelToast 1.7s ease-out;}
   @keyframes levelToast{0%{opacity:0;transform:translate(-50%,-45%) scale(.6);}16%{opacity:1;transform:translate(-50%,-54%) scale(1.1);}68%{opacity:1;transform:translate(-50%,-58%) scale(1);}100%{opacity:0;transform:translate(-50%,-70%) scale(1);}}
 
-  /* ---------- corner buttons ---------- */
-  .corner{position:absolute;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:18px;cursor:pointer;
-    background:rgba(10,16,36,.7);border:1.5px solid rgba(255,255,255,.2);color:#fff;}
-  #backBtn{left:8px;top:max(8px,env(safe-area-inset-top));}
-  #muteBtn{left:96px;top:max(8px,env(safe-area-inset-top));}
-  #dbgBtn{left:52px;top:max(8px,env(safe-area-inset-top));font-size:15px;}
+  /* ---------- corner buttons (match hub / other games: panel circle, themed border, blur) ---------- */
+  .corner{position:absolute;z-index:40;width:37px;height:37px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:var(--display);font-weight:800;line-height:1;cursor:pointer;color:#fff;
+    background:var(--panel);border:1.5px solid var(--strike);box-shadow:0 2px 10px rgba(0,0,0,.45);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+  #backBtn{left:12px;top:max(12px,env(safe-area-inset-top));font-size:24px;padding-bottom:3px;}
+  #muteBtn{left:56px;top:max(12px,env(safe-area-inset-top));font-size:15px;}
+  #dbgBtn{left:100px;top:max(12px,env(safe-area-inset-top));font-size:15px;border-color:rgba(255,255,255,.25);opacity:.7;}
   /* hide the combat HUD on the menu so it doesn't bleed behind the overlay */
   .ui.menumode #topbar,.ui.menumode #hudLeft,.ui.menumode #hpBottom,.ui.menumode #radial,.ui.menumode #muteBtn{display:none;}
 
@@ -225,7 +228,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.5.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.5.1</div>
   </div>
 </div>
 
@@ -480,6 +483,7 @@ function unlit(c,o){return new THREE.MeshBasicMaterial(Object.assign({color:c},o
     let y=Math.sin(x*0.12)*0.25+Math.cos(z*0.1)*0.3+(rn()-0.5)*0.5;
     const distLane=Math.abs(x*0.6 - (z+4)*0.05);           // rough central lane
     if(z<-30) y+=(-z-30)*0.06;                              // ground rises toward hills
+    const dpl=Math.hypot(x-0.8, z-2.2); if(dpl<13) y*=clamp((dpl-7)/6,0,1); // flat combat clearing so the action ring sits on the ground
     pos.setY(i,y);
     const c=new THREE.Color().copy(grass).lerp(grass2,rn());
     if(y>0.5) c.lerp(rock,clamp((y-0.5)*0.7,0,0.6));
@@ -527,10 +531,10 @@ const clouds=[];
 })();
 
 /* action bar as a ground ring around the hero's feet (fills from the centre out) */
-const actGrp=new THREE.Group(); actGrp.rotation.x=-Math.PI/2; actGrp.position.y=0.09; actGrp.visible=false; scene.add(actGrp);
-const actRing=new THREE.Mesh(new THREE.RingGeometry(1.16,1.34,44), unlit(0x9fc0ff,{transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));
-const actDisc=new THREE.Mesh(new THREE.CircleGeometry(1.16,44), unlit(0x5a7bd8,{transparent:true,opacity:0.4,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));
-actRing.renderOrder=3; actDisc.renderOrder=2; actGrp.add(actDisc, actRing);
+const actGrp=new THREE.Group(); actGrp.rotation.x=-Math.PI/2; actGrp.position.y=0.05; actGrp.visible=false; scene.add(actGrp);
+const actRing=new THREE.Mesh(new THREE.RingGeometry(1.14,1.36,48), unlit(0x9fc0ff,{transparent:true,opacity:0.95,side:THREE.DoubleSide})); // solid; depth-tested so the hero stands in it
+const actDisc=new THREE.Mesh(new THREE.CircleGeometry(1.12,48), unlit(0x2f5fb0,{transparent:true,opacity:0.9,side:THREE.DoubleSide}));
+actGrp.add(actDisc, actRing);
 
 /* =========================================================================
    PLAYER — low-poly warrior with a transforming pike
@@ -1176,7 +1180,7 @@ document.getElementById('btnBlitz').addEventListener('pointerdown',e=>{e.prevent
 document.getElementById('cashBtn').addEventListener('pointerdown',e=>{e.preventDefault();cashOut(false);});
 // lay the 4 radial buttons on a 90° arc in the lower-right (pivot near the bottom-right corner)
 (function layoutRadial(){
-  const pivotR=14, pivotB=54, R=122, D2R=Math.PI/180;   // px from corner; arc radius (cleared above the bottom HP bar)
+  const pivotR=14, pivotB=54, R=180, D2R=Math.PI/180;   // px from corner; arc radius (spread out so buttons never overlap)
   const arc=[['btnStrike',80],['btnShoot',58],['btnCast',36],['btnBlitz',14]]; // [id, angle: 90=left/low .. 0=up/right]
   for(const [id,a] of arc){ const b=document.getElementById(id);
     const right=pivotR+R*Math.sin(a*D2R)-29, bottom=pivotB+R*Math.cos(a*D2R)-29;
@@ -1294,12 +1298,12 @@ function animatePlayer(rdt){
     const showRing = state==='combat' && !off && !queuedAction;
     actGrp.visible = showRing;
     if(showRing){
-      actGrp.position.set(playerMesh.position.x, 0.07, playerMesh.position.z);
+      actGrp.position.set(playerMesh.position.x, 0.05, playerMesh.position.z);
       actDisc.scale.setScalar(Math.max(0.001, actBar));
       const ready = actBar>=1;
-      const pulse = ready ? 0.85+Math.sin(t*6)*0.15 : 1;
-      actDisc.material.color.setHex(ready?0x7be0a8:0x5a7bd8); actDisc.material.opacity=(ready?0.5:0.4)*pulse;
-      actRing.material.color.setHex(ready?0x9bffcf:0x9fc0ff); actRing.material.opacity=(ready?0.85:0.5)*pulse;
+      const pulse = ready ? 0.9+Math.sin(t*6)*0.1 : 1;
+      actDisc.material.color.setHex(ready?0x2fae64:0x2f5fb0); actDisc.material.opacity=0.9*pulse;
+      actRing.material.color.setHex(ready?0x8bffc0:0x9fc0ff); actRing.material.opacity=0.95*pulse;
     }
   }
 }
@@ -1395,6 +1399,13 @@ function overlayDraw(){
     for(let k=0;k<8;k++){ const ang=k/8*Math.PI*2+b.life*4; octx.beginPath(); octx.moveTo(s.x+Math.cos(ang)*R*0.4,s.y+Math.sin(ang)*R*0.2); octx.lineTo(s.x+Math.cos(ang)*R,s.y+Math.sin(ang)*R*0.5); octx.stroke(); }
     octx.restore(); } }
 
+  // "READY" on the action ring when it is full
+  if(playerMesh && state==='combat' && !off && !queuedAction && actBar>=1){
+    const s=toScreen(playerMesh.position.clone().add(new THREE.Vector3(0.4,0.14,0.85)));
+    if(s.ok){ octx.save(); octx.font='800 15px Orbitron,sans-serif'; octx.textAlign='center'; octx.textBaseline='middle';
+      octx.lineWidth=4; octx.strokeStyle='rgba(0,0,0,.6)'; octx.strokeText('READY',s.x,s.y); octx.fillStyle='#d6ffe8'; octx.fillText('READY',s.x,s.y); octx.restore(); }
+  }
+
   // level-up: golden beams firing up in a ring around the hero
   if(playerMesh){ for(const g of goldBursts){ const f=g.life/g.max; const a=Math.sin(Math.min(f,1)*Math.PI);
     const foot=toScreen(playerMesh.position.clone().setY(0.1)); const N=11, ringR=48;
@@ -1481,8 +1492,8 @@ function updateHudStatic(){
   el('enemyTag').textContent='FOE '+(enemyIdx+1)+'/3';
   const pips=document.querySelectorAll('.epip'); pips.forEach((p,i)=>{ p.className='epip'+(i<enemyIdx?' done':i===enemyIdx?' cur':''); });
   const ms=l=>(l>=3?(l>=6?(l>=9?'★':'✦'):'•'):'');   // milestone marker on the level badge
-  el('btnStrikeLv').textContent=lv.strike; el('btnShootLv').textContent=lv.shoot;
-  el('btnCastLv').textContent=lv.cast; el('btnBlitzLv').textContent=lv.blitz;
+  el('btnStrikeLv').textContent='LVL '+lv.strike; el('btnShootLv').textContent='LVL '+lv.shoot;
+  el('btnCastLv').textContent='LVL '+lv.cast; el('btnBlitzLv').textContent='LVL '+lv.blitz;
 }
 // level-up notification: text flyout + golden beams around the hero
 function levelUpFX(pick, level){
