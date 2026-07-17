@@ -52,8 +52,9 @@ i.e. deliberately slow/readable).
         │  │ Perfect   │──────────►│ STAGGER (on Blitz)│ │
         │  └─────┬─────┘ interrupt └───────────────────┘ │
         │        │                                        │
-        │   UNIFIED TAP: on active target = attack input; │
-        │   anywhere else = dodge (±0.10s of a hit).      │
+        │   TURN-BASED: only ONE timing game is ever live.│
+        │   Attacking→tap=hit; enemy attacking→tap=dodge  │
+        │   (±0.2s); commit during their attack = QUEUED.  │
         └───┬───────────────┬───────────────┬────────────┘
             │ enemy.hp≤0     │ cashout()     │ player hp≤0
             │ (foe 1&2)      │ (foe 1&2)     │
@@ -74,10 +75,12 @@ i.e. deliberately slow/readable).
     └──────────────────────────┘
 ```
 
-**Concurrency is the point:** the action bar keeps filling and the enemy keeps
-telegraphing/attacking while you decide. A committed offense and an incoming enemy hit
-can overlap — you must choose between tapping the next attack ring (advance the combo,
-eat the hit) or tapping open ground (dodge, sacrifice the ring).
+**One timing game at a time (turn-based):** there are never two timing games on screen.
+While **you** attack, the enemy is paused (it can't start an attack). While the **enemy**
+attacks, you dodge — and if you commit an action (the bar was full) it is **queued** and fires
+the instant their attack ends (its button shows `QUEUED`). This removes the old
+"abandon-your-combo-to-dodge" scramble in favour of a clean read: attack cleanly on your beat,
+then dodge cleanly on theirs.
 
 ---
 
@@ -90,9 +93,10 @@ eat the hit) or tapping open ground (dodge, sacrifice the ring).
 | **Cast** | Action Bar full | long (~0.8–3.3s) | ordered glyphs | highest normal ceiling | long recoveries; **Cliffhorn** (armour) vuln |
 | **Blitz** | Blitz Bar full only | longest (~2.5–4.5s) | 5–9 inputs, hard finisher | biggest | staggers a *starting* attack; burst window |
 
-**Action Bar** fills in **2.7 s**, stays full until you choose, refills the instant you commit.
-**Unified tap:** a tap on a live offensive ring (upper ~58% of screen) = attack input; any
-other tap = dodge attempt. When no ring is live, every tap is a dodge.
+**Action Bar** fills in **2.7 s**, stays full until you choose. **Unified tap** (unambiguous
+because only one timing game is live): while attacking, any tap = the current attack input;
+while the enemy attacks, any tap = dodge; otherwise taps do nothing (dodge only activates when
+there's an incoming attack, so you're never "accidentally dodging" while trying to time a hit).
 
 ### Ability levels & 3/6/9 evolutions
 Each action has a level 1–9. Milestones at **3 / 6 / 9** swap in a **new, longer timing
@@ -136,9 +140,12 @@ usageWeight 3.2 × share`), abilities at L9 excluded. **Max 8 level-ups per run*
 
 ## 5. Dodge & offensive timing
 
-- **Dodge window: ±0.10 s** around each hit's impact (≈200 ms total). Perfect dodge = within
-  **±0.045 s**. Early/late = the hit lands in full. **Every hit in a multi-hit set needs its own
-  dodge.** A successful dodge cancels all damage, feeds mult + Blitz, and pops a ground-beam ring.
+- **Reticle:** every timing target (dodge and offense) is a **thin ring shrinking onto a thick
+  "success band"** — line the thin ring up with the band to hit (band centre = Perfect). The band's
+  screen thickness *is* the success window, so fairness is legible.
+- **Dodge window: ±0.20 s** around each hit's impact (0.2 before / 0.2 after = 400 ms total).
+  Perfect dodge = within **±0.09 s**. Early/late = the hit lands in full. **Every hit in a multi-hit
+  set needs its own dodge.** A successful dodge cancels all damage, feeds mult + Blitz, pops a beam ring.
 - **Offense grades:** Miss / Good (±`lvGood`, ~0.115 s +0.004/lv) / Perfect (±0.05 s). A
   **finisher** hit tapped dead-center (±0.022 s) is a **guaranteed critical**.
 - **Crit:** deterministic roll from `rngCrit`; Good ~8% + lv, Perfect ~24% + lv; crit = ×1.9 dmg.
@@ -213,7 +220,7 @@ enemy's remaining-HP fraction; low-HP enrage sets gated by `maxHpFrac`. All auth
 | **Enemy dmg scale** | E1 / E2 / E3 | 0.55 / 0.68 / 0.96 |
 | **Enemy breather** | E1 / E2 / E3 (s) | 1.45 / 1.05 / 0.62 |
 | **Action Bar** | fill time | 2.7 s |
-| **Dodge** | window / perfect | ±0.10 / ±0.045 s |
+| **Dodge** | window / perfect | ±0.20 / ±0.09 s |
 | **Offense** | good / perfect / center | ±0.115 (+0.004/lv) / ±0.05 / ±0.022 s |
 | **Grade dmg** | miss / good / perfect | ×0.18 / ×1.0 / ×1.55 |
 | **Crit** | mult / good% / perfect% / per-lv | ×1.9 / 0.08 / 0.24 / +0.012 |

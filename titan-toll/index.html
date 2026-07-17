@@ -100,6 +100,11 @@
   .abtn.blitz{box-shadow:0 3px 12px rgba(0,0,0,.4),inset 0 0 0 2px var(--blitz);} .abtn.blitz .nm{color:var(--blitz);}
   .abtn.blitz.on{background:linear-gradient(180deg,rgba(80,60,10,.95),rgba(40,28,6,.95));animation:blitzBtn .9s infinite;}
   @keyframes blitzBtn{0%,100%{box-shadow:0 3px 12px rgba(0,0,0,.4),inset 0 0 0 2px var(--blitz);}50%{box-shadow:0 3px 20px rgba(255,210,58,.6),inset 0 0 0 2px #fff2b0;}}
+  /* action committed while the enemy is attacking — waiting to fire */
+  .abtn.queued{opacity:1;filter:none;animation:queuedPulse .7s infinite;}
+  .abtn.queued::after{content:'QUEUED';position:absolute;top:-7px;left:50%;transform:translateX(-50%);
+    font-family:var(--display);font-weight:800;font-size:8px;letter-spacing:1px;color:#0b1226;background:#fff;padding:2px 6px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.4);}
+  @keyframes queuedPulse{0%,100%{box-shadow:0 3px 10px rgba(0,0,0,.4),inset 0 0 0 2px rgba(255,255,255,.55);}50%{box-shadow:0 3px 16px rgba(255,255,255,.5),inset 0 0 0 2px #fff;}}
 
   /* ---------- corner buttons ---------- */
   .corner{position:absolute;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:18px;cursor:pointer;
@@ -236,7 +241,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.3.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.4.0</div>
   </div>
 </div>
 
@@ -272,8 +277,8 @@ const CFG={
   enemyDmgScale:[0.55,0.68,0.96], // per-enemy incoming-damage multiplier (E1 forgiving -> E3 lethal)
   actionFill:2.7,          // s to fill the action bar
   // dodge
-  dodgeWin:0.10,           // ± s around impact (200ms total)
-  perfectDodgeWin:0.045,
+  dodgeWin:0.20,           // ± s around impact (0.2 before / 0.2 after = 400ms total)
+  perfectDodgeWin:0.09,
   // offensive timing (base; widened by ability level)
   goodWin:0.115, perfectWin:0.05, centerWin:0.022,
   winPerLv:0.004,          // +good window per ability level
@@ -702,6 +707,7 @@ let lv={strike:1,shoot:1,cast:1,blitz:1};
 let use={strike:1,shoot:1,cast:1,blitz:1};   // damage-weighted usage for level-up weighting
 let actBar=0;               // 0..1
 let off=null;               // active offensive sequence
+let queuedAction=null;      // action committed while the enemy is attacking; fires after their attack
 let atk=null;               // active enemy attack
 let enemyState='idle';      // idle | telegraph | active | recovery | stagger
 let enemyTimer=0;           // counts within a state
@@ -780,7 +786,7 @@ function startRun(sd){
   document.getElementById('dSeed').value=seed;
   hp=CFG.playerHP; score=0; mult=1; multMeter=0; blitz=0; xp=0; levelUps=0;
   lv={strike:1,shoot:1,cast:1,blitz:1}; use={strike:1,shoot:1,cast:1,blitz:1};
-  actBar=0; off=null; T=0; resolveLockT=0; castStreak=0; staggerT=0; forcedAttack=-1;
+  actBar=0; off=null; queuedAction=null; T=0; resolveLockT=0; castStreak=0; staggerT=0; forcedAttack=-1;
   hitLog.length=0; floaters.length=0; particles.length=0; paused=false;
   if(!playerMesh){playerMesh=buildPlayer(); scene.add(playerMesh);}
   playerPose='idle'; poseT=0;
@@ -843,32 +849,32 @@ function showResult(dead){
 /* =========================================================================
    OFFENSE — commit an action, build & resolve the timing sequence
    ========================================================================= */
+const enemyAttacking=()=> !!atk && (enemyState==='telegraph'||enemyState==='active') && atk.hits.some(h=>!h.resolved);
 function commit(action){
-  if(state!=='combat'||off) return;
-  if(action==='blitz'){ if(blitz<CFG.blitzMax) return; }
-  else { if(actBar<1) return; }
-  const level=lv[action];
-  let tier;
-  let seqList;
-  if(action==='blitz'){ tier=tierOf(level); seqList=SEQ.blitz[tier]; }
-  else { tier=tierOf(level); seqList=SEQ[action][tier]; }
-  // build targets w/ absolute times
+  if(state!=='combat'||off||queuedAction) return;      // already attacking or one queued
+  if(action==='blitz'){ if(blitz<CFG.blitzMax) return; } else { if(actBar<1) return; }
+  // consume the resource now
+  if(action==='blitz') blitz=0; else actBar=0;
+  // Never two timing games at once: if the enemy is mid-attack, QUEUE this action to fire after.
+  if(enemyAttacking()){ queuedAction=action; sfx('tele'); }
+  else beginOffense(action);
+}
+function beginOffense(action){
+  const level=lv[action], tier=tierOf(level);
+  const seqList = action==='blitz' ? SEQ.blitz[tier] : SEQ[action][tier];
   const targets=[]; let t=0;
   for(const d of seqList){ t+=d.g*CFG.timeScale; targets.push({t, an:d.an, w:d.w, k:d.k, fin:!!d.fin, mv:d.mv||null, resolved:false, grade:null}); }
   const dur=targets[targets.length-1].t;
   off={action, level, tier, startT:T, targets, dur, idx:0, clean:true, dmgMul:lvDmg(level)*(action==='blitz'?1.35:1)};
-  if(action!=='blitz'){ actBar=0; }
-  else {
-    blitz=0;
-    staggerT=CFG.staggerTime;
-    if(enemyState==='telegraph'){ enemyState='stagger'; enemyTimer=0; atk=null; } // interrupt a starting set (not a landing hit)
+  if(action==='blitz'){
+    staggerT=CFG.staggerTime;                          // protect the opening after this blitz
     sfx('blitz'); shake(0.4,0.35);
     addFloater(playerMesh.position.clone().setY(3),'BLITZ!','#ffd23a',1.2,30);
   }
   if(action==='cast') castStreak++; else castStreak=0;
   playerPose=action; poseT=0;
   setPikeForm(off.targets[0]?off.targets[0].k:action, action);
-  sfx('tele'); // small commit tick
+  sfx('tele');
 }
 
 function setPikeForm(kind,action){
@@ -1050,6 +1056,7 @@ function updateEnemy(dt){
   // Blitz-stagger of a telegraph nulls atk; route to a post-stagger vuln window that doesn't read atk.
   if(enemyState==='stagger'){ enemyTimer+=dt; if(staggerT<=0){enemyState='recovery';enemyTimer=0;recDur=0.9;vulnAction=pickVuln();} return; }
   if(enemyState==='idle'){
+    if(off) return;                          // enemy waits while the player is attacking (never two timing games)
     enemyTimer-=dt;
     if(enemyTimer<=0 && staggerT<=0){ startAttack(chooseAttack()); }
     return;
@@ -1160,17 +1167,11 @@ function groundBeams(color){ if(!playerMesh)return; beamRings.push({p:playerMesh
 const tapEl=document.getElementById('tap');
 function onTap(e){
   if(state!=='combat') return;
-  const r=tapEl.getBoundingClientRect();
-  const x=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0].clientX))-r.left;
-  const y=(e.clientY!=null?e.clientY:(e.touches&&e.touches[0].clientY))-r.top;
   const now=T;
-  const inEnemyZone = y < ch*0.58;
-  const hasLiveTarget = off && off.targets.some(t=>!t.resolved);
-  if(hasLiveTarget && inEnemyZone){
-    if(!tapOffense(now)) tapDodge(now);   // too-early whiff falls through to a dodge attempt
-  } else {
-    tapDodge(now);
-  }
+  // Only one timing game is ever live, so the tap is unambiguous:
+  if(off){ tapOffense(now); return; }              // player attacking -> attack input (tap anywhere)
+  if(enemyAttacking()){ tapDodge(now); return; }   // enemy attacking -> dodge
+  // otherwise ignore: dodge only activates when there's an incoming attack
 }
 tapEl.addEventListener('pointerdown',e=>{e.preventDefault();onTap(e);});
 
@@ -1196,8 +1197,8 @@ muteBtn.addEventListener('click',()=>{ muted=!muted; store.set('tt_mute',muted?'
 window.addEventListener('keydown',e=>{
   if(state!=='combat'){ if(e.key==='Enter'&&state==='menu') startRun(document.getElementById('seedIn').value.trim()); return; }
   if(e.key==='1')commit('strike'); else if(e.key==='2')commit('shoot'); else if(e.key==='3')commit('cast'); else if(e.key==='4')commit('blitz');
-  else if(e.key===' '){ e.preventDefault(); const hasLive=off&&off.targets.some(t=>!t.resolved); if(hasLive)tapOffense(T)||tapDodge(T); else tapDodge(T); }
-  else if(e.key==='f'){ if(!tapOffense(T))tapOffense(T); }   // f = attack input
+  else if(e.key===' '){ e.preventDefault(); if(off)tapOffense(T); else if(enemyAttacking())tapDodge(T); }
+  else if(e.key==='f'){ tapOffense(T); }   // f = attack input
   else if(e.key==='d'){ tapDodge(T); }
   else if(e.key==='c'){ cashOut(false); }
   else if(e.key==='`'){ toggleDbg(); }
@@ -1230,7 +1231,7 @@ function update(rdt){
 function step(dt){
   T+=dt;
   resolveLockT=Math.max(0,resolveLockT-dt);
-  if(!off && actBar<1){ actBar=Math.min(1, actBar+dt/CFG.actionFill); }
+  if(!off && !queuedAction && actBar<1){ actBar=Math.min(1, actBar+dt/CFG.actionFill); }
   if(off){
     // auto-miss expired targets, end when done
     const good=lvGood(off.level);
@@ -1238,6 +1239,8 @@ function step(dt){
     if(off.targets.every(t=>t.resolved) && T > off.startT+off.dur+CFG.seqTail){ endOffense(); }
   }
   updateEnemy(dt);
+  // fire a queued action the instant the enemy is no longer attacking (start of its recovery)
+  if(queuedAction && !off && !enemyAttacking()){ const a=queuedAction; queuedAction=null; beginOffense(a); }
 }
 
 /* =========================================================================
@@ -1333,6 +1336,30 @@ function syncParticles(){
 /* =========================================================================
    OVERLAY (2D) — timing targets, dodge cue, floaters, beams
    ========================================================================= */
+// A reticle: a THIN ring shrinks from outside onto a THICK "success band" ring.
+// Tap when the thin ring overlaps the band (good) / hits dead-centre (perfect).
+// dt = seconds until the perfect moment (>0 before); win/perfWin = half-windows; app = approach time.
+function drawReticle(cx,cy,R0,dt,win,perfWin,app,col,Rmax,glyph,next){
+  const K=Rmax/app;                          // px travelled per second
+  const band=clamp(K*win,7,R0*0.85);         // success-band half-thickness (px) = the win in screen space
+  octx.save(); octx.translate(cx,cy); octx.textAlign='center'; octx.textBaseline='middle';
+  // thick success band (annulus)
+  octx.globalAlpha=next?0.55:0.22; octx.strokeStyle=col; octx.lineWidth=band*2;
+  octx.beginPath(); octx.arc(0,0,R0,0,Math.PI*2); octx.stroke();
+  // band edges + perfect centre line
+  octx.lineWidth=1.5; octx.globalAlpha=next?0.5:0.2;
+  octx.beginPath(); octx.arc(0,0,R0-band,0,Math.PI*2); octx.stroke();
+  octx.beginPath(); octx.arc(0,0,R0+band,0,Math.PI*2); octx.stroke();
+  octx.strokeStyle='#fff'; octx.globalAlpha=next?0.75:0.3; octx.lineWidth=2;
+  octx.beginPath(); octx.arc(0,0,R0,0,Math.PI*2); octx.stroke();
+  // thin converging ring
+  if(dt>-win*1.6){ const R=R0+K*dt; if(R>2){ octx.strokeStyle=col; octx.globalAlpha=next?1:0.4; octx.lineWidth=next?3.5:2;
+    octx.beginPath(); octx.arc(0,0,R,0,Math.PI*2); octx.stroke(); } }
+  // aligned pulse
+  if(Math.abs(dt)<=win){ octx.globalAlpha=Math.abs(dt)<=perfWin?0.95:0.55; octx.fillStyle='#fff'; octx.beginPath(); octx.arc(0,0,band*0.6,0,Math.PI*2); octx.fill(); }
+  if(glyph){ octx.globalAlpha=next?1:0.5; octx.fillStyle='#fff'; octx.font='800 16px Orbitron,sans-serif'; octx.fillText(glyph,0,0); }
+  octx.restore();
+}
 function overlayDraw(){
   octx.clearRect(0,0,cw,ch);
   if(state!=='combat'&&state!=='defeated') return;
@@ -1343,51 +1370,35 @@ function overlayDraw(){
     for(let k=0;k<8;k++){ const ang=k/8*Math.PI*2+b.life*4; octx.beginPath(); octx.moveTo(s.x+Math.cos(ang)*R*0.4,s.y+Math.sin(ang)*R*0.2); octx.lineTo(s.x+Math.cos(ang)*R,s.y+Math.sin(ang)*R*0.5); octx.stroke(); }
     octx.restore(); } }
 
-  // dodge cue — incoming enemy hit
-  if(atk && enemyState==='active' && playerMesh){
-    let best=null,bd=1e9; for(const h of atk.hits){ if(h.resolved)continue; const d=(atk.startT+h.at)-T; if(d>-CFG.dodgeWin && d<bd){bd=d;best=h;} }
+  // dodge cue — incoming enemy hit (thin ring converging onto the thick success band, over the player)
+  if(enemyAttacking() && playerMesh){
+    let best=null,bd=1e9; for(const h of atk.hits){ if(h.resolved)continue; const d=(atk.startT+h.at)-T; if(d>-CFG.dodgeWin*1.6 && d<bd){bd=d;best=h;} }
     if(best){
-      const imp=atk.startT+best.at; const d=imp-T;
-      const ps=toScreen(playerMesh.position.clone().setY(2.2));
+      const dt=(atk.startT+best.at)-T;
+      const ps=toScreen(playerMesh.position.clone().setY(2.7));
       const spd=best.sp; const col= spd==='fast'?'#ffe14d':spd==='med'?'#ff9a3c':'#ff3b5c';
-      // incoming ring shrinks to the dodge moment
-      const prog=clamp(1-(d/ (LD(spd))),0,1);
-      const R=90*(1-prog)+18;
-      octx.save(); octx.globalAlpha=0.35+prog*0.55; octx.strokeStyle=col; octx.lineWidth=4;
-      octx.beginPath(); octx.arc(ps.x,ps.y,R,0,Math.PI*2); octx.stroke();
-      // in-window flash
-      if(Math.abs(d)<=CFG.dodgeWin){ octx.globalAlpha=0.9; octx.fillStyle=col; octx.font='800 22px Orbitron,sans-serif'; octx.fillText('DODGE!',ps.x,ps.y-R-14); octx.beginPath();octx.arc(ps.x,ps.y,20,0,Math.PI*2);octx.fillStyle=col;octx.globalAlpha=0.4;octx.fill(); }
-      octx.restore();
+      drawReticle(ps.x,ps.y,52,dt,CFG.dodgeWin,CFG.perfectDodgeWin,LD(spd),col,118,null,true);
+      if(Math.abs(dt)<=CFG.dodgeWin){ octx.save(); octx.globalAlpha=0.95; octx.fillStyle=col; octx.font='800 20px Orbitron,sans-serif'; octx.textAlign='center'; octx.lineWidth=4; octx.strokeStyle='rgba(0,0,0,.5)'; octx.strokeText('DODGE!',ps.x,ps.y-78); octx.fillText('DODGE!',ps.x,ps.y-78); octx.restore(); }
     }
   }
 
-  // offensive timing targets
+  // offensive timing targets (thin ring -> thick success band; only the NEXT one is "live")
   if(off){
     let firstUnres=-1; for(let i=0;i<off.targets.length;i++){ if(!off.targets[i].resolved){firstUnres=i;break;} }
+    const col= off.action==='strike'?'#ffb648': off.action==='shoot'?'#5fe0ff': off.action==='cast'?'#c07bff':'#ffd23a';
     for(let i=0;i<off.targets.length;i++){
       const tg=off.targets[i]; if(tg.resolved) continue;
       const wp=offAnchor(tg); if(tg.mv==='drift'){ wp.x+=Math.sin((T-off.startT+i)*4)*1.4; }
       const s=toScreen(wp); if(!s.ok)continue;
-      const abs=off.startT+tg.t; const d=abs-T; const lead=0.85*CFG.timeScale;
-      const prog=clamp(1-d/lead,0,1);
-      const isNext=(i===firstUnres);
-      const col= off.action==='strike'?'#ffb648': off.action==='shoot'?'#5fe0ff': off.action==='cast'?'#c07bff':'#ffd23a';
-      octx.save();
-      const baseR = tg.fin?46:34;
-      // static target ring
-      octx.globalAlpha=isNext?0.9:0.4; octx.strokeStyle=col; octx.lineWidth=isNext?3.5:2;
-      octx.beginPath(); octx.arc(s.x,s.y,baseR,0,Math.PI*2); octx.stroke();
-      // shrinking ring converges to baseR at perfect time
-      if(prog>0 && d>-0.2){ const R=baseR + (1-prog)*120; octx.globalAlpha=clamp(prog,0,1)*(isNext?0.95:0.4); octx.lineWidth=isNext?4:2.5; octx.beginPath(); octx.arc(s.x,s.y,R,0,Math.PI*2); octx.stroke(); }
-      // perfect flash
-      if(isNext && Math.abs(d)<=CFG.perfectWin){ octx.globalAlpha=0.9; octx.fillStyle=col; octx.beginPath(); octx.arc(s.x,s.y,baseR*0.5,0,Math.PI*2); octx.fill(); }
-      // kind glyph
-      octx.globalAlpha=isNext?1:0.5; octx.fillStyle='#fff'; octx.font='800 '+(tg.fin?18:14)+'px Orbitron,sans-serif';
+      const R0=tg.fin?42:32;
       const sym = tg.k==='reticle'?'◎': tg.k==='charge'?'✦': tg.k==='glyph'?'❖': tg.k==='detonate'?'✸': tg.k==='launch'?'▲': tg.k==='heavy'?'✖':'●';
-      octx.fillText(sym,s.x,s.y);
-      // order index for glyph sequences
-      if(off.action==='cast'||off.action==='blitz'){ octx.font='700 11px Orbitron'; octx.globalAlpha=isNext?0.9:0.4; octx.fillText((i+1),s.x,s.y+baseR+12); }
-      octx.restore();
+      if(i===firstUnres){
+        drawReticle(s.x,s.y,R0,(off.startT+tg.t)-T,lvGood(off.level),CFG.perfectWin,0.85*CFG.timeScale,col,120,sym,true);
+      } else {
+        octx.save(); octx.globalAlpha=0.26; octx.strokeStyle=col; octx.lineWidth=2; octx.beginPath(); octx.arc(s.x,s.y,R0,0,Math.PI*2); octx.stroke();
+        octx.globalAlpha=0.4; octx.fillStyle='#fff'; octx.font='800 14px Orbitron,sans-serif'; octx.textAlign='center'; octx.textBaseline='middle'; octx.fillText(sym,s.x,s.y); octx.restore();
+      }
+      if(off.action==='cast'||off.action==='blitz'){ octx.save(); octx.font='700 11px Orbitron,sans-serif'; octx.textAlign='center'; octx.globalAlpha=i===firstUnres?0.9:0.4; octx.fillStyle='#fff'; octx.fillText((i+1),s.x,s.y+R0+14); octx.restore(); }
     }
   }
 
@@ -1424,14 +1435,16 @@ function syncHud(){
   const bf=clamp(blitz/CFG.blitzMax,0,1); el('blitzFill').style.transform=`scaleX(${bf})`;
   el('blitzWrap').classList.toggle('ready',blitz>=CFG.blitzMax);
   // action bar
-  el('actFill').style.transform=`scaleX(${off?0:actBar})`;
-  el('actWrap').classList.toggle('full',!off&&actBar>=1);
-  // buttons enabled
-  const canAct=!off&&actBar>=1&&state==='combat';
+  el('actFill').style.transform=`scaleX(${(off||queuedAction)?0:actBar})`;
+  el('actWrap').classList.toggle('full',!off&&!queuedAction&&actBar>=1);
+  // buttons: enabled only when idle & bar full; the queued one is marked
+  const canAct=!off&&!queuedAction&&actBar>=1&&state==='combat';
+  const btn={strike:'btnStrike',shoot:'btnShoot',cast:'btnCast',blitz:'btnBlitz'};
   el('btnStrike').classList.toggle('on',canAct);
   el('btnShoot').classList.toggle('on',canAct);
   el('btnCast').classList.toggle('on',canAct);
-  el('btnBlitz').classList.toggle('on',!off&&blitz>=CFG.blitzMax&&state==='combat');
+  el('btnBlitz').classList.toggle('on',!off&&!queuedAction&&blitz>=CFG.blitzMax&&state==='combat');
+  for(const a in btn){ el(btn[a]).classList.toggle('queued', queuedAction===a); }
   // cashout
   el('cashVal').textContent=Math.round(score).toLocaleString();
   el('cashBtn').classList.toggle('lock',resolveLockT>0||state!=='combat');
@@ -1487,7 +1500,7 @@ window.__game={
   get s(){ return {state, seed, T:+T.toFixed(2), enemyIdx, enemy:enemy?enemy.name:null,
     enemyHP:enemy?Math.round(enemy.hp):0, enemyMax:enemy?enemy.maxHp:0, hp:Math.round(hp), score:Math.round(score),
     mult, multMeter:+multMeter.toFixed(2), blitz:Math.round(blitz), blitzReady:blitz>=CFG.blitzMax, xp:Math.round(xp), levelUps, lv:{...lv}, use:{strike:+use.strike.toFixed(0),shoot:+use.shoot.toFixed(0),cast:+use.cast.toFixed(0),blitz:+use.blitz.toFixed(0)},
-    actBar:+actBar.toFixed(2), off:off?{action:off.action,tier:off.tier,left:off.targets.filter(t=>!t.resolved).length}:null,
+    actBar:+actBar.toFixed(2), off:off?{action:off.action,tier:off.tier,left:off.targets.filter(t=>!t.resolved).length}:null, queued:queuedAction,
     enemyState, atk:atk?atk.set.name:null, atkLeft:atk?atk.hits.filter(h=>!h.resolved).length:0, vuln:vulnAction, lock:+resolveLockT.toFixed(2), draws:renderer.info.render.calls }; },
   step:d=>{ try{ if(state==='combat')step(d); else if(state==='defeated'){defeatedT+=d; if(defeatedT>1.3)proceedNext();} }catch(e){console.error(e);} },
   start:sd=>startRun(sd), toMenu,
@@ -1511,6 +1524,7 @@ window.__game={
   setCam:(px,py,pz,lx,ly,lz)=>{ CAM.pos.set(px,py,pz); CAM.look.set(lx,ly,lz); camera.position.copy(CAM.pos); camera.lookAt(CAM.look); camera.updateMatrixWorld(true); },
   setPlayerHome:(x,z,ry)=>{ PHOME.x=x; PHOME.z=z; PHOME.ry=ry; if(playerMesh){playerMesh.position.set(x,0,z);playerMesh.rotation.y=ry;} },
   setMirror:(v)=>{ PHOME.mirror=v; if(playerMesh)playerMesh.scale.x=v?-1:1; },
+  pause:(v=true)=>{ paused=v; },
   setEnemyZ:(z)=>{ if(enemyMesh)enemyMesh.position.z=z; },
   setEnemyScale:(s)=>{ if(enemyMesh)enemyMesh.scale.setScalar(s); },
   setFov:(f)=>{ camera.fov=f; camera.updateProjectionMatrix(); },
