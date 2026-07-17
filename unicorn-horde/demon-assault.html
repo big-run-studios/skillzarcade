@@ -156,7 +156,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.26.2</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.27.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -1585,6 +1585,7 @@ function col3(c){ return colCache[c]||(colCache[c]=new THREE.Color(c)); }
 
 /* ---- far world: an eerie lava-red sky glow beyond the fog line ---- */
 let skyDome=null;   // recentred on the camera each frame (see syncScene) so its far side never clips the far plane
+let fowVis=540;     // FOG OF WAR: player-space visibility radius (≈1.5× shoot range), recomputed each frame; also drives the threat-arrow range
 (function buildSky(){
   const c=document.createElement('canvas'); c.width=16; c.height=256; const g=c.getContext('2d');
   const grd=g.createLinearGradient(0,0,0,256);   // canvas top→bottom maps to zenith→nadir on the dome
@@ -2653,6 +2654,15 @@ function syncScene(dt){
   // sky follows the camera (XZ; Y stays 0 so the glow sits on the true horizon) — keeps the whole dome
   // inside the far-clip plane from any position, killing the growing black arc when you move off-centre
   if(skyDome) skyDome.position.set(camera.position.x, 0, camera.position.z);
+  // FOG OF WAR: visibility ≈ 1.5× your shoot range, measured from the HERO. Fog is camera-based, so
+  // add the live camera→hero distance (differs per mode) → the bubble is the same size in both cameras.
+  if(scene.fog && weap){
+    const rng=CFG.aimRange[weap.cur]||360; fowVis=rng*1.5;
+    const cdx=camera.position.x-px, cdy=camera.position.y, cdz=camera.position.z-py;
+    const camD=Math.sqrt(cdx*cdx+cdy*cdy+cdz*cdz);   // camera → hero
+    scene.fog.near=camD+rng*0.7;    // crisp out to ~0.7× range
+    scene.fog.far =camD+fowVis;     // fully swallowed by 1.5× range
+  }
   sun.position.set(px-760, 470, py+340); sun.target.position.set(px, 0, py); sun.target.updateMatrixWorld();
 
   // unicorn
@@ -3143,7 +3153,7 @@ function overlayDraw(){
     // TPS sub-mode: off-screen enemy THREAT arrows — pinned to the screen edge, pointing at any
     // near enemy you can't see (esp. behind you). Nearest first, capped so it never clutters.
     if(tps){
-      const cx=cw/2, cy=ch/2, mx2=cw/2-30, my2=ch/2-104, RANGE=1200, CAP=10;
+      const cx=cw/2, cy=ch/2, mx2=cw/2-30, my2=ch/2-104, RANGE=fowVis, CAP=10;   // only warn about threats inside the fog-of-war visibility (murk hides the rest)
       const cand=[];
       for(const e of enemies){ if(e.dead) continue;
         const dw=Math.hypot(e.x-px,e.y-py); if(dw>RANGE) continue;
