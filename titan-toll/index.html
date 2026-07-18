@@ -307,7 +307,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.12.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.12.1</div>
   </div>
 </div>
 
@@ -1410,7 +1410,15 @@ function onTap(e){
   if(enemyAttacking()){ tapDodge(now); return; }   // enemy attacking -> tap ANYWHERE to dodge (shield is the cue)
 }
 tapEl.addEventListener('pointerdown',e=>{e.preventDefault();onTap(e);});
-document.getElementById('dodgeShield').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(state==='combat')tapDodge(T);});
+// Tap ANYWHERE = the active timing input. During a timing game (your attack combo, or an incoming enemy
+// attack) a tap anywhere on the screen — INCLUDING on top of the attack buttons — counts as the offense/
+// dodge tap. Only genuine controls are exempt: cash-out, the Blitz interrupt button, and corner nav.
+document.addEventListener('pointerdown', e=>{
+  if(state!=='combat') return;
+  if(e.target.closest && e.target.closest('#cashBtn,#blitzBtn,.corner')) return;
+  if(off){ e.preventDefault(); e.stopPropagation(); tapOffense(T); }
+  else if(enemyAttacking()){ e.preventDefault(); e.stopPropagation(); tapDodge(T); }
+}, true);
 
 document.getElementById('btnStrike').addEventListener('pointerdown',e=>{e.preventDefault();commit('strike');});
 document.getElementById('btnShoot').addEventListener('pointerdown',e=>{e.preventDefault();commit('shoot');});
