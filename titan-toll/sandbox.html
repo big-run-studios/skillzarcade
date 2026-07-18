@@ -110,7 +110,7 @@
   <button id="loop" class="on">🔁 Loop</button><button id="spin" class="on">↻ Spin</button>
   <span class="spd">SPD <input id="speed" type="range" min="0.1" max="2" step="0.1" value="1"><b id="spdv">1.0×</b></span>
 </div>
-<div id="hint">DRAG canvas to orbit · WHEEL/PINCH zoom · drag a clip onto a slot to map it</div>
+<div id="hint">WASD move · Q/E down/up · SHIFT faster · drag = look · wheel/pinch = dolly · drag a clip → slot</div>
 <div id="modal"><div class="box">
   <div class="hdr" style="font-size:13px;color:var(--cyan)">ANIMATION MAP — copy &amp; send</div>
   <textarea id="mapText" readonly></textarea>
@@ -161,22 +161,39 @@ const grid=new THREE.GridHelper(20,20,0x2a5a2a,0x3a6a3a); grid.position.y=0.02; 
 const padR=new THREE.Mesh(new THREE.RingGeometry(1.4,1.6,48), new THREE.MeshBasicMaterial({color:0x34e1ff,transparent:true,opacity:.7,side:THREE.DoubleSide}));
 padR.rotation.x=-Math.PI/2; padR.position.y=0.03; scene.add(padR);
 
-// orbit camera
-let orbit={ target:new THREE.Vector3(0,1,0), r:6, theta:2.1, phi:1.2, autospin:true };
-function applyCam(){ const {r,theta,phi,target}=orbit;
-  camera.position.set(target.x+r*Math.sin(phi)*Math.sin(theta), target.y+r*Math.cos(phi), target.z+r*Math.sin(phi)*Math.cos(theta)); camera.lookAt(target); }
+// free-fly camera (demon-assault style): WASD move · Q/E down/up · drag = look · wheel/pinch = dolly
+camera.rotation.order='YXZ';
+const fly={ pos:new THREE.Vector3(0,1.4,6), yaw:0, pitch:-0.05, spin:false };
+const _fFwd=new THREE.Vector3(), _fRgt=new THREE.Vector3(), keys=new Set();
+const clampN=(v,a,b)=>Math.max(a,Math.min(b,v));
+function flyLook(){ camera.rotation.set(fly.pitch,fly.yaw,0); }
+function flyStep(dt){
+  if(fly.spin) fly.yaw-=dt*0.35;
+  flyLook();
+  _fFwd.set(0,0,-1).applyQuaternion(camera.quaternion); _fFwd.y=0; if(_fFwd.lengthSq()>1e-6)_fFwd.normalize();
+  _fRgt.set(1,0,0).applyQuaternion(camera.quaternion); _fRgt.y=0; if(_fRgt.lengthSq()>1e-6)_fRgt.normalize();
+  const mv=(keys.has('ShiftLeft')||keys.has('ShiftRight')?9:3.6)*dt;
+  if(keys.has('KeyW'))fly.pos.addScaledVector(_fFwd,mv); if(keys.has('KeyS'))fly.pos.addScaledVector(_fFwd,-mv);
+  if(keys.has('KeyD'))fly.pos.addScaledVector(_fRgt,mv); if(keys.has('KeyA'))fly.pos.addScaledVector(_fRgt,-mv);
+  if(keys.has('KeyE'))fly.pos.y+=mv; if(keys.has('KeyQ'))fly.pos.y-=mv;
+  camera.position.copy(fly.pos);
+}
+function dolly(amt){ flyLook(); _fFwd.set(0,0,-1).applyQuaternion(camera.quaternion); fly.pos.addScaledVector(_fFwd,amt); }
+addEventListener('keydown',e=>{ if(/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName||'')) return;
+  if(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','ShiftLeft','ShiftRight'].includes(e.code)){ e.preventDefault(); keys.add(e.code); } });
+addEventListener('keyup',e=>keys.delete(e.code));
+addEventListener('blur',()=>keys.clear());
 let camDrag=false,cpx=0,cpy=0,pinch=0;
-canvas.addEventListener('pointerdown',e=>{camDrag=true;cpx=e.clientX;cpy=e.clientY;orbit.autospin=false;el('spin').classList.remove('on');});
+canvas.addEventListener('pointerdown',e=>{camDrag=true;cpx=e.clientX;cpy=e.clientY;fly.spin=false;el('spin').classList.remove('on');});
 addEventListener('pointerup',()=>camDrag=false);
-addEventListener('pointermove',e=>{ if(!camDrag)return; orbit.theta-=(e.clientX-cpx)*0.01; orbit.phi=Math.max(0.25,Math.min(1.5,orbit.phi-(e.clientY-cpy)*0.008)); cpx=e.clientX;cpy=e.clientY; });
-canvas.addEventListener('wheel',e=>{ e.preventDefault(); orbit.r=Math.max(2,Math.min(30,orbit.r+e.deltaY*0.01)); },{passive:false});
-canvas.addEventListener('touchmove',e=>{ if(e.touches.length===2){ const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); if(pinch)orbit.r=Math.max(2,Math.min(30,orbit.r+(pinch-d)*0.03)); pinch=d; } },{passive:false});
+addEventListener('pointermove',e=>{ if(!camDrag)return; fly.yaw-=(e.clientX-cpx)*0.005; fly.pitch=clampN(fly.pitch-(e.clientY-cpy)*0.005,-1.45,1.3); cpx=e.clientX;cpy=e.clientY; });
+canvas.addEventListener('wheel',e=>{ e.preventDefault(); dolly(-e.deltaY*0.012); },{passive:false});
+canvas.addEventListener('touchmove',e=>{ if(e.touches.length===2){ const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); if(pinch)dolly((d-pinch)*0.02); pinch=d; } },{passive:false});
 canvas.addEventListener('touchend',()=>pinch=0);
 
 // state
 const loader=new GLTFLoader();
-let mixer=null, clips=[], curAction=null, curIdx=0, playing=true, looping=true, speed=1, model=null, curFile='', rootBone=null;
-const _pin=new THREE.Vector3();
+let mixer=null, clips=[], curAction=null, curIdx=0, playing=true, looping=true, speed=1, model=null, curFile='';
 let mapping={};
 
 function mapKey(){ return 'tg_map_'+curFile; }
@@ -195,11 +212,10 @@ function loadModel(file){
     model.position.set(-(b.min.x+b.max.x)/2, -b.min.y, -(b.min.z+b.max.z)/2);
     model.traverse(o=>{ if(o.isMesh) o.frustumCulled=false; });
     scene.add(model);
-    // find the root/hips bone so we can keep the character planted on the pad (strip horizontal root motion)
-    rootBone=null;
-    model.traverse(o=>{ if(o.isBone && !rootBone && /hips|pelvis/i.test(o.name)) rootBone=o; });
-    if(!rootBone) model.traverse(o=>{ if(o.isSkinnedMesh && !rootBone && o.skeleton && o.skeleton.bones.length) rootBone=o.skeleton.bones[0]; });
-    const sz=(b.max.y-b.min.y); orbit.target.set(0,sz*0.46,0); orbit.r=sz*2.4;
+    // frame the model with the free-fly camera (front 3/4), then derive yaw/pitch
+    const sz=(b.max.y-b.min.y);
+    camera.position.set(sz*1.15, sz*0.72, sz*1.7); camera.lookAt(0, sz*0.5, 0);
+    fly.yaw=camera.rotation.y; fly.pitch=camera.rotation.x; fly.pos.copy(camera.position);
     mixer=new THREE.AnimationMixer(model);
     clips=gltf.animations.slice().sort((a,b)=>a.name.localeCompare(b.name));
     el('cnt').textContent=clips.length+' CLIPS';
@@ -252,7 +268,7 @@ el('prev').onclick=()=>play(curIdx-1);
 el('next').onclick=()=>play(curIdx+1);
 el('play').onclick=()=>{ playing=!playing; if(curAction)curAction.paused=!playing; el('play').textContent=playing?'⏸':'▶'; };
 el('loop').onclick=()=>{ looping=!looping; el('loop').classList.toggle('on',looping); play(curIdx); };
-el('spin').onclick=()=>{ orbit.autospin=!orbit.autospin; el('spin').classList.toggle('on',orbit.autospin); };
+el('spin').onclick=()=>{ fly.spin=!fly.spin; el('spin').classList.toggle('on',fly.spin); };
 el('speed').oninput=e=>{ speed=+e.target.value; el('spdv').textContent=speed.toFixed(1)+'×'; if(curAction)curAction.timeScale=speed; };
 
 // export — shape matches what the game consumes for this kind (paste-ready)
@@ -276,9 +292,7 @@ addEventListener('resize',resize); resize();
 let last=performance.now();
 function frame(){ requestAnimationFrame(frame); const now=performance.now(), dt=Math.min((now-last)/1000,0.05); last=now;
   if(mixer)mixer.update(dt);
-  // keep the character centred on the pad: cancel the root bone's horizontal drift each frame
-  if(model&&rootBone){ rootBone.getWorldPosition(_pin); model.position.x-=_pin.x; model.position.z-=_pin.z; }
-  if(orbit.autospin)orbit.theta+=dt*0.5; applyCam(); renderer.render(scene,camera); }
+  flyStep(dt); renderer.render(scene,camera); }
 // ---- DEFENSE-TIMING authoring mode: scrub an attack clip, mark tap points, preview, export ----
 let mode='map', timings={}, dLastIdx=-1, dLastFile='', dLastN=-1, dPreview=false, previewSpeed=0.6;
 function loadTimings(){ try{ timings=JSON.parse(localStorage.getItem('tg_taps_'+curFile)||'{}'); }catch(e){ timings={}; } }
