@@ -308,7 +308,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.13</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.14</div>
   </div>
 </div>
 
@@ -925,11 +925,19 @@ const ENEMY_TAPS=[
     'Punch_Combo':  { dur:2.467, taps:[0.646,1.404] },
     'Punch_Pose':   { dur:4.3,   taps:[2.516] },
   },
-  {  // Gale — 2 of the 4 unique cast clips authored so far (mage_soell_cast_4 / _6 still pending)
-    'mage_soell_cast':  { dur:2.267, taps:[0.972] },   // Attack 1 & 8
-    'mage_soell_cast_2':{ dur:3,     taps:[1.242] },   // Attack 2 & 5
+  {  // Gale — all 4 unique cast clips authored
+    'mage_soell_cast':  { dur:2.267, taps:[0.972] },              // Attack 1 & 8
+    'mage_soell_cast_2':{ dur:3,     taps:[0.33,0.684,1.398] },   // Attack 2 & 5
+    'mage_soell_cast_4':{ dur:2.233, taps:[0.732] },              // Attack 3 & 6
+    'mage_soell_cast_6':{ dur:2.3,   taps:[0.492,0.768,1.074] },  // Attack 4 & 7
   },
-  {},   // Sky Titan
+  {  // Sky Titan — 6 of 8 slots authored (Roundhouse_Kick=Attack 6 & Kung_Fu_Punch=Attack 8 still pending)
+    'Shrug':                { dur:2,     taps:[0.702,0.852,1.014] },  // Attack 1
+    'Neck_Slashing_Gesture':{ dur:4.233, taps:[0.576,1.518,2.731] },  // Attack 2
+    'Angry_Ground_Stomp_2': { dur:1.8,   taps:[0.726,0.876,1.452] },  // Attack 3
+    'Lunge_Spin_Kick':      { dur:1.633, taps:[1.32] },               // Attack 4 & 7
+    'Sweep_Kick':           { dur:4.067, taps:[1.327,2.155] },        // Attack 5
+  },
 ];
 // TAP-WINDOW SPARKLE — a character-anchored twinkle on each boss's signature body part,
 // lit only while the dodge tap window is open (brightest at the perfect-tap instant).
