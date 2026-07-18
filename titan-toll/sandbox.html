@@ -300,7 +300,15 @@ function saveTimings(){ localStorage.setItem('tg_taps_'+curFile, JSON.stringify(
 function curClipName(){ return clips[curIdx]?clips[curIdx].name:''; }
 function curTaps(){ const n=curClipName(); if(!n)return []; if(!timings[n])timings[n]=[]; return timings[n]; }
 function forceWeight(){ if(curAction){ curAction.enabled=true; curAction.setEffectiveWeight(1); } }
-function fillClipSel(){ const s=el('defClipSel'); if(!s)return; s.innerHTML=clips.map((c,i)=>'<option value="'+i+'">'+c.name+'  ('+c.duration.toFixed(1)+'s)</option>').join(''); s.value=curIdx; dLastN=clips.length; }
+// which SLOT/move label(s) a clip is mapped to in MAP mode (reverse lookup); [] if the clip isn't assigned to a move
+function slotsForClip(name){ return curSlots.filter(([k])=>mapping[k]===name).map(([,label])=>label); }
+function moveLabel(name){ const s=slotsForClip(name); return s.length? s.join(' / ') : '(unmapped)'; }
+function fillClipSel(){ const s=el('defClipSel'); if(!s)return;
+  const order=curSlots.map(([,l])=>l);                                  // list by slot order (mapped moves first, unmapped last)
+  const items=clips.map((c,i)=>({i,c,slots:slotsForClip(c.name)}));
+  items.sort((a,b)=>{ const oa=a.slots.length?order.indexOf(a.slots[0]):999, ob=b.slots.length?order.indexOf(b.slots[0]):999; return oa-ob || a.c.name.localeCompare(b.c.name); });
+  s.innerHTML=items.map(({i,c,slots})=>'<option value="'+i+'">'+(slots.length?slots.join(' / '):'(unmapped)')+'  —  '+c.name+'  ('+c.duration.toFixed(1)+'s)</option>').join('');
+  s.value=curIdx; dLastN=clips.length; }
 function setMode(m){ mode=m;
   el('slots').style.display=m==='map'?'flex':'none';        // in DEFEND, hide BOTH side panels + transport
   el('list').style.display=m==='map'?'flex':'none';         // so the character is centred & fully visible
@@ -309,13 +317,16 @@ function setMode(m){ mode=m;
   el('defend').style.display=m==='defend'?'flex':'none';
   el('modeMap').classList.toggle('on',m==='map'); el('modeDef').classList.toggle('on',m==='defend');
   if(m==='defend'){ playing=false; loadTimings(); fillClipSel(); syncDefend(); }
-  else { playing=true; if(curAction)curAction.paused=false; if(curAction)curAction.timeScale=speed; el('play').textContent='⏸'; dPreview=false; el('tapNow').style.opacity='0'; } }
+  else { playing=true; if(curAction)curAction.paused=false; if(curAction)curAction.timeScale=speed; el('play').textContent='⏸'; dPreview=false; el('tapNow').style.opacity='0';
+    if(clips[curIdx]){ el('nowName').textContent=clips[curIdx].name; el('nowMeta').textContent='#'+(curIdx+1)+' / '+clips.length+'  ·  '+clips[curIdx].duration.toFixed(2)+'s'; } }   // MAP mode: back to clip name
+}
 el('modeMap').onclick=()=>setMode('map'); el('modeDef').onclick=()=>setMode('defend');
 el('defClipSel').onchange=e=>play(+e.target.value);
 el('defSpeed').oninput=e=>{ previewSpeed=+e.target.value; };
 function syncDefend(){ const c=clips[curIdx]; const s=el('defClipSel'); if(s&&clips.length)s.value=curIdx;
   if(!c){ el('defDur').textContent=''; return; }
   el('defDur').textContent=c.duration.toFixed(2)+'s';
+  el('nowName').textContent=moveLabel(c.name); el('nowMeta').textContent=c.name+'  ·  '+c.duration.toFixed(2)+'s';   // big label = the MOVE (slot); sub = clip name
   el('scrub').value='0'; if(curAction){ curAction.paused=true; curAction.time=0; forceWeight(); } if(mixer)mixer.update(0);
   el('scrubT').textContent='0.00s'; buildTapList(); drawTimeline(); drawPlayhead(); }
 function scrubTo(frac){ const c=clips[curIdx]; if(!c||!curAction)return; playing=false; dPreview=false; el('tapNow').style.opacity='0';
@@ -334,7 +345,7 @@ function drawTimeline(){ const c=clips[curIdx]; if(!c)return; const a=curTaps();
   el('defTimeline').innerHTML=a.map(t=>'<div class="mk" style="left:'+(t/c.duration*100).toFixed(1)+'%"></div>').join('')+'<div class="ph" id="defPh" style="left:0%"></div>'; }
 function drawPlayhead(){ const c=clips[curIdx], ph=el('defPh'); if(ph&&c&&curAction)ph.style.left=(Math.min(curAction.time,c.duration)/c.duration*100).toFixed(1)+'%'; }
 el('defExport').onclick=()=>{ const name=MODELS.find(m=>m.file===curFile)?.name||curFile; const attacks={};
-  Object.keys(timings).forEach(k=>{ if(timings[k]&&timings[k].length){ const c=clips.find(x=>x.name===k); attacks[k]={duration:c?+c.duration.toFixed(3):null, taps:timings[k].slice().sort((a,b)=>a-b).map(t=>+t.toFixed(3))}; } });
+  Object.keys(timings).forEach(k=>{ if(timings[k]&&timings[k].length){ const c=clips.find(x=>x.name===k); attacks[k]={slots:slotsForClip(k), clip:k, duration:c?+c.duration.toFixed(3):null, taps:timings[k].slice().sort((a,b)=>a-b).map(t=>+t.toFixed(3))}; } });
   el('mapText').value=JSON.stringify({model:name, attacks},null,2); el('modal').style.display='flex'; };
 function defendLoop(){ requestAnimationFrame(defendLoop);
   if(clips.length!==dLastN && mode==='defend'){ fillClipSel(); syncDefend(); }
