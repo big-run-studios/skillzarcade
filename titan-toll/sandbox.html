@@ -62,24 +62,27 @@
   #modeToggle{display:flex;gap:4px;}
   #modeToggle button{font:800 11px var(--disp);color:#9fb2d8;background:#141a34;border:1.5px solid #2b3a7a;border-radius:9px;padding:7px 8px;cursor:pointer;letter-spacing:.5px;white-space:nowrap;}
   #modeToggle button.on{background:var(--gold);color:#3a2600;border-color:var(--gold);}
-  #defend{top:112px;left:10px;bottom:92px;width:min(52vw,300px);overflow-y:auto;padding:9px;z-index:6;display:none;flex-direction:column;gap:7px;}
-  #defend .dclip{font-weight:900;font-size:13px;color:var(--gold);letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  #defend .ddur{font-weight:700;font-size:10px;color:#9fb2d8;letter-spacing:1px;}
-  #defend .lbl{font-weight:800;font-size:10px;letter-spacing:1.5px;color:#9fb2d8;margin-top:3px;}
-  #scrub{width:100%;}
-  #defTimeline{position:relative;height:30px;background:#0a1130;border:1.5px solid #2b3a7a;border-radius:8px;overflow:hidden;}
+  /* DEFEND mode = compact BOTTOM bar (side panels hidden) so the character is centered & fully visible */
+  #defend{left:8px;right:8px;bottom:8px;z-index:7;padding:8px 10px;display:none;flex-direction:column;gap:6px;}
+  #defend .drow{display:flex;gap:6px;align-items:center;}
+  #defend select{flex:1;min-width:0;font:700 12px var(--disp);background:#141a34;color:#eaf2ff;border:1.5px solid #2b3a7a;border-radius:9px;padding:7px 9px;letter-spacing:.3px;}
+  #defend .ddur{font-weight:700;font-size:10px;color:#9fb2d8;letter-spacing:1px;white-space:nowrap;}
+  #defSpd{display:flex;align-items:center;gap:4px;font-weight:700;font-size:10px;color:#9fb2d8;white-space:nowrap;}
+  #defSpd input{width:62px;}
+  #scrub{width:100%;margin:0;}
+  #defTimeline{position:relative;height:26px;background:#0a1130;border:1.5px solid #2b3a7a;border-radius:8px;overflow:hidden;}
   #defTimeline .mk{position:absolute;top:0;bottom:0;width:3px;background:var(--gold);box-shadow:0 0 6px var(--gold);transform:translateX(-50%);}
   #defTimeline .ph{position:absolute;top:0;bottom:0;width:2px;background:var(--cyan);box-shadow:0 0 8px var(--cyan);transform:translateX(-50%);}
-  #defend .drow{display:flex;gap:6px;}
   #defend .drow button{flex:1;font:800 11px var(--disp);color:#eaf2ff;background:#1b2450;border:1.5px solid #3a4a90;border-radius:9px;padding:9px 6px;cursor:pointer;letter-spacing:.5px;white-space:nowrap;}
   #defend .drow button:active{transform:scale(.96);}
   #setTap{background:var(--gold)!important;color:#3a2600!important;border-color:var(--gold)!important;}
-  #tapList{display:flex;flex-wrap:wrap;gap:5px;min-height:14px;}
-  #tapList .tap{font:800 11px var(--disp);color:#cfe6ff;background:rgba(255,194,51,.14);border:1px solid rgba(255,194,51,.5);border-radius:999px;padding:4px 8px;}
+  #defExport{background:var(--green)!important;color:#052!important;border-color:var(--green)!important;}
+  #tapMeta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:800;font-size:10px;color:#9fb2d8;letter-spacing:.5px;}
+  #tapCount{color:var(--green);}
+  #tapList{display:flex;flex-wrap:wrap;gap:5px;}
+  #tapList .tap{font:800 11px var(--disp);color:#cfe6ff;background:rgba(255,194,51,.14);border:1px solid rgba(255,194,51,.5);border-radius:999px;padding:3px 8px;}
   #tapList .tap b{color:#ff6a7a;cursor:pointer;margin-left:4px;}
-  #tapCount{font-weight:800;color:var(--green);}
-  #defExport{margin-top:5px;font:800 12px var(--disp);color:#052;background:var(--green);border:none;border-radius:9px;padding:10px;cursor:pointer;letter-spacing:1px;}
-  #tapNow{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:8;font:900 42px var(--disp);color:#eafcff;text-shadow:0 0 20px var(--cyan),0 0 44px var(--cyan);opacity:0;transition:opacity .04s;pointer-events:none;letter-spacing:2px;}
+  #tapNow{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);z-index:8;font:900 42px var(--disp);color:#eafcff;text-shadow:0 0 20px var(--cyan),0 0 44px var(--cyan);opacity:0;transition:opacity .04s;pointer-events:none;letter-spacing:2px;}
 </style>
 </head>
 <body>
@@ -93,16 +96,11 @@
 <div id="now" class="panel"><div class="nm" id="nowName">loading…</div><div class="meta" id="nowMeta"></div></div>
 <div id="slots" class="panel"><div class="hdr">REQUIRED SLOTS · drop a clip here</div><div id="slotList"></div><button id="export">⬇ EXPORT JSON</button></div>
 <div id="defend" class="panel">
-  <div class="hdr">DEFENSE TIMING · tap a clip → mark the taps</div>
-  <div class="dclip" id="defClip">— pick a clip —</div><div class="ddur" id="defDur"></div>
-  <div class="lbl">SCRUB THROUGH CLIP</div>
+  <div class="drow"><select id="defClipSel"></select><span class="ddur" id="defDur"></span><span id="defSpd">SPD<input id="defSpeed" type="range" min="0.25" max="1" step="0.05" value="0.6"></span></div>
   <input id="scrub" type="range" min="0" max="1" step="0.001" value="0">
   <div id="defTimeline"><div class="ph" id="defPh" style="left:0%"></div></div>
-  <div class="lbl"><span id="scrubT">0.00s</span> · <span id="tapCount">0 taps</span></div>
-  <div class="drow"><button id="setTap">⊕ SET TAP</button><button id="preview">▶ PREVIEW</button><button id="clearTaps">✕ CLEAR</button></div>
-  <div class="lbl">TAP POINTS (× to remove)</div>
-  <div id="tapList"></div>
-  <button id="defExport">⬇ EXPORT TIMING JSON</button>
+  <div class="drow"><button id="setTap">⊕ SET TAP</button><button id="preview">▶ PREVIEW</button><button id="clearTaps">✕ CLEAR</button><button id="defExport">⬇ EXPORT</button></div>
+  <div id="tapMeta"><span id="scrubT">0.00s</span><span id="tapCount">0 taps</span><span id="tapList"></span></div>
 </div>
 <div id="list" class="panel"><div class="hdr">AVAILABLE CLIPS · drag → slot · tap = play</div><div id="clipList"></div></div>
 <div id="ghost"></div>
@@ -274,21 +272,28 @@ let last=performance.now();
 function frame(){ requestAnimationFrame(frame); const now=performance.now(), dt=Math.min((now-last)/1000,0.05); last=now;
   if(mixer)mixer.update(dt); if(orbit.autospin)orbit.theta+=dt*0.5; applyCam(); renderer.render(scene,camera); }
 // ---- DEFENSE-TIMING authoring mode: scrub an attack clip, mark tap points, preview, export ----
-let mode='map', timings={}, dLastIdx=-1, dLastFile='', dPreview=false;
+let mode='map', timings={}, dLastIdx=-1, dLastFile='', dLastN=-1, dPreview=false, previewSpeed=0.6;
 function loadTimings(){ try{ timings=JSON.parse(localStorage.getItem('tg_taps_'+curFile)||'{}'); }catch(e){ timings={}; } }
 function saveTimings(){ localStorage.setItem('tg_taps_'+curFile, JSON.stringify(timings)); }
 function curClipName(){ return clips[curIdx]?clips[curIdx].name:''; }
 function curTaps(){ const n=curClipName(); if(!n)return []; if(!timings[n])timings[n]=[]; return timings[n]; }
 function forceWeight(){ if(curAction){ curAction.enabled=true; curAction.setEffectiveWeight(1); } }
+function fillClipSel(){ const s=el('defClipSel'); if(!s)return; s.innerHTML=clips.map((c,i)=>'<option value="'+i+'">'+c.name+'  ('+c.duration.toFixed(1)+'s)</option>').join(''); s.value=curIdx; dLastN=clips.length; }
 function setMode(m){ mode=m;
-  el('slots').style.display=m==='map'?'flex':'none'; el('defend').style.display=m==='defend'?'flex':'none';
+  el('slots').style.display=m==='map'?'flex':'none';        // in DEFEND, hide BOTH side panels + transport
+  el('list').style.display=m==='map'?'flex':'none';         // so the character is centred & fully visible
+  el('ctrl').style.display=m==='map'?'flex':'none';
+  el('hint').style.display=m==='map'?'block':'none';
+  el('defend').style.display=m==='defend'?'flex':'none';
   el('modeMap').classList.toggle('on',m==='map'); el('modeDef').classList.toggle('on',m==='defend');
-  el('hint').textContent = m==='defend' ? 'tap a clip to load it · SCRUB to a moment · SET TAP to mark it · PREVIEW to feel the timing' : 'DRAG canvas to orbit · WHEEL/PINCH zoom · drag a clip onto a slot to map it';
-  if(m==='defend'){ playing=false; loadTimings(); syncDefend(); }
-  else { playing=true; if(curAction)curAction.paused=false; el('play').textContent='⏸'; dPreview=false; el('tapNow').style.opacity='0'; } }
+  if(m==='defend'){ playing=false; loadTimings(); fillClipSel(); syncDefend(); }
+  else { playing=true; if(curAction)curAction.paused=false; if(curAction)curAction.timeScale=speed; el('play').textContent='⏸'; dPreview=false; el('tapNow').style.opacity='0'; } }
 el('modeMap').onclick=()=>setMode('map'); el('modeDef').onclick=()=>setMode('defend');
-function syncDefend(){ const c=clips[curIdx]; if(!c){ el('defClip').textContent='— pick a clip —'; el('defDur').textContent=''; return; }
-  el('defClip').textContent=c.name; el('defDur').textContent=c.duration.toFixed(2)+'s';
+el('defClipSel').onchange=e=>play(+e.target.value);
+el('defSpeed').oninput=e=>{ previewSpeed=+e.target.value; };
+function syncDefend(){ const c=clips[curIdx]; const s=el('defClipSel'); if(s&&clips.length)s.value=curIdx;
+  if(!c){ el('defDur').textContent=''; return; }
+  el('defDur').textContent=c.duration.toFixed(2)+'s';
   el('scrub').value='0'; if(curAction){ curAction.paused=true; curAction.time=0; forceWeight(); } if(mixer)mixer.update(0);
   el('scrubT').textContent='0.00s'; buildTapList(); drawTimeline(); drawPlayhead(); }
 function scrubTo(frac){ const c=clips[curIdx]; if(!c||!curAction)return; playing=false; dPreview=false; el('tapNow').style.opacity='0';
@@ -299,7 +304,7 @@ el('setTap').onclick=()=>{ const c=clips[curIdx]; if(!c||!curAction)return; cons
   if(!a.some(x=>Math.abs(x-t)<0.03)){ a.push(t); a.sort((x,y)=>x-y); saveTimings(); buildTapList(); drawTimeline(); } };
 el('clearTaps').onclick=()=>{ timings[curClipName()]=[]; saveTimings(); buildTapList(); drawTimeline(); };
 el('preview').onclick=()=>{ const c=clips[curIdx]; if(!c||!curAction)return; playing=true;
-  curAction.reset(); curAction.setLoop(THREE.LoopOnce,1); curAction.clampWhenFinished=true; forceWeight(); curAction.paused=false; curAction.time=0; curAction.play(); dPreview=true; };
+  curAction.reset(); curAction.setLoop(THREE.LoopOnce,1); curAction.clampWhenFinished=true; curAction.timeScale=previewSpeed; forceWeight(); curAction.paused=false; curAction.time=0; curAction.play(); dPreview=true; };
 function buildTapList(){ const a=curTaps(); el('tapCount').textContent=a.length+' tap'+(a.length===1?'':'s');
   el('tapList').innerHTML=a.map((t,i)=>'<span class="tap">'+t.toFixed(2)+'s<b data-i="'+i+'">×</b></span>').join('');
   [...el('tapList').querySelectorAll('b')].forEach(b=>b.onclick=()=>{ a.splice(+b.dataset.i,1); saveTimings(); buildTapList(); drawTimeline(); }); }
@@ -310,7 +315,8 @@ el('defExport').onclick=()=>{ const name=MODELS.find(m=>m.file===curFile)?.name|
   Object.keys(timings).forEach(k=>{ if(timings[k]&&timings[k].length){ const c=clips.find(x=>x.name===k); attacks[k]={duration:c?+c.duration.toFixed(3):null, taps:timings[k].slice().sort((a,b)=>a-b).map(t=>+t.toFixed(3))}; } });
   el('mapText').value=JSON.stringify({model:name, attacks},null,2); el('modal').style.display='flex'; };
 function defendLoop(){ requestAnimationFrame(defendLoop);
-  if(curFile!==dLastFile){ dLastFile=curFile; if(mode==='defend'){ loadTimings(); syncDefend(); } }
+  if(clips.length!==dLastN && mode==='defend'){ fillClipSel(); syncDefend(); }
+  if(curFile!==dLastFile){ dLastFile=curFile; if(mode==='defend'){ loadTimings(); fillClipSel(); syncDefend(); } }
   if(curIdx!==dLastIdx){ dLastIdx=curIdx; if(mode==='defend') syncDefend(); }
   if(mode!=='defend'||!curAction) return;
   drawPlayhead();
