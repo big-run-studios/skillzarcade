@@ -182,7 +182,7 @@
     </div>
 
     <div id="dbg"></div>
-    <div class="brand" id="brand">CRASHARCADE · MONKEY STACK v0.3.1</div>
+    <div class="brand" id="brand">CRASHARCADE · MONKEY STACK v0.4.0</div>
   </div>
   <audio id="unlockAudio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA"></audio>
 </div>
@@ -204,20 +204,22 @@ const store={ get:k=>{try{return localStorage.getItem(k);}catch(e){return null;}
 const CFG={
   // world
   timeScale:1,
-  U:36, platCols:9, platRows:18,
+  U:36, platCols:9, platRows:30, gridOverhang:5,       // grid extends 5 columns past each tray edge
   trayY:640, trayH:22, floorY:856,
   // board sim — the tray is a driven pendulum: gravity torque from the grid's mass map vs the
   // monkey's angular spring. No physics engine; the whole model is these numbers.
   boardG:1500,                    // gravity, px/s² per unit cell mass
-  boardK:4.5e6, boardC:6.2e5,     // monkey spring / damping (torque per rad, per rad/s)
+  boardK:9e6, boardC:9e5,         // strong monkey: centered mountains are safe, overhangs are the risk
   boardI0:175000,                 // empty-tray rotational inertia
-  springSoftenPerPlace:0.02, springSoftenMin:0.72,
+  heightDestab:0.15,              // how much tower height amplifies tilt (he actively balances the rest)
+  springSoftenPerPlace:0.008, springSoftenMin:0.8,
   maxTilt:0.46, critTilt:0.30, critGrace:1.1,
   impactKick:0.045,               // landing dip: fraction of the brick's own torque as an angV kick
   // flow
   crashBelow:150,
-  spawnGap:180, spawnGapGrow:6, spawnGapMax:265,
-  descentBase:46, descentGrow:2.5, descentMax:88,      // auto-descent px/s, ramps per placement
+  spawnGap:300, spawnGapGrow:4, spawnGapMax:430,       // bricks enter from high above the tower
+  descentStart:40, descentStartGrow:2.5, descentStartMax:90,
+  descentAccel:110, descentCap:460,                    // falls accelerate as they go
   slamSpeed:900, snapLerp:0.09, tumbleG:1800,
   // scoring
   baseCell:12, heightPts:6, fullClickPts:45, extraPegPts:12, weakClickPts:18,
@@ -226,7 +228,7 @@ const CFG={
   multBase:0.10, multPerPlace:0.015, multWeak:0.05,
   multOffset:0.06, multHeight:0.012, multDanger:0.18, multHard:0.03,
   // camera
-  camMinZoom:0.55, camEase:3, camTopPad:150,
+  camMinZoom:0.42, camEase:2.2, camTopPad:150, camPerRow:0.02,
 };
 
 /* ================================================================= brick shapes
@@ -305,7 +307,8 @@ function applyMute(){ muteBtn.textContent=muted?'🔇':'🔊'; if(master) master
 muteBtn.addEventListener('click',e=>{ e.stopPropagation(); muted=!muted; store.set('ms_mute',muted?'1':'0'); applyMute(); });
 applyMute();
 /* ================================================================= board sim */
-const W=430, H=932, U=CFG.U, HALF=(CFG.platCols-1)/2;      // grid columns -HALF..HALF
+const W=430, H=932, U=CFG.U, HALF=(CFG.platCols-1)/2;      // tray columns -HALF..HALF
+const GRID_HALF=HALF+CFG.gridOverhang;                      // stackable columns reach past the tray edges
 const TRAY_W=CFG.platCols*U+14;
 const PIVOT={x:W/2, y:CFG.trayY+CFG.trayH/2};              // where the monkey's hands hold the tray
 const board={angle:0, angV:0};
@@ -317,12 +320,12 @@ function addCellMass(i,j,m){
 }
 function springNow(){ return CFG.boardK*Math.max(CFG.springSoftenMin, 1-placements*CFG.springSoftenPerPlace); }
 function boardEq(dMx=0,dMh=0){ // small-angle equilibrium tilt for the (optionally hypothetical) mass map
-  const den=springNow()-CFG.boardG*(sumMh+dMh);
+  const den=springNow()-CFG.boardG*(sumMh+dMh)*CFG.heightDestab;
   return den>1e4 ? CFG.boardG*(sumMx+dMx)/den : Math.sign(sumMx+dMx)*CFG.maxTilt;
 }
 function boardStep(dt){
   const c=Math.cos(board.angle), s=Math.sin(board.angle);
-  const grav=CFG.boardG*(sumMx*c + sumMh*s);               // θ>0 = right side dips; tall towers amplify
+  const grav=CFG.boardG*(sumMx*c + sumMh*s*CFG.heightDestab);   // θ>0 = right side dips; height amplifies
   if(state==='crashing'){                                  // keel over freely, no monkey resistance
     board.angV+=grav/(CFG.boardI0+sumMr2)*dt + Math.sign(board.angle||1)*0.6*dt;
     board.angle=clamp(board.angle+board.angV*dt,-2.2,2.2);
@@ -410,11 +413,12 @@ function drawShape(){
   hardRun=SHAPES[k].hard?hardRun+1:0;
   return k;
 }
-function descentNow(){ return Math.min(CFG.descentBase+placements*CFG.descentGrow, CFG.descentMax); }
+function descentStart(){ return Math.min(CFG.descentStart+placements*CFG.descentStartGrow, CFG.descentStartMax); }
 function spawnBrick(){
   const key=drawShape();
   let ci; do{ ci=Math.floor(Math.random()*COLORS.length); }while(ci===lastColor); lastColor=ci;
-  active={ key, rot:0, color:ci, geom:buildGeom(key,0), x:W/2, y:spawnYNow(), slam:false, snapT:0, tumble:null };
+  active={ key, rot:0, color:ci, geom:buildGeom(key,0), x:W/2, y:spawnYNow(), vy:descentStart(),
+    slam:false, snapT:0, tumble:null };
   state='descend';
   setCtl();
   tutShow('move');
@@ -427,10 +431,10 @@ function rotateActive(){
 }
 function activeHalfW(){ const xs=active.geom.cells.map(c=>c.off.x); return (Math.max(...xs)-Math.min(...xs))/2+U/2; }
 function activeHalfH(){ return Math.max(...active.geom.cells.map(c=>c.off.y))+U/2; }
-function clampAim(x){ const hw=activeHalfW(); return clamp(x, W/2-(HALF+0.5)*U+hw, W/2+(HALF+0.5)*U-hw); }
+function clampAim(x){ const hw=activeHalfW(); return clamp(x, W/2-(GRID_HALF+0.5)*U+hw, W/2+(GRID_HALF+0.5)*U-hw); }
 function dropActive(){                      // SLAM = fast-forward the descent; the click itself is the landing
   if(!active||state!=='descend'||active.slam) return;
-  active.slam=true;
+  active.slam=true; active.vy=CFG.slamSpeed;
   tutDone('move'); tutDone('rotate'); tutDone('drop');
   sfx.drop();
 }
@@ -442,7 +446,7 @@ function beginSnap(cand){
 }
 function beginTumble(){
   const side=active.x>=W/2?1:-1;
-  active.tumble={vx:side*rnd(50,110), vy:Math.max(120,active.slam?CFG.slamSpeed*0.4:descentNow()), vr:side*rnd(1.5,3.5)};
+  active.tumble={vx:side*rnd(50,110), vy:Math.max(120,active.vy*(active.slam?0.4:1)), vr:side*rnd(1.5,3.5)};
   active.ang=board.angle;
   state='tumbling'; setCtl();
   popTxt(active.x,active.y-U,'no pegs!','#ff8fa0');
@@ -567,7 +571,8 @@ function tick(dt){
   if(state==='descend'&&active){
     aimCand=aimCandidate(active.x,active.rot);
     if(aimCand&&!aimCand.matches.length) tutDoneShow('miss','No pegs there — it would fall!');
-    active.y+=(active.slam?CFG.slamSpeed:descentNow())*sdt;
+    if(!active.slam) active.vy=Math.min(active.vy+CFG.descentAccel*sdt, CFG.descentCap);   // gravity feel
+    active.y+=active.vy*sdt;
     if(aimCand){
       // contact: cell 0 reaches its target cell centre (brick rides the tray tilt, so one cell suffices)
       const f=gridFrame();
@@ -609,9 +614,9 @@ function tick(dt){
     }
   }
 
-  // camera: zoom out just enough to keep spawn + monkey framed
+  // camera: a gentle notch out per stacked row, and never tighter than what frames spawn + monkey
   const reqTop=spawnYNow()-2*U, ax=900;
-  camZT=clamp((ax-CFG.camTopPad)/Math.max(1,ax-reqTop), CFG.camMinZoom, 1);
+  camZT=clamp(Math.min((ax-CFG.camTopPad)/Math.max(1,ax-reqTop), 1-maxRow*CFG.camPerRow), CFG.camMinZoom, 1);
   camZ+=(camZT-camZ)*Math.min(1,dt*CFG.camEase);
   camShake=Math.max(0,camShake-dt*1.6);
 
@@ -638,7 +643,7 @@ function aimCandidate(x,rot){
   const fracErr=frac-Math.round(frac);                       // signed column misalignment, in cells
   const maxOffY=Math.max(...g.cells.map(c=>c.off.y));        // bottom row of the shape
   const cis=[...new Set(g.cells.map(c=>Math.round(gp.gx+c.off.x/U)))];
-  if(cis.some(i=>i<-HALF||i>HALF)) return null;
+  if(cis.some(i=>i<-GRID_HALF||i>GRID_HALF)) return null;
   const rest=Math.max(...cis.map(stackH));                   // row the bottom of the shape lands on
   const cellsG=g.cells.map(c=>({ i:Math.round(gp.gx+c.off.x/U), j:rest+Math.round((maxOffY-c.off.y)/U),
     pegUp:c.peg?c.peg.y<-0.7:false, pegDown:c.peg?c.peg.y>0.7:false }));
@@ -649,7 +654,8 @@ function aimCandidate(x,rot){
     for(const c of cellsG){
       if(set.has(c.i+','+(c.j-1))) continue;
       if(c.pegDown) continue;
-      if(c.j===0) matches.push(c); else if(pegAt(c.i,c.j-1)) matches.push(c);
+      if(c.j===0&&Math.abs(c.i)<=HALF) matches.push(c);      // tray studs stop at the tray edge
+      else if(c.j>0&&pegAt(c.i,c.j-1)) matches.push(c);
     }
   }
   return {cellsG, matches, fracErr, restY:CFG.trayY-rest*U};
