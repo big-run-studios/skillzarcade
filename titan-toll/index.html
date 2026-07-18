@@ -308,7 +308,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.6</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.8</div>
   </div>
 </div>
 
@@ -904,6 +904,13 @@ const ENEMY_ANIM=[
   { idle:'Checkout_Gesture', hit:'Hit_Reaction_with_Bow', attacks:['mage_soell_cast','mage_soell_cast_2','mage_soell_cast_4','mage_soell_cast_6','mage_soell_cast_2','mage_soell_cast_4','mage_soell_cast_6','mage_soell_cast'] },  // Gale (lab map)
   { idle:'Combat_Stance',   hit:'Hit_Reaction_1', attacks:['Shrug','Neck_Slashing_Gesture','Angry_Ground_Stomp_2','Lunge_Spin_Kick','Sweep_Kick','Roundhouse_Kick','Lunge_Spin_Kick','Kung_Fu_Punch'] },  // Sky Titan (lab map)
 ];
+// Per-clip facing fix-ups (deg, added to the enemy's base yaw) — some merged clips are authored facing a different way.
+// Authored in the Animation Lab (FACE bar) and exported. Applied in playEnemyClip.
+const ENEMY_ROT=[
+  { Hit_Reaction:80 },   // Cliffhorn — hit reaction faces ~80° off; rotate it back to face the player
+  {},                    // Gale
+  {},                    // Sky Titan
+];
 // TAP-WINDOW SPARKLE — a character-anchored twinkle on each boss's signature body part,
 // lit only while the dodge tap window is open (brightest at the perfect-tap instant).
 const ENEMY_SPARK=[
@@ -939,10 +946,11 @@ function buildStaffDuplicate(model, cfg){
   const rhPos=new THREE.Vector3().setFromMatrixPosition(binv.clone().invert());   // wrist bind pos (mesh-local)
   const g=sm.geometry, pos=g.attributes.position, nor=g.attributes.normal, uv=g.attributes.uv, si=g.attributes.skinIndex, sw=g.attributes.skinWeight, idx=g.index;
   const _v=new THREE.Vector3(), isW=new Uint8Array(pos.count);
+  let dmin=1e9; const wv=[];                                       // weapon verts + their distance (for the connecting shaft)
   for(let i=0;i<pos.count;i++){                                    // weapon vert = hand-bone weighted AND far from the wrist
     let w=0; const ix=[si.getX(i),si.getY(i),si.getZ(i),si.getW(i)], wx=[sw.getX(i),sw.getY(i),sw.getZ(i),sw.getW(i)];
     for(let k=0;k<4;k++) if(ix[k]===rhi) w+=wx[k];
-    if(w>0.5){ _v.fromBufferAttribute(pos,i); if(_v.distanceTo(rhPos)>cfg.distMin) isW[i]=1; }
+    if(w>0.5){ _v.fromBufferAttribute(pos,i); const d=_v.distanceTo(rhPos); if(d>cfg.distMin){ isW[i]=1; wv.push({i, p:_v.clone(), d}); dmin=Math.min(dmin,d); } }
   }
   // M = rotate flip about rhPos (in bind space): T(rhPos) · R(flip) · T(-rhPos)
   const R=new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(cfg.flip[0],cfg.flip[1],cfg.flip[2]));
@@ -957,6 +965,23 @@ function buildStaffDuplicate(model, cfg){
   const arr=idx?idx.array:null, tc=idx?idx.count:pos.count;
   for(let t=0;t<tc;t+=3){ const a=idx?arr[t]:t,b=idx?arr[t+1]:t+1,c=idx?arr[t+2]:t+2; if(isW[a]&&isW[b]&&isW[c]) ni.push(remap(a),remap(b),remap(c)); }
   if(ni.length<3) return null;
+  // CONNECTING SHAFT — bridge the gap between the original weapon's near-end (A) and the flipped
+  // duplicate's near-end (M·A) so the two blades read as ONE continuous double-ended staff.
+  if(wv.length){
+    const near=wv.filter(o=>o.d<=dmin+0.15);
+    const A=new THREE.Vector3(); near.forEach(o=>A.add(o.p)); A.multiplyScalar(1/near.length);   // shaft near-end centre
+    const axis=A.clone().sub(rhPos).normalize();
+    let r=0; near.forEach(o=>{ const rel=o.p.clone().sub(rhPos); r+=rel.clone().addScaledVector(axis,-rel.dot(axis)).length(); }); r=(r/near.length)*1.15 || 0.02;  // shaft radius = perp spread
+    let uvN=[0.5,0.5]; if(uv && wv.length){ const s=wv.slice().sort((a,b)=>a.d-b.d); const pk=s[Math.floor(s.length*0.35)]; uvN=[uv.getX(pk.i),uv.getY(pk.i)]; }  // mid-shaft texel (dark metal), not the near-end (brown grip)
+    const B=A.clone().applyMatrix4(M);                              // duplicate's near-end
+    const mid=A.clone().add(B).multiplyScalar(0.5), dir=B.clone().sub(A);
+    const len=dir.length()*1.24;                                    // +overlap into both weapons so no seam
+    const cyl=new THREE.CylinderGeometry(r,r,len,10,1,false);
+    cyl.applyMatrix4(new THREE.Matrix4().compose(mid, new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize()), new THREE.Vector3(1,1,1)));
+    const cp=cyl.attributes.position, cn=cyl.attributes.normal, cidx=cyl.index, base=P.length/3;
+    for(let i=0;i<cp.count;i++){ P.push(cp.getX(i),cp.getY(i),cp.getZ(i)); N.push(cn.getX(i),cn.getY(i),cn.getZ(i)); if(uv)U.push(uvN[0],uvN[1]); SI.push(rhi,0,0,0); SW.push(1,0,0,0); }
+    if(cidx){ for(let i=0;i<cidx.count;i++) ni.push(base+cidx.getX(i)); } else { for(let i=0;i<cp.count;i++) ni.push(base+i); }
+  }
   const wg=new THREE.BufferGeometry();
   wg.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
   wg.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
@@ -1030,6 +1055,8 @@ function playEnemyClip(u, name, loop, fade, speed){
   next.enabled=true; next.setEffectiveWeight(1); next.fadeIn(fade); next.play();
   if(u.action && u.action!==next) u.action.fadeOut(fade);
   u.action=next; u.curClip=name;
+  // per-clip facing fix-up: some merged clips are authored facing a different way (Animation Lab FACE export)
+  if(u.model) u.model.rotation.y = (u.baseYaw||0) + ((u.rotMap&&u.rotMap[name]||0)*Math.PI/180);
 }
 function buildEnemyGLB(i){
   const g=new THREE.Group(); const h=ENEMY_H_LOCAL[i];
@@ -1047,7 +1074,7 @@ function buildEnemyGLB(i){
   for(const c of bossGLTF[i].animations) clips[c.name]=c;
   const spk=ENEMY_SPARK[i]; const sparkBone=spk?model.getObjectByName(spk.node):null;
   const staffDup=ENEMY_STAFF[i]?buildStaffDuplicate(model,ENEMY_STAFF[i]):null;   // double-sided weapon (Gale)
-  g.userData={...g.userData, height:h, model, mixer, clips, animMap:ENEMY_ANIM[i], curClip:'', action:null, _rx:0, spark:spk, sparkBone, boneFix:resolveBoneFix(model,i), staffDup, staffIdx:i};
+  g.userData={...g.userData, height:h, model, mixer, clips, animMap:ENEMY_ANIM[i], baseYaw:ENEMY_YAW[i], rotMap:ENEMY_ROT[i]||{}, curClip:'', action:null, _rx:0, spark:spk, sparkBone, boneFix:resolveBoneFix(model,i), staffDup, staffIdx:i};
   playEnemyClip(g.userData, ENEMY_ANIM[i].idle, true, 0);
   return g;
 }
