@@ -308,7 +308,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.5</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.6</div>
   </div>
 </div>
 
@@ -915,12 +915,61 @@ const ENEMY_SPARK=[
 // Gale's scythe is fused to the skinned mesh on RightHand (a leaf bone) and hangs pointing down; rotate it up.
 const ENEMY_BONEFIX=[
   null,                                    // Cliffhorn
-  [{node:'RightHand', e:[Math.PI,0,0]}],   // Gale — 180° about hand X so the fused scythe points UP, not down (tune live via __game.boneFix)
+  null,                                    // Gale — was a RightHand flip; now a DOUBLE-SIDED STAFF (see ENEMY_STAFF) instead
   null,                                    // Sky Titan
 ];
 function resolveBoneFix(model,i){
   const list=ENEMY_BONEFIX[i]; if(!list) return null;
   return list.map(f=>({ bone:model.getObjectByName(f.node), q:new THREE.Quaternion().setFromEuler(new THREE.Euler(f.e[0],f.e[1],f.e[2])), node:f.node }));
+}
+// DOUBLE-SIDED STAFF — the boss's weapon is fused into the single skinned mesh, weighted to a hand bone.
+// Isolate those verts (hand-bone weight + far from the wrist joint), rebuild them as a rigid SkinnedMesh
+// duplicate (100% weighted to the hand bone, sharing the skeleton so it aligns under any scale), and rotate
+// its BIND pose 180° about the wrist so it points the opposite way. Original + duplicate = a two-ended staff.
+const ENEMY_STAFF=[
+  null,                                                            // Cliffhorn
+  { bone:'RightHand', distMin:0.35, flip:[Math.PI,0,0] },          // Gale — scythe → double-sided (tune via __game.staffTune)
+  null,                                                            // Sky Titan
+];
+function buildStaffDuplicate(model, cfg){
+  let sm=null; model.traverse(o=>{ if(o.isSkinnedMesh && !sm) sm=o; });
+  if(!sm) return null;
+  const rhi=sm.skeleton.bones.findIndex(b=>b.name===cfg.bone); if(rhi<0) return null;
+  const binv=sm.skeleton.boneInverses[rhi];
+  const rhPos=new THREE.Vector3().setFromMatrixPosition(binv.clone().invert());   // wrist bind pos (mesh-local)
+  const g=sm.geometry, pos=g.attributes.position, nor=g.attributes.normal, uv=g.attributes.uv, si=g.attributes.skinIndex, sw=g.attributes.skinWeight, idx=g.index;
+  const _v=new THREE.Vector3(), isW=new Uint8Array(pos.count);
+  for(let i=0;i<pos.count;i++){                                    // weapon vert = hand-bone weighted AND far from the wrist
+    let w=0; const ix=[si.getX(i),si.getY(i),si.getZ(i),si.getW(i)], wx=[sw.getX(i),sw.getY(i),sw.getZ(i),sw.getW(i)];
+    for(let k=0;k<4;k++) if(ix[k]===rhi) w+=wx[k];
+    if(w>0.5){ _v.fromBufferAttribute(pos,i); if(_v.distanceTo(rhPos)>cfg.distMin) isW[i]=1; }
+  }
+  // M = rotate flip about rhPos (in bind space): T(rhPos) · R(flip) · T(-rhPos)
+  const R=new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(cfg.flip[0],cfg.flip[1],cfg.flip[2]));
+  const M=new THREE.Matrix4().makeTranslation(rhPos.x,rhPos.y,rhPos.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-rhPos.x,-rhPos.y,-rhPos.z));
+  const nmat=new THREE.Matrix3().getNormalMatrix(M);
+  const map=new Map(), P=[],N=[],U=[],SI=[],SW=[],ni=[], _n=new THREE.Vector3();
+  const remap=oi=>{ if(map.has(oi))return map.get(oi); const n=P.length/3; map.set(oi,n);
+    _v.fromBufferAttribute(pos,oi).applyMatrix4(M); P.push(_v.x,_v.y,_v.z);
+    _n.fromBufferAttribute(nor,oi).applyMatrix3(nmat).normalize(); N.push(_n.x,_n.y,_n.z);
+    if(uv) U.push(uv.getX(oi),uv.getY(oi));
+    SI.push(rhi,0,0,0); SW.push(1,0,0,0); return n; };
+  const arr=idx?idx.array:null, tc=idx?idx.count:pos.count;
+  for(let t=0;t<tc;t+=3){ const a=idx?arr[t]:t,b=idx?arr[t+1]:t+1,c=idx?arr[t+2]:t+2; if(isW[a]&&isW[b]&&isW[c]) ni.push(remap(a),remap(b),remap(c)); }
+  if(ni.length<3) return null;
+  const wg=new THREE.BufferGeometry();
+  wg.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+  wg.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+  if(uv) wg.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+  wg.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(SI,4));
+  wg.setAttribute('skinWeight',new THREE.Float32BufferAttribute(SW,4));
+  wg.setIndex(ni);
+  const dup=new THREE.SkinnedMesh(wg, (Array.isArray(sm.material)?sm.material[0]:sm.material).clone());
+  dup.frustumCulled=false;
+  sm.parent.add(dup);                                             // sibling of the body mesh → same matrixWorld + bind => aligns exactly
+  dup.position.copy(sm.position); dup.quaternion.copy(sm.quaternion); dup.scale.copy(sm.scale);
+  dup.bind(sm.skeleton, sm.bindMatrix);
+  return dup;
 }
 function makeSparkTexture(){
   const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d'), C=64;
@@ -997,7 +1046,8 @@ function buildEnemyGLB(i){
   const mixer=new THREE.AnimationMixer(model), clips={};
   for(const c of bossGLTF[i].animations) clips[c.name]=c;
   const spk=ENEMY_SPARK[i]; const sparkBone=spk?model.getObjectByName(spk.node):null;
-  g.userData={...g.userData, height:h, model, mixer, clips, animMap:ENEMY_ANIM[i], curClip:'', action:null, _rx:0, spark:spk, sparkBone, boneFix:resolveBoneFix(model,i)};
+  const staffDup=ENEMY_STAFF[i]?buildStaffDuplicate(model,ENEMY_STAFF[i]):null;   // double-sided weapon (Gale)
+  g.userData={...g.userData, height:h, model, mixer, clips, animMap:ENEMY_ANIM[i], curClip:'', action:null, _rx:0, spark:spk, sparkBone, boneFix:resolveBoneFix(model,i), staffDup, staffIdx:i};
   playEnemyClip(g.userData, ENEMY_ANIM[i].idle, true, 0);
   return g;
 }
@@ -2112,6 +2162,10 @@ window.__game={
   sparkTune:(dx,dy,dz,scale)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.spark)return '(no spark)'; if(dx!=null)u.spark.off=[dx,dy,dz]; if(scale!=null)u.spark.scale=scale; return {node:u.spark.node, off:u.spark.off, scale:u.spark.scale, boneFound:!!u.sparkBone}; },
   boneFix:(node,rx=0,ry=0,rz=0)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.model)return '(no enemy)'; const bone=u.model.getObjectByName(node);
     u.boneFix=[{bone, q:new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz)), node}]; return {node, found:!!bone, e:[rx,ry,rz]}; },
+  staffTune:(rx=Math.PI,ry=0,rz=0,distMin)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.model)return '(no enemy)'; const base=ENEMY_STAFF[u.staffIdx]; if(!base)return '(no staff on this boss)';
+    if(u.staffDup){ u.staffDup.parent&&u.staffDup.parent.remove(u.staffDup); u.staffDup.geometry.dispose(); }
+    const cfg={bone:base.bone, distMin:distMin!=null?distMin:base.distMin, flip:[rx,ry,rz]};
+    u.staffDup=buildStaffDuplicate(u.model,cfg); return {flip:[rx,ry,rz], distMin:cfg.distMin, built:!!u.staffDup}; },
   pause:(v=true)=>{ paused=v; },
   setEnemyZ:(z)=>{ if(enemyMesh)enemyMesh.position.z=z; },
   setEnemyScale:(s)=>{ if(enemyMesh)enemyMesh.scale.setScalar(s); },
