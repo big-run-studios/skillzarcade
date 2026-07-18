@@ -156,7 +156,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.27.4</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.28.0</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -681,6 +681,7 @@ function spawnCorpse(e){
   const m=meshMap.get(e);
   if(!m) return;                 // never rendered (spawned+killed same frame) → nothing to dissolve
   meshMap.delete(e);             // take the mesh out of the pool/sweep; the corpse owns it now
+  m.visible=true; m.position.set(e.x, m.position.y, e.y);   // in case it died while fog/frustum-culled (stale transform)
   m.updateWorldMatrix(true,true);
   _deathBox.setFromObject(m);
   const top=_deathBox.max.y, bot=_deathBox.min.y, noise=Math.max(4,(top-bot)*0.14);
@@ -2642,6 +2643,7 @@ const scanGrp=new THREE.Group(); scanGrp.visible=false; scene.add(scanGrp);
 
 /* ================================================================= scene sync */
 const _v=new THREE.Vector3(), _tv=new THREE.Vector3(), _tv2=new THREE.Vector3(), _X1=new THREE.Vector3(1,0,0), _upY=new THREE.Vector3(0,1,0);
+const _frust=new THREE.Frustum(), _fm=new THREE.Matrix4(), _fmInv=new THREE.Matrix4(), _cullSph=new THREE.Sphere();   // Tier-1 perf: cull enemies hidden by the fog / off-screen
 function toScreen(x,z,h){
   _v.set(x,h||0,z).project(camera);
   return {x:(_v.x*0.5+0.5)*cw, y:(-_v.y*0.5+0.5)*ch, ok:_v.z<1};
@@ -2699,6 +2701,9 @@ function syncScene(dt){
     scene.fog.near=camD+rng*0.5; scene.fog.far=camD+fowVis;   // camera-based fog: enemies + hero only (colour matches the haze)
     fowU.player.value.set(px,0,py); fowU.near.value=rng*0.5; fowU.far.value=fowVis;   // PLAYER-centred fog: the WHOLE environment → a stable haze circle around the hero; soft gradient 0.5→1.6× range so haze builds gradually (not a hard vignette)
   } else { fowU.far.value=1e9; }   // fog off (sandbox) → environment fully visible
+  // Tier-1 perf: rebuild the camera frustum so the enemy sync can cull off-screen enemies
+  camera.updateMatrixWorld();
+  _frust.setFromProjectionMatrix(_fm.multiplyMatrices(camera.projectionMatrix, _fmInv.copy(camera.matrixWorld).invert()));
   sun.position.set(px-760, 470, py+340); sun.target.position.set(px, 0, py); sun.target.updateMatrixWorld();
 
   // unicorn
@@ -2813,6 +2818,17 @@ function syncScene(dt){
   // enemies
   syncSet(enemies,e=>'e_'+e.type,e=>makeFruit(e.type),(e,m)=>{
     const d=FRUIT[e.type], ud=m.userData;
+    // Tier-1 perf cull: don't render enemies swallowed by the fog-of-war murk or off-screen — they're
+    // invisible to the player anyway, so this skips their skinned draw + skeleton pose. Sim is untouched;
+    // they re-show the instant they're back in the bubble/on-screen.
+    if(!sandbox){
+      const distP=Math.hypot(e.x-px, e.y-py);
+      let vis;
+      if(distP > fowVis + d.r + 40) vis=false;                         // beyond the murk
+      else { _cullSph.center.set(e.x, d.r, e.y); _cullSph.radius=d.r*3; vis=_frust.intersectsSphere(_cullSph); }   // outside the view
+      m.visible=vis;
+      if(!vis) return;
+    } else m.visible=true;
     const rise=e.spawnT>0?Math.max(0,e.spawnT)/0.55:0;   // new demon rises out of the ground
     let by=-d.r*2.6*rise;
     if(ud.float && rise<=0) by=d.r*0.7+Math.sin(time*3+e.ph)*d.r*BS_BOB;   // bilespawn hovers + bobs (calmed)
