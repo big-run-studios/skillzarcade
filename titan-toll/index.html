@@ -308,7 +308,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.2</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.3</div>
   </div>
 </div>
 
@@ -923,10 +923,12 @@ function cloneRigged(source){
   });
   return clone;
 }
-function playEnemyClip(u, name, loop, fade){
-  if(!u.mixer || !u.clips[name] || u.curClip===name) return;
+function playEnemyClip(u, name, loop, fade, speed){
+  if(!u.mixer || !u.clips[name]) return;
+  if(u.curClip===name){ if(speed!=null && u.action) u.action.timeScale=speed; return; }   // already playing: just retime
   const next=u.mixer.clipAction(u.clips[name]);
   next.reset(); next.setLoop(loop?THREE.LoopRepeat:THREE.LoopOnce, loop?Infinity:1); next.clampWhenFinished=!loop;
+  next.timeScale=(speed!=null?speed:1);
   next.enabled=true; next.setEffectiveWeight(1); next.fadeIn(fade); next.play();
   if(u.action && u.action!==next) u.action.fadeOut(fade);
   u.action=next; u.curClip=name;
@@ -1722,10 +1724,15 @@ function animateEnemy(rdt){
   // rigged-model animation: drive the mixer + pick a clip by combat state (cosmetic; off the deterministic sim)
   if(u.mixer){
     u.mixer.update(rdt);
-    const map=u.animMap; let want=map.idle, loop=true;
+    const map=u.animMap; let want=map.idle, loop=true, spd=1;
     if(enemyHurtT>0 || enemyState==='stagger'){ want=map.hit; loop=false; }
-    else if(atk && (enemyState==='telegraph'||enemyState==='active')){ want=map.attacks[(atk.setIdx||0)%map.attacks.length]; }
-    playEnemyClip(u, want, loop, 0.14);
+    else if(atk && (enemyState==='telegraph'||enemyState==='active')){       // attack: fit the clip to the dodge-game window
+      want=map.attacks[(atk.setIdx||0)%map.attacks.length]; loop=false;
+      const clip=u.clips[want];
+      if(clip){ const winLen=Math.max(0.35, atk.hits[atk.hits.length-1].at + dwin());   // attack start -> last dodge window closes
+        spd=clamp(clip.duration/winLen, 0.25, 4); }                          // stretch/squeeze so one play == the window
+    }
+    playEnemyClip(u, want, loop, 0.14, spd);
   }
 }
 
@@ -2047,6 +2054,9 @@ window.__game={
   enemyTune:(yaw,scale)=>{ if(!enemyMesh)return '(no enemy)'; const m=enemyMesh.userData.model; if(m&&yaw!=null)m.rotation.y=yaw; if(scale!=null)enemyMesh.scale.setScalar(scale); return {yaw:m?+m.rotation.y.toFixed(3):null, scale:+enemyMesh.scale.x.toFixed(3), rigged:!!enemyMesh.userData.mixer}; },
   enemyClip:(name)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.mixer)return '(no rigged enemy)'; u.curClip=''; playEnemyClip(u,name,true,0.12); return name; },
   enemyClips:()=>{ const u=enemyMesh&&enemyMesh.userData; return (u&&u.clips)?Object.keys(u.clips):[]; },
+  enemyAnimDbg:()=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.action)return '(no rigged enemy)';
+    const o={ clip:u.curClip, timeScale:+u.action.timeScale.toFixed(3), clipDur:+u.action.getClip().duration.toFixed(3), state:enemyState };
+    if(atk){ o.winLen=+(atk.hits[atk.hits.length-1].at+dwin()).toFixed(3); o.effDur=+(o.clipDur/o.timeScale).toFixed(3); } return o; },
   pause:(v=true)=>{ paused=v; },
   setEnemyZ:(z)=>{ if(enemyMesh)enemyMesh.position.z=z; },
   setEnemyScale:(s)=>{ if(enemyMesh)enemyMesh.scale.setScalar(s); },
