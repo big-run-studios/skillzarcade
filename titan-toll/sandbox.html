@@ -115,7 +115,7 @@
 <div id="tapNow">🛡 TAP</div>
 <div id="ctrl" class="panel">
   <button id="prev">◀</button><button id="play">⏸</button><button id="next">▶</button>
-  <button id="loop" class="on">🔁 Loop</button><button id="spin" class="on">↻ Spin</button>
+  <button id="loop" class="on">🔁 Loop</button><button id="spin" class="on">↻ Spin</button><button id="mirror" class="on">🪞 Mirror</button>
   <span class="spd">SPD <input id="speed" type="range" min="0.1" max="2" step="0.1" value="1"><b id="spdv">1.0×</b></span>
 </div>
 <div id="hint">WASD move · Q/E down/up · SHIFT faster · drag = look · wheel/pinch = dolly · drag a clip → slot</div>
@@ -215,8 +215,60 @@ function loadMapping(){ let saved={}; try{ saved=JSON.parse(localStorage.getItem
   mapping={...def, ...saved}; }
 function saveMapping(){ localStorage.setItem(mapKey(),JSON.stringify(mapping)); }
 
+// FOREARM MIRROR — mirror of the game's ENEMY_ARMS / buildLimbDuplicate (index.html). Keep in sync when
+// the game's arm flips change. Duplicates everything distal to the elbow (forearm+hand+weapon), flipped
+// about the elbow, rigid to the forearm bone. The sandbox's AnimationMixer(model) drives it (shared skeleton).
+const ARM_CFG = {
+  'assets/boss2.glb': [ { fore:'RightForeArm', hand:'RightHand', flip:[Math.PI,0,0] },
+                        { fore:'LeftForeArm',  hand:'LeftHand',  flip:[Math.PI,0,0] } ],
+};
+function buildLimbDuplicate(mdl, cfg){
+  let sm=null; mdl.traverse(o=>{ if(o.isSkinnedMesh && !sm) sm=o; });
+  if(!sm) return null;
+  const fi=sm.skeleton.bones.findIndex(b=>b.name===cfg.fore); if(fi<0) return null;
+  const hi=sm.skeleton.bones.findIndex(b=>b.name===cfg.hand);
+  const elbow=new THREE.Vector3().setFromMatrixPosition(sm.skeleton.boneInverses[fi].clone().invert());
+  const g=sm.geometry, pos=g.attributes.position, nor=g.attributes.normal, uv=g.attributes.uv, si=g.attributes.skinIndex, sw=g.attributes.skinWeight, idx=g.index;
+  const _v=new THREE.Vector3(), _n=new THREE.Vector3(), isW=new Uint8Array(pos.count);
+  for(let i=0;i<pos.count;i++){
+    let w=0; const ix=[si.getX(i),si.getY(i),si.getZ(i),si.getW(i)], wx=[sw.getX(i),sw.getY(i),sw.getZ(i),sw.getW(i)];
+    for(let k=0;k<4;k++) if(ix[k]===fi || ix[k]===hi) w+=wx[k];
+    if(w>0.5) isW[i]=1;
+  }
+  const R=new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(cfg.flip[0],cfg.flip[1],cfg.flip[2]));
+  const M=new THREE.Matrix4().makeTranslation(elbow.x,elbow.y,elbow.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-elbow.x,-elbow.y,-elbow.z));
+  const nmat=new THREE.Matrix3().getNormalMatrix(M);
+  const map=new Map(), P=[],N=[],U=[],SI=[],SW=[],ni=[];
+  const remap=oi=>{ if(map.has(oi))return map.get(oi); const n=P.length/3; map.set(oi,n);
+    _v.fromBufferAttribute(pos,oi).applyMatrix4(M); P.push(_v.x,_v.y,_v.z);
+    _n.fromBufferAttribute(nor,oi).applyMatrix3(nmat).normalize(); N.push(_n.x,_n.y,_n.z);
+    if(uv) U.push(uv.getX(oi),uv.getY(oi));
+    SI.push(fi,0,0,0); SW.push(1,0,0,0); return n; };
+  const arr=idx?idx.array:null, tc=idx?idx.count:pos.count;
+  for(let t=0;t<tc;t+=3){ const a=idx?arr[t]:t,b=idx?arr[t+1]:t+1,c=idx?arr[t+2]:t+2; if(isW[a]&&isW[b]&&isW[c]) ni.push(remap(a),remap(b),remap(c)); }
+  if(ni.length<3) return null;
+  const wg=new THREE.BufferGeometry();
+  wg.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+  wg.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+  if(uv) wg.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+  wg.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(SI,4));
+  wg.setAttribute('skinWeight',new THREE.Float32BufferAttribute(SW,4));
+  wg.setIndex(ni);
+  const dup=new THREE.SkinnedMesh(wg, (Array.isArray(sm.material)?sm.material[0]:sm.material).clone());
+  dup.frustumCulled=false;
+  sm.parent.add(dup);
+  dup.position.copy(sm.position); dup.quaternion.copy(sm.quaternion); dup.scale.copy(sm.scale);
+  dup.bind(sm.skeleton, sm.bindMatrix);
+  return dup;
+}
+let limbDups=[], mirrorOn=true;
+function clearArms(){ for(const d of limbDups){ d.parent&&d.parent.remove(d); d.geometry.dispose(); } limbDups=[]; }
+function applyArms(){ clearArms(); const cfg=ARM_CFG[curFile]; if(!cfg||!mirrorOn||!model) return; model.updateMatrixWorld(true);
+  for(const a of cfg){ const d=buildLimbDuplicate(model,a); if(d)limbDups.push(d); } }
+
 function loadModel(file){
   curFile=file; const m=MODELS.find(x=>x.file===file); curKind=(m&&m.kind)||'hero'; curSlots=SLOT_SETS[curKind]; loadMapping();
+  clearArms();
   el('nowName').textContent='loading…'; el('nowMeta').textContent=''; el('clipList').innerHTML=''; el('err').style.display='none';
   if(model){ scene.remove(model); model=null; } mixer=null; clips=[]; curAction=null;
   loader.load(file, gltf=>{
@@ -234,7 +286,7 @@ function loadModel(file){
     mixer=new THREE.AnimationMixer(model);
     clips=gltf.animations.slice().sort((a,b)=>a.name.localeCompare(b.name));
     el('cnt').textContent=clips.length+' CLIPS';
-    buildClips(); buildSlots(); play(0);
+    buildClips(); buildSlots(); play(0); applyArms();
   }, xhr=>{ if(xhr.total)el('nowName').textContent='loading… '+Math.round(xhr.loaded/xhr.total*100)+'%'; },
      err=>{ el('err').style.display='block'; el('err').textContent='Failed to load '+file+'\n'+err; console.error(err); });
 }
@@ -284,6 +336,7 @@ el('next').onclick=()=>play(curIdx+1);
 el('play').onclick=()=>{ playing=!playing; if(curAction)curAction.paused=!playing; el('play').textContent=playing?'⏸':'▶'; };
 el('loop').onclick=()=>{ looping=!looping; el('loop').classList.toggle('on',looping); play(curIdx); };
 el('spin').onclick=()=>{ fly.spin=!fly.spin; el('spin').classList.toggle('on',fly.spin); };
+el('mirror').onclick=()=>{ mirrorOn=!mirrorOn; el('mirror').classList.toggle('on',mirrorOn); applyArms(); };
 el('speed').oninput=e=>{ speed=+e.target.value; el('spdv').textContent=speed.toFixed(1)+'×'; if(curAction)curAction.timeScale=speed; };
 
 // export — shape matches what the game consumes for this kind (paste-ready)
