@@ -308,7 +308,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.1</div>
   </div>
 </div>
 
@@ -900,7 +900,7 @@ const _EY=HERO_YAW+Math.PI;                      // enemy faces back toward the 
 const ENEMY_YAW=[_EY,_EY,_EY];                   // per-boss facing (tune live via __game.enemyTune)
 // clip roles per boss (names verified against the merged-animation GLBs)
 const ENEMY_ANIM=[
-  { idle:'Punch_Pose',      hit:'Hit_Reaction',   attacks:['Punch_Combo','Punch_Combo_1','Punch_Combo_2','Punch_Combo_3','Punch_Combo_4','Punch_Combo_5','Angry_Ground_Stomp'] },        // Cliffhorn
+  { idle:'Angry_Ground_Stomp', hit:'Hit_Reaction', attacks:['Punch_Combo_1','Punch_Combo_3','Punch_Combo_4','Punch_Combo_5','Punch_Combo_4','Punch_Combo_2','Punch_Combo','Punch_Pose'] },  // Cliffhorn (lab map)
   { idle:'Shouting_Angrily', hit:'Hit_Reaction',  attacks:['mage_soell_cast','mage_soell_cast_2','mage_soell_cast_4','mage_soell_cast_6'] },                                              // Gale
   { idle:'Combat_Stance',   hit:'Hit_Reaction_1', attacks:['Kung_Fu_Punch','Lunge_Spin_Kick','Roundhouse_Kick','Sweep_Kick','Angry_Ground_Stomp_2','Neck_Slashing_Gesture'] },           // Sky Titan
 ];
