@@ -308,7 +308,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.14.1</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.0</div>
   </div>
 </div>
 
@@ -735,10 +735,11 @@ function buildPlayer(){
 /* =========================================================================
    HERO MODEL — rigged GLB (Meshy "Nocturnal Vanguard") replacing the blocky body
    ========================================================================= */
-let heroGLTF=null, heroModel=null, heroMixer=null, heroAction=null, heroCurName='', heroRightHand=null, heroDead=false;
+let heroGLTF=null, heroModel=null, heroMixer=null, heroAction=null, heroCurName='', heroRightHand=null, heroDead=false, heroOneShot='', heroOneShotT=0;
 const heroClips={};
 const HERO_H=2.05, HERO_YAW=1.85+Math.PI/2;   // target height + facing (rotated 90° CCW to face the titan)
-const HERO_CLIP={ idle:'Idle_10', strike:'Double_Combo_Attack', shoot:'Male_Head_Down_Charge', cast:'Charged_Spell_Cast_1', blitz:'360_Power_Spin_Jump', dodge:'Roll_Dodge_4', dead:'Dead' };
+// Andrew's mapping from the Animation Lab (sandbox.html)
+const HERO_CLIP={ idle:'Idle_10', strike:'Charged_Axe_Chop', shoot:'mage_soell_cast_7', cast:'mage_soell_cast_6', blitz:'360_Power_Spin_Jump', dodge:'Roll_Dodge_4', dead:'Dead', hit:'Arise', victory:'Sword_Shout', intro:'Axe_Stance' };
 const _hHand=new THREE.Vector3();
 new GLTFLoader().load('assets/hero.glb', gltf=>{ heroGLTF=gltf; attachHero(); }, undefined, err=>console.error('hero load',err));
 function attachHero(){
@@ -768,15 +769,21 @@ function playHeroClip(name, loop, fade){
   if(heroAction && heroAction!==next) heroAction.fadeOut(fade);
   heroAction=next; heroCurName=name;
 }
+function triggerHeroOneShot(slot,cap){ const nm=HERO_CLIP[slot]; if(!nm)return; heroOneShot=nm;
+  const c=heroClips[nm]; heroOneShotT=Math.min(c?c.duration:cap, cap); }   // brief one-shot (hit flinch / intro)
+const HERO_LOOP=[HERO_CLIP.idle,HERO_CLIP.strike,HERO_CLIP.shoot,HERO_CLIP.cast,HERO_CLIP.blitz];   // clips that loop
 function updateHero(rdt){
   if(!heroMixer) return;
   heroMixer.update(rdt);
+  if(heroOneShotT>0) heroOneShotT-=rdt;
   let want;
-  if(heroDead) want=HERO_CLIP.dead;
+  if(heroDead) want=HERO_CLIP.dead;                              // death
+  else if(state==='result') want=HERO_CLIP.victory;             // cash-out / full clear
   else if(off) want=HERO_CLIP[off.action]||HERO_CLIP.idle;      // attacking -> action clip (loops through the combo)
+  else if(heroOneShotT>0) want=heroOneShot;                     // hit flinch / intro stance
   else if(playerPose==='dodge' && poseT<0.5) want=HERO_CLIP.dodge;
   else want=HERO_CLIP.idle;
-  playHeroClip(want, want!==HERO_CLIP.dodge && want!==HERO_CLIP.dead, 0.15);
+  playHeroClip(want, HERO_LOOP.includes(want), 0.15);
   if(heroRightHand){ const pike=playerMesh.userData.pike;                    // pike follows the right hand (position)
     heroRightHand.getWorldPosition(_hHand); playerMesh.worldToLocal(_hHand); pike.position.copy(_hHand); }
 }
@@ -880,6 +887,70 @@ function buildTitan(){
 const ENEMY_BUILD=[buildCliffhorn,buildGale,buildTitan];
 
 /* =========================================================================
+   ENEMY GLB MODELS — rigged bosses replace the procedural silhouettes.
+   Same contract as the procedural builders: a wrapper Group carrying
+   userData.anchors (core/head/…) + userData.height so all combat VFX,
+   the rage light, the death dissolve, and the recoil spring keep working.
+   The rigged mesh is a child; an AnimationMixer drives state->clip in
+   animateEnemy. Falls back to the procedural build until the GLB loads.
+   ========================================================================= */
+const ENEMY_GLB=['assets/boss1.glb','assets/boss2.glb','assets/boss3.glb'];
+const ENEMY_H_LOCAL=[11,10.5,13.5];              // local height per boss = old procedural height, so ENEMY_SCALE means the same on-screen size
+const _EY=HERO_YAW+Math.PI;                      // enemy faces back toward the hero (opposite the hero's facing); same rig => shared base yaw
+const ENEMY_YAW=[_EY,_EY,_EY];                   // per-boss facing (tune live via __game.enemyTune)
+// clip roles per boss (names verified against the merged-animation GLBs)
+const ENEMY_ANIM=[
+  { idle:'Punch_Pose',      hit:'Hit_Reaction',   attacks:['Punch_Combo','Punch_Combo_1','Punch_Combo_2','Punch_Combo_3','Punch_Combo_4','Punch_Combo_5','Angry_Ground_Stomp'] },        // Cliffhorn
+  { idle:'Shouting_Angrily', hit:'Hit_Reaction',  attacks:['mage_soell_cast','mage_soell_cast_2','mage_soell_cast_4','mage_soell_cast_6'] },                                              // Gale
+  { idle:'Combat_Stance',   hit:'Hit_Reaction_1', attacks:['Kung_Fu_Punch','Lunge_Spin_Kick','Roundhouse_Kick','Sweep_Kick','Angry_Ground_Stomp_2','Neck_Slashing_Gesture'] },           // Sky Titan
+];
+const bossGLTF=[null,null,null];
+ENEMY_GLB.forEach((f,i)=>{ new GLTFLoader().load(f, g=>{ bossGLTF[i]=g; }, undefined, err=>console.error('boss load '+i, err)); });
+
+// SkeletonUtils.clone (inlined — not vendored): plain .clone() breaks skinned-mesh
+// bone binding, so rebind each cloned SkinnedMesh to the cloned bones.
+function cloneRigged(source){
+  const srcLookup=new Map(), cloneLookup=new Map();
+  const clone=source.clone();
+  (function walk(a,b){ srcLookup.set(b,a); cloneLookup.set(a,b); for(let i=0;i<a.children.length;i++) walk(a.children[i],b.children[i]); })(source,clone);
+  clone.traverse(node=>{
+    if(!node.isSkinnedMesh) return;
+    const srcMesh=srcLookup.get(node);
+    node.skeleton=srcMesh.skeleton.clone();
+    node.bindMatrix.copy(srcMesh.bindMatrix);
+    node.skeleton.bones=srcMesh.skeleton.bones.map(b=>cloneLookup.get(b));
+    node.bind(node.skeleton, node.bindMatrix);
+  });
+  return clone;
+}
+function playEnemyClip(u, name, loop, fade){
+  if(!u.mixer || !u.clips[name] || u.curClip===name) return;
+  const next=u.mixer.clipAction(u.clips[name]);
+  next.reset(); next.setLoop(loop?THREE.LoopRepeat:THREE.LoopOnce, loop?Infinity:1); next.clampWhenFinished=!loop;
+  next.enabled=true; next.setEffectiveWeight(1); next.fadeIn(fade); next.play();
+  if(u.action && u.action!==next) u.action.fadeOut(fade);
+  u.action=next; u.curClip=name;
+}
+function buildEnemyGLB(i){
+  const g=new THREE.Group(); const h=ENEMY_H_LOCAL[i];
+  const model=cloneRigged(bossGLTF[i].scene);
+  model.rotation.set(0,ENEMY_YAW[i],0); model.scale.setScalar(1); model.position.set(0,0,0);
+  model.updateMatrixWorld(true);
+  let b=new THREE.Box3().setFromObject(model); const nat=(b.max.y-b.min.y)||1;   // measure AFTER world-matrix update (skinned rig gotcha)
+  model.scale.setScalar(h/nat);
+  model.updateMatrixWorld(true);
+  b=new THREE.Box3().setFromObject(model);
+  model.position.set(-(b.min.x+b.max.x)/2, -b.min.y, -(b.min.z+b.max.z)/2);      // centred x/z, feet at y=0
+  model.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; } });
+  g.add(model); addAnchors(g,h);
+  const mixer=new THREE.AnimationMixer(model), clips={};
+  for(const c of bossGLTF[i].animations) clips[c.name]=c;
+  g.userData={...g.userData, height:h, model, mixer, clips, animMap:ENEMY_ANIM[i], curClip:'', action:null, _rx:0};
+  playEnemyClip(g.userData, ENEMY_ANIM[i].idle, true, 0);
+  return g;
+}
+
+/* =========================================================================
    GAME STATE
    ========================================================================= */
 let state='menu';            // menu | combat | defeated | result
@@ -910,6 +981,7 @@ let forcedAttack=-1;
 let godMode=false, paused=false;
 let defeatedT=0;
 let enemyKb=0, enemyKbV=0;                 // enemy hit-recoil spring (knockback away from player, scaled by damage)
+let enemyHurtT=0;                          // >0 => play the boss hit-reaction clip (cosmetic; set when a player hit lands)
 let enemyDeathFx=null;                      // active slow red death dissolve
 const E_DEATH_FREEZE=0.45, E_DEATH_DUR=2.2, E_DEATH_HOLD=0.3, E_DEATH_COL=0xff2a1e, E_DEATH_MOTE='#ff6a4a';
 const _edeathBox=new THREE.Box3();
@@ -968,9 +1040,10 @@ function playStinger(a){ stopMusic(); if(muted)return; try{a.currentTime=0;}catc
    ========================================================================= */
 function setEnemy(i){
   if(enemyMesh){scene.remove(enemyMesh);}
-  enemyKb=0; enemyKbV=0; enemyDeathFx=null;
+  enemyKb=0; enemyKbV=0; enemyHurtT=0; enemyDeathFx=null;
   enemyIdx=i; enemy={...ENEMIES[i], hp:ENEMIES[i].hp, maxHp:ENEMIES[i].hp};
-  enemyMesh=ENEMY_BUILD[i](); enemyMesh.position.set(-0.55,0,ENEMY_Z); enemyMesh.scale.setScalar(ENEMY_SCALE[i]||1); scene.add(enemyMesh);
+  enemyMesh=(bossGLTF[i]&&bossGLTF[i].scene)?buildEnemyGLB(i):ENEMY_BUILD[i]();   // rigged GLB once loaded, else procedural fallback
+  enemyMesh.position.set(-0.55,0,ENEMY_Z); enemyMesh.scale.setScalar(ENEMY_SCALE[i]||1); scene.add(enemyMesh);
   enemyState='idle'; enemyTimer=CFG.breather[i]*0.6; atk=null; lastAtk=-1; last2Atk=-1; recentFast=0; vulnAction=null;
   buildForceList();
 }
@@ -986,7 +1059,7 @@ function startRun(sd){
   hitLog.length=0; floaters.length=0; particles.length=0; paused=false;
   if(!playerMesh){playerMesh=buildPlayer(); scene.add(playerMesh);}
   attachHero();                 // swap in the GLB hero once it (and the player rig) exist
-  heroDead=false; heroCurName=''; if(heroMixer)playHeroClip(HERO_CLIP.idle,true,0.1);
+  heroDead=false; heroCurName=''; heroOneShotT=0; if(heroMixer){playHeroClip(HERO_CLIP.idle,true,0.1); triggerHeroOneShot('intro',1.6);}
   playerPose='idle'; poseT=0;
   setEnemy(0);
   state='combat';
@@ -1209,6 +1282,7 @@ function resolveTarget(tg, grade, err){
   if(dmg>0){
     enemy.hp-=dmg; score+=dmg*mult;
     enemyKbV -= Math.min(24, dmg*0.18);   // hit-recoil impulse, shoved back away from the player, ∝ damage
+    enemyHurtT=0.35;                       // trigger the boss hit-reaction clip (rigged models)
     blitz=Math.min(CFG.blitzMax, blitz + dmg*CFG.blitzPerDmg + (crit?CFG.blitzCrit:0));
     addXP(dmg*CFG.xpPerDmg + CFG.xpAction*0.15 + (off.action==='blitz'?CFG.xpBlitz*0.11:0), off.action, dmg);
   }
@@ -1368,6 +1442,7 @@ function landHit(hit){
   if(state!=='combat')return;
   const dmg=godMode?0:Math.round(hit.dmg*(CFG.enemyDmgScale[enemyIdx]||1));
   hp=Math.max(0,hp-dmg);
+  if(hp>0 && dmg>0) triggerHeroOneShot('hit',0.6);   // brief flinch (fatal hits play the death anim instead)
   interruptOffense();
   // mult punish: drop a full level + clear meter
   mult=Math.max(1,mult-1); multMeter=0;
@@ -1616,6 +1691,7 @@ function animateEnemy(rdt){
   if(enemyDeathFx) return;                 // pose frozen during the death dissolve
   // hit-recoil spring: shoved back (−z, away from player) then settles; magnitude set by damage
   enemyKbV += (-enemyKb*120 - enemyKbV*15)*rdt; enemyKb += enemyKbV*rdt;
+  enemyHurtT=Math.max(0, enemyHurtT-rdt);
   // idle breathing / bob (+ a small hop when shoved back)
   enemyMesh.position.y=Math.sin(t*1.3)*0.15 + Math.max(0,-enemyKb)*0.25;
   enemyMesh.position.z=ENEMY_Z+enemyKb;
@@ -1643,6 +1719,14 @@ function animateEnemy(rdt){
   // lean on strike (+ hit-recoil lean)
   u._rx=lerp(u._rx||0, strikeAmt*0.06, 0.3);
   enemyMesh.rotation.x=u._rx + enemyKb*0.03;
+  // rigged-model animation: drive the mixer + pick a clip by combat state (cosmetic; off the deterministic sim)
+  if(u.mixer){
+    u.mixer.update(rdt);
+    const map=u.animMap; let want=map.idle, loop=true;
+    if(enemyHurtT>0 || enemyState==='stagger'){ want=map.hit; loop=false; }
+    else if(atk && (enemyState==='telegraph'||enemyState==='active')){ want=map.attacks[(atk.setIdx||0)%map.attacks.length]; }
+    playEnemyClip(u, want, loop, 0.14);
+  }
 }
 
 let last=performance.now(), fps=60;
@@ -1960,6 +2044,9 @@ window.__game={
   setPlayerHome:(x,z,ry)=>{ PHOME.x=x; PHOME.z=z; PHOME.ry=ry; if(playerMesh){playerMesh.position.set(x,0,z);playerMesh.rotation.y=ry;} },
   setMirror:(v)=>{ PHOME.mirror=v; if(playerMesh)playerMesh.scale.x=v?-1:1; },
   heroTune:(yaw,h)=>{ if(!heroModel)return '(no hero)'; if(yaw!=null)heroModel.rotation.y=yaw; if(h!=null){const b0=new THREE.Box3().setFromObject(heroModel);} return {yaw:heroModel.rotation.y}; },
+  enemyTune:(yaw,scale)=>{ if(!enemyMesh)return '(no enemy)'; const m=enemyMesh.userData.model; if(m&&yaw!=null)m.rotation.y=yaw; if(scale!=null)enemyMesh.scale.setScalar(scale); return {yaw:m?+m.rotation.y.toFixed(3):null, scale:+enemyMesh.scale.x.toFixed(3), rigged:!!enemyMesh.userData.mixer}; },
+  enemyClip:(name)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.mixer)return '(no rigged enemy)'; u.curClip=''; playEnemyClip(u,name,true,0.12); return name; },
+  enemyClips:()=>{ const u=enemyMesh&&enemyMesh.userData; return (u&&u.clips)?Object.keys(u.clips):[]; },
   pause:(v=true)=>{ paused=v; },
   setEnemyZ:(z)=>{ if(enemyMesh)enemyMesh.position.z=z; },
   setEnemyScale:(s)=>{ if(enemyMesh)enemyMesh.scale.setScalar(s); },
