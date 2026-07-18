@@ -308,7 +308,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.14.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.14.1</div>
   </div>
 </div>
 
@@ -737,7 +737,7 @@ function buildPlayer(){
    ========================================================================= */
 let heroGLTF=null, heroModel=null, heroMixer=null, heroAction=null, heroCurName='', heroRightHand=null, heroDead=false;
 const heroClips={};
-const HERO_H=2.05, HERO_YAW=1.85;   // target height (world units) + facing offset toward the titan (3/4 view)
+const HERO_H=2.05, HERO_YAW=1.85+Math.PI/2;   // target height + facing (rotated 90° CCW to face the titan)
 const HERO_CLIP={ idle:'Idle_10', strike:'Double_Combo_Attack', shoot:'Male_Head_Down_Charge', cast:'Charged_Spell_Cast_1', blitz:'360_Power_Spin_Jump', dodge:'Roll_Dodge_4', dead:'Dead' };
 const _hHand=new THREE.Vector3();
 new GLTFLoader().load('assets/hero.glb', gltf=>{ heroGLTF=gltf; attachHero(); }, undefined, err=>console.error('hero load',err));

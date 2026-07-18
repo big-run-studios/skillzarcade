@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Titan Guard — Animation Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --disp:'Orbitron',sans-serif; --cyan:#34e1ff; --gold:#ffc233; --red:#ff5a6e; --violet:#b06bff; --ink:#0b1226; --panel:rgba(10,16,36,.86); }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;overflow:hidden;background:#8fbfe8;font-family:var(--disp);color:#eaf2ff;touch-action:none;}
+  #c{position:fixed;inset:0;display:block;}
+  .panel{position:fixed;background:var(--panel);border:1.5px solid rgba(95,224,255,.25);border-radius:14px;backdrop-filter:blur(8px);box-shadow:0 8px 24px rgba(0,0,0,.45);}
+  /* top bar: model picker + back */
+  #top{top:10px;left:10px;right:10px;display:flex;gap:10px;align-items:center;padding:8px 10px;z-index:5;}
+  #top a.back{text-decoration:none;color:#cfe6ff;font-weight:800;font-size:18px;padding:2px 10px;border:1.5px solid rgba(95,224,255,.35);border-radius:10px;}
+  #top select{flex:1;font:700 13px var(--disp);background:#141a34;color:#eaf2ff;border:1.5px solid #2b3a7a;border-radius:9px;padding:8px 10px;letter-spacing:.5px;}
+  #top .cnt{font-weight:700;font-size:11px;color:#9fb2d8;letter-spacing:1px;white-space:nowrap;}
+  /* current clip name — big */
+  #now{top:64px;left:50%;transform:translateX(-50%);padding:8px 18px;text-align:center;z-index:5;pointer-events:none;border-color:rgba(255,194,51,.4);}
+  #now .nm{font-weight:900;font-size:clamp(16px,4.6vw,24px);letter-spacing:1px;color:var(--gold);text-shadow:0 0 14px rgba(255,194,51,.55);}
+  #now .meta{font-weight:700;font-size:11px;color:#9fb2d8;letter-spacing:1px;margin-top:2px;}
+  /* clip list */
+  #list{top:118px;right:10px;bottom:96px;width:min(52vw,240px);overflow-y:auto;padding:8px;z-index:5;display:flex;flex-direction:column;gap:5px;}
+  #list .clip{display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;
+    font-weight:700;font-size:12px;letter-spacing:.3px;color:#cfe6ff;background:rgba(20,26,52,.7);border:1.5px solid transparent;border-radius:9px;padding:8px 10px;}
+  #list .clip .ix{color:#7f8fc0;font-size:10px;min-width:20px;}
+  #list .clip .du{color:#7f8fc0;font-size:10px;}
+  #list .clip.on{border-color:var(--gold);background:rgba(255,194,51,.14);color:#fff;}
+  #list .clip:active{transform:scale(.98);}
+  /* transport controls */
+  #ctrl{left:10px;bottom:10px;right:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:9px 12px;z-index:5;}
+  #ctrl button{font:800 13px var(--disp);color:#eaf2ff;background:#1b2450;border:1.5px solid #3a4a90;border-radius:10px;padding:9px 13px;cursor:pointer;letter-spacing:.5px;}
+  #ctrl button:active{transform:scale(.96);}
+  #ctrl button.on{background:#2f6;border-color:#6fb;color:#052;}
+  #ctrl .spd{display:flex;align-items:center;gap:6px;font-weight:700;font-size:11px;color:#9fb2d8;letter-spacing:.5px;}
+  #ctrl input[type=range]{width:96px;}
+  #hint{position:fixed;left:10px;bottom:64px;z-index:4;font-size:10px;color:#5c709e;letter-spacing:1px;pointer-events:none;}
+  #err{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;color:#ff6a7a;font-weight:800;font-size:14px;text-align:center;display:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="top" class="panel">
+  <a class="back" href="index.html" title="Back to game">‹</a>
+  <select id="model"></select>
+  <span class="cnt" id="cnt">—</span>
+</div>
+<div id="now" class="panel"><div class="nm" id="nowName">loading…</div><div class="meta" id="nowMeta"></div></div>
+<div id="list" class="panel"></div>
+<div id="ctrl" class="panel">
+  <button id="prev">◀ Prev</button>
+  <button id="play">⏸ Pause</button>
+  <button id="next">Next ▶</button>
+  <button id="loop" class="on">🔁 Loop</button>
+  <button id="spin" class="on">↻ Auto-spin</button>
+  <span class="spd">SPEED <input id="speed" type="range" min="0.1" max="2" step="0.1" value="1"><b id="spdv">1.0×</b></span>
+</div>
+<div id="hint">DRAG to orbit · WHEEL / PINCH to zoom</div>
+<div id="err"></div>
+
+<script type="module">
+import * as THREE from './lib/three.module.js';
+import { GLTFLoader } from './lib/GLTFLoader.js';
+
+// Models to review — add boss GLBs here as they land.
+const MODELS = [
+  { name:'Hero — Nocturnal Vanguard', file:'assets/hero.glb' },
+  // { name:'Cliffhorn Juggernaut', file:'assets/boss1.glb' },
+  // { name:'Gale Reaper',          file:'assets/boss2.glb' },
+  // { name:'Sky Titan',            file:'assets/boss3.glb' },
+];
+
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x8fbfe8); scene.fog=new THREE.Fog(0xbfe0f5,30,90);
+const camera=new THREE.PerspectiveCamera(45,1,0.1,500);
+
+// lights — match the game's bright daytime look
+scene.add(new THREE.HemisphereLight(0xdff0ff,0x5a7a4a,0.9));
+const amb=new THREE.AmbientLight(0xffffff,0.35); scene.add(amb);
+const key=new THREE.DirectionalLight(0xfff4e0,1.5); key.position.set(6,12,8); scene.add(key);
+const rim=new THREE.DirectionalLight(0x9fd0ff,0.5); rim.position.set(-8,5,-6); scene.add(rim);
+
+// ground + grid stage
+const ground=new THREE.Mesh(new THREE.CircleGeometry(60,48), new THREE.MeshStandardMaterial({color:0x6fae54,roughness:1}));
+ground.rotation.x=-Math.PI/2; scene.add(ground);
+const grid=new THREE.GridHelper(20,20,0x2a5a2a,0x3a6a3a); grid.position.y=0.02; grid.material.opacity=0.35; grid.material.transparent=true; scene.add(grid);
+const pad=new THREE.Mesh(new THREE.RingGeometry(1.4,1.6,48), new THREE.MeshBasicMaterial({color:0x34e1ff,transparent:true,opacity:.7,side:THREE.DoubleSide}));
+pad.rotation.x=-Math.PI/2; pad.position.y=0.03; scene.add(pad);
+
+// orbit camera (custom, no addon dep)
+let orbit={ target:new THREE.Vector3(0,1,0), r:6, theta:2.1, phi:1.25, autospin:true };
+function applyCam(){ const {r,theta,phi,target}=orbit;
+  camera.position.set(target.x+r*Math.sin(phi)*Math.sin(theta), target.y+r*Math.cos(phi), target.z+r*Math.sin(phi)*Math.cos(theta));
+  camera.lookAt(target); }
+let drag=false, px=0, py=0, pinchD=0;
+canvas.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;orbit.autospin=false;document.getElementById('spin').classList.remove('on');});
+addEventListener('pointerup',()=>drag=false);
+addEventListener('pointermove',e=>{ if(!drag)return; orbit.theta-=(e.clientX-px)*0.01; orbit.phi=Math.max(0.2,Math.min(1.5,orbit.phi-(e.clientY-py)*0.008)); px=e.clientX;py=e.clientY; });
+canvas.addEventListener('wheel',e=>{ e.preventDefault(); orbit.r=Math.max(2,Math.min(30,orbit.r+e.deltaY*0.01)); },{passive:false});
+canvas.addEventListener('touchmove',e=>{ if(e.touches.length===2){ const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); if(pinchD)orbit.r=Math.max(2,Math.min(30,orbit.r+(pinchD-d)*0.03)); pinchD=d; } },{passive:false});
+canvas.addEventListener('touchend',()=>pinchD=0);
+
+// state
+const loader=new GLTFLoader();
+let mixer=null, clips=[], curAction=null, curIdx=0, playing=true, looping=true, speed=1, model=null;
+const el=id=>document.getElementById(id);
+
+function loadModel(file){
+  el('nowName').textContent='loading…'; el('nowMeta').textContent=''; el('list').innerHTML=''; el('err').style.display='none';
+  if(model){ scene.remove(model); model=null; } mixer=null; clips=[]; curAction=null;
+  loader.load(file, gltf=>{
+    model=gltf.scene;
+    // scale to ~2.4u tall, feet on the ground, centred
+    model.scale.setScalar(1); model.rotation.set(0,0,0); model.position.set(0,0,0); model.updateMatrixWorld(true);
+    let b=new THREE.Box3().setFromObject(model); const h=b.max.y-b.min.y||1; model.scale.setScalar(2.4/h);
+    model.updateMatrixWorld(true); b=new THREE.Box3().setFromObject(model);
+    model.position.set(-(b.min.x+b.max.x)/2, -b.min.y, -(b.min.z+b.max.z)/2);
+    model.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; } });
+    scene.add(model);
+    orbit.target.set(0,(b.max.y-b.min.y)*0.5,0); orbit.r=(b.max.y-b.min.y)*2.4;
+    mixer=new THREE.AnimationMixer(model);
+    clips=gltf.animations.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    el('cnt').textContent=clips.length+' CLIPS';
+    buildList(); play(0);
+  }, xhr=>{ if(xhr.total)el('nowName').textContent='loading… '+Math.round(xhr.loaded/xhr.total*100)+'%'; },
+     err=>{ el('err').style.display='block'; el('err').textContent='Failed to load '+file+'\n'+err; console.error(err); });
+}
+function buildList(){
+  const L=el('list'); L.innerHTML='';
+  clips.forEach((c,i)=>{ const d=document.createElement('div'); d.className='clip'; d.dataset.i=i;
+    d.innerHTML='<span class="ix">'+(i+1)+'</span><span class="nm">'+c.name+'</span><span class="du">'+c.duration.toFixed(1)+'s</span>';
+    d.addEventListener('click',()=>play(i)); L.appendChild(d); });
+}
+function play(i){
+  if(!mixer||!clips.length) return; curIdx=(i+clips.length)%clips.length;
+  const c=clips[curIdx];
+  if(curAction) curAction.fadeOut(0.2);
+  curAction=mixer.clipAction(c); curAction.reset(); curAction.setLoop(looping?THREE.LoopRepeat:THREE.LoopOnce,Infinity);
+  curAction.clampWhenFinished=!looping; curAction.timeScale=speed; curAction.fadeIn(0.2); curAction.paused=!playing; curAction.play();
+  el('nowName').textContent=c.name;
+  el('nowMeta').textContent='#'+(curIdx+1)+' / '+clips.length+'  ·  '+c.duration.toFixed(2)+'s  ·  '+c.tracks.length+' tracks';
+  [...el('list').children].forEach((d,j)=>d.classList.toggle('on',j===curIdx));
+  const on=el('list').children[curIdx]; if(on)on.scrollIntoView({block:'nearest'});
+}
+// controls
+el('prev').onclick=()=>play(curIdx-1);
+el('next').onclick=()=>play(curIdx+1);
+el('play').onclick=()=>{ playing=!playing; if(curAction)curAction.paused=!playing; el('play').textContent=playing?'⏸ Pause':'▶ Play'; };
+el('loop').onclick=()=>{ looping=!looping; el('loop').classList.toggle('on',looping); play(curIdx); };
+el('spin').onclick=()=>{ orbit.autospin=!orbit.autospin; el('spin').classList.toggle('on',orbit.autospin); };
+el('speed').oninput=e=>{ speed=+e.target.value; el('spdv').textContent=speed.toFixed(1)+'×'; if(curAction)curAction.timeScale=speed; };
+
+// model picker
+const sel=el('model'); MODELS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=m.name; sel.appendChild(o); });
+sel.onchange=()=>loadModel(MODELS[+sel.value].file);
+
+function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+addEventListener('resize',resize); resize();
+
+let last=performance.now();
+function frame(){ requestAnimationFrame(frame);
+  const now=performance.now(), dt=Math.min((now-last)/1000,0.05); last=now;
+  if(mixer) mixer.update(dt);
+  if(orbit.autospin) orbit.theta+=dt*0.5;
+  applyCam(); renderer.render(scene,camera);
+}
+loadModel(MODELS[0].file); frame();
+</script>
+</body>
+</html>
