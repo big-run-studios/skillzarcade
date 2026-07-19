@@ -183,7 +183,7 @@
     </div>
 
     <div id="dbg"></div>
-    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.6.0</div>
+    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.6.1</div>
   </div>
   <audio id="unlockAudio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA"></audio>
   <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -1047,6 +1047,16 @@ function drawMonkeySprite(){
   }
 
   const lean=mrot?0:(-a*0.25-side*d*0.06);
+  // arms first, so the flat shoulder cuts tuck BEHIND the body (palms still cup the tray underside)
+  if(!hidden&&monkeyMood!=='crash'){
+    const org={x:mx,y:CFG.floorY+my};
+    const SL=vAdd(org,vRot({x:-bw/2+B.shl.x*MK,y:-bh+B.shl.y*MK},mrot+lean));
+    const SR=vAdd(org,vRot({x:-bw/2+B.shr.x*MK,y:-bh+B.shr.y*MK},mrot+lean));
+    const gripL=vAdd(PIVOT,vRot({x:-58,y:CFG.trayH/2+8},board.angle));
+    const gripR=vAdd(PIVOT,vRot({x:58,y:CFG.trayH/2+8},board.angle));
+    drawArmSprite(SL,gripL,true);
+    drawArmSprite(SR,gripR,false);
+  }
   ctx.save(); ctx.translate(mx,CFG.floorY+my); ctx.rotate(mrot+lean);
   // tail behind the body — the counterbalance performer
   const T=MRIG.tail, tb={x:-bw/2+B.tail.x*MK, y:-bh+B.tail.y*MK};
@@ -1068,16 +1078,6 @@ function drawMonkeySprite(){
   }
   ctx.restore();
 
-  // arms up to the tray grips (world space) — palms cup the tray underside
-  if(!hidden&&monkeyMood!=='crash'){
-    const org={x:mx,y:CFG.floorY+my};
-    const SL=vAdd(org,vRot({x:-bw/2+B.shl.x*MK,y:-bh+B.shl.y*MK},mrot+lean));
-    const SR=vAdd(org,vRot({x:-bw/2+B.shr.x*MK,y:-bh+B.shr.y*MK},mrot+lean));
-    const gripL=vAdd(PIVOT,vRot({x:-58,y:CFG.trayH/2+8},board.angle));
-    const gripR=vAdd(PIVOT,vRot({x:58,y:CFG.trayH/2+8},board.angle));
-    drawArmSprite(SL,gripL,true);
-    drawArmSprite(SR,gripR,false);
-  }
   // sweat
   if(d>0.6&&monkeyMood==='play'&&Math.random()<0.06)
     particles.push({type:'sweat',x:mx+rnd(-16,16),y:CFG.floorY-bh-30,vx:rnd(-30,30),vy:-60,life:0.7,max:0.7,color:'#7ec8ff',sz:3});
