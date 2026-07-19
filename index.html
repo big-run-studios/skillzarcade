@@ -178,6 +178,18 @@
       repeating-linear-gradient(0deg, rgba(52,225,255,.0) 0 30px, rgba(52,225,255,.12) 30px 32px),
       radial-gradient(95% 85% at 50% 25%, #3d2c6e, #1a1240 60%, #0a0722 85%);}
   .art.soon{background:radial-gradient(80% 70% at 50% 35%, #161d44, #080b22 80%);}
+
+  /* private-beta feedback button (full grid width, below the Coming Soon tile) */
+  .feedback{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:10px;
+    padding:16px 20px;border-radius:18px;text-decoration:none;cursor:pointer;
+    font-family:var(--display);font-weight:800;font-size:clamp(13px,3.6vw,16px);letter-spacing:1.5px;color:#2a1c04;
+    background:radial-gradient(120% 160% at 50% 0%, #ffe9a8, #ffc233 55%, #d9941e);
+    border:2px solid rgba(255,255,255,.55);
+    box-shadow:0 0 18px rgba(255,194,51,.4),0 8px 22px rgba(0,0,0,.5),inset 0 0 0 2px rgba(255,255,255,.25);
+    transition:transform .12s, box-shadow .2s;}
+  .feedback:hover{transform:translateY(-2px);box-shadow:0 0 26px rgba(255,194,51,.65),0 10px 26px rgba(0,0,0,.5),inset 0 0 0 2px rgba(255,255,255,.3);}
+  .feedback:active{transform:translateY(0) scale(.99);}
+  .feedback .fi{font-size:20px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));}
   .art .glow{position:absolute;width:130%;height:60%;top:8%;left:-15%;filter:blur(26px);opacity:.5;z-index:0;}
   .art.pitch .glow{background:radial-gradient(closest-side, rgba(57,255,160,.55), transparent);}
   .art.chicken .glow{background:radial-gradient(closest-side, rgba(95,224,255,.6), transparent);}
@@ -318,9 +330,13 @@
         <div class="meta"><h3>Coming Soon</h3><span class="status soon">IN THE LAB</span></div>
       </div>
 
+      <a class="feedback" href="mailto:andrew@bigrunstudios.com?subject=Big%20Run%20-%20Crash%20Arcade%20Private%20Beta%20Feedback">
+        <span class="fi">✉️</span> SEND FEEDBACK
+      </a>
+
     </div>
 
-    <footer>Big Run Studios — CrashArcade · Internal Prototype · v0.5.7</footer>
+    <footer>Big Run Studios — CrashArcade · Internal Prototype · v0.5.8</footer>
   </div>
 
   <nav class="botnav" aria-label="Primary">
