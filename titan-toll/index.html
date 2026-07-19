@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.20.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.20.1</div>
   </div>
 </div>
 
@@ -972,9 +972,12 @@ const ENEMY_ROT=[
   { Roundhouse_Kick:70, Kung_Fu_Punch:120, Lunge_Spin_Kick:320, Sweep_Kick:315 },   // Sky Titan — kick/punch clips are authored facing off; rotate back (lab FACE export)
 ];
 // ANIMATION-DRIVEN DODGE TIMING (Animation Lab DEFEND export). Per boss: clip -> { taps:[sec…] }.
-// When an attack's mapped clip has authored taps, the dodge hits land at those tap moments and the clip
-// plays at NATURAL speed so the swing lines up with the tap; damage/speed are borrowed from the attack set.
-// Clips without an entry keep the original abstract-set timing (stretched clip). See startAttack.
+// Each authored tap marks the clip's IMPACT FRAME. The dodge timing game ENDS there: the window close
+// (= the moment undodged damage lands) sits exactly on the tap, and the grading centre `at` is shifted
+// dwin() earlier at construction (see startAttack) so the whole window is anticipatory-through-impact.
+// The clip plays at NATURAL speed so the swing lines up. Damage/speed are borrowed from the attack set.
+// Clips without an entry keep the original abstract-set timing (stretched clip). New taps authored in
+// sandbox.html DEFEND mode inherit this automatically — the export stays raw impact-frame seconds.
 const ENEMY_TAPS=[
   {  // Cliffhorn — all 8 attack slots authored in the lab (7 unique clips; Punch_Combo_4 backs Attack 3 & 5)
     'Punch_Combo_1':{ dur:2.233, taps:[1.34] },
@@ -1635,13 +1638,15 @@ function startAttack(idx){
   const s=enemy.sets[idx];
   // if this attack's mapped clip has authored tap points, drive the dodge hits from them (clip plays natural
   // speed so the swing aligns); damage/speed are borrowed from the set's hits, cycled to the tap count.
+  // Authored taps mark the clip's IMPACT FRAME = the dodge window CLOSE, so `at` (the grading centre,
+  // where the window closes at at+dwin()) is shifted dwin() earlier — undodged damage lands ON the frame.
   const map=ENEMY_ANIM[enemyIdx];
   const clip = map&&map.attacks ? map.attacks[idx%map.attacks.length] : null;
   const td = clip && ENEMY_TAPS[enemyIdx] ? ENEMY_TAPS[enemyIdx][clip] : null;
   let hits, animTimed=false;
   if(td && td.taps && td.taps.length){
     animTimed=true;
-    hits = td.taps.map((t,j)=>{ const src=s.hits[j%s.hits.length]; return {sp:src.sp, dmg:src.dmg, at:t, resolved:false, dodged:false, tele:false}; });
+    hits = td.taps.map((t,j)=>{ const src=s.hits[j%s.hits.length]; return {sp:src.sp, dmg:src.dmg, at:Math.max(0.05, t-dwin()), resolved:false, dodged:false, tele:false}; });
   } else {
     hits = s.hits.map(h=>({...h, at:h.at*CFG.timeScale, dmg:h.dmg, resolved:false, dodged:false, tele:false}));
   }
@@ -1992,7 +1997,7 @@ function animateEnemy(rdt){
   if(atk && atk.startT!==_fxStartT){ _fxStartT=atk.startT;
     const am=u.animMap, cl=am&&am.attacks?am.attacks[(atk.setIdx||0)%am.attacks.length]:null;
     const ty=cl&&ENEMY_FX[enemyIdx]?ENEMY_FX[enemyIdx][cl]:null;
-    if(ty) for(const h of atk.hits) enemyFx.push({type:ty, impactT:atk.startT+h.at, sp:h.sp, seed:rf(0,100)});
+    if(ty) for(const h of atk.hits) enemyFx.push({type:ty, impactT:atk.startT+h.at+dwin(), sp:h.sp, seed:rf(0,100)});   // arrive at the window CLOSE = the damage moment (the authored impact frame)
   }
 }
 
