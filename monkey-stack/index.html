@@ -183,9 +183,10 @@
     </div>
 
     <div id="dbg"></div>
-    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.5.4</div>
+    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.5.5</div>
   </div>
   <audio id="unlockAudio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA"></audio>
+  <audio id="music" src="music.mp3" loop preload="auto"></audio>
 </div>
 <script>
 (()=>{ 'use strict';
@@ -304,8 +305,18 @@ const sfx={
     for(let i=0;i<6;i++) noise(0.06,0.5,700+Math.random()*900,1,0.08+i*0.09); },
   bank(){ [523,659,784,1047].forEach((f,i)=>{ tone(f,f,0.16,'triangle',0.16,i*0.09); tone(f*2,f*2,0.1,'sine',0.05,i*0.09); }); },
 };
+// music track — restarts each run, stops on crash, rides the cash-out card (house pattern, <audio>
+// element so iOS Silent Mode doesn't eat it)
+const music=$('music');
+let musicOn=false;
+function musicSet(on){
+  musicOn=on;
+  if(on&&!muted){ music.volume=0.52; music.play().catch(()=>{}); }
+  else music.pause();
+}
 const muteBtn=$('muteBtn');
-function applyMute(){ muteBtn.textContent=muted?'🔇':'🔊'; if(master) master.gain.value=muted?0:0.8; }
+function applyMute(){ muteBtn.textContent=muted?'🔇':'🔊'; if(master) master.gain.value=muted?0:0.8;
+  music.muted=muted; if(!muted&&musicOn) music.play().catch(()=>{}); }
 muteBtn.addEventListener('click',e=>{ e.stopPropagation(); muted=!muted; store.set('ms_mute',muted?'1':'0'); applyMute(); });
 applyMute();
 /* ================================================================= board sim */
@@ -535,6 +546,7 @@ function doCrash(reason){
   if(state==='crashing'||state==='banked'||state==='menu') return;
   crashReason=reason; crashLostScore=bank||Math.floor(score*mult);
   state='crashing'; crashT=t; monkeyMood='crash'; camShake=1; setCtl();
+  musicSet(false);                                  // the crash takes the stage
   sfx.crash();
   // canned tumble: every placed brick becomes kinematic debris, the tray keels over freely
   const f=gridFrame(), side=Math.sign(board.angle)||1;
@@ -565,10 +577,12 @@ function resetRun(){
   monkeyMood='play'; crashT=0; bankT=0; hardRun=0; bag=[]; crashReason='';
   overCrash.classList.add('hide'); overBank.classList.add('hide'); menuEl.classList.add('hide');
   hudEl.classList.add('on');
+  try{ music.currentTime=0; }catch(e){}
+  musicSet(true);                                   // fresh track every run
   updateHud(true);
   spawnBrick();
 }
-function toMenu(){ state='menu'; hudEl.classList.remove('on'); setCtl(); menuEl.classList.remove('hide'); }
+function toMenu(){ state='menu'; hudEl.classList.remove('on'); setCtl(); menuEl.classList.remove('hide'); musicSet(false); }
 
 /* ================================================================= per-frame update */
 function tick(dt){
