@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.22.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.23.0</div>
   </div>
 </div>
 
@@ -766,8 +766,10 @@ let heroRollT=0, heroRollYawOff=0;   // dodge roll: remaining time + accumulated
 let introT=0;                        // sim-clocked intro gate: battle starts after the hero's full stance
 const heroClips={};
 const HERO_H=2.05, HERO_YAW=1.85+Math.PI/2;   // target height + facing (rotated 90° CCW to face the titan)
-// Andrew's mapping from the Animation Lab (sandbox.html)
-const HERO_CLIP={ idle:'Idle_10', strike:'Charged_Axe_Chop', shoot:'mage_soell_cast_7', cast:'mage_soell_cast_6', blitz:'360_Power_Spin_Jump', dodge:'Roll_Dodge_4', dead:'Dead', hit:'Arise', victory:'Sword_Shout', intro:'Axe_Stance' };
+// Andrew's mapping from the Animation Lab (sandbox.html).
+// hit was 'Arise' (starts flat on the ground -> hero collapsed on every hit taken);
+// Male_Head_Down_Charge is a 0.53s standing brace that fits the 0.6s flinch cap exactly.
+const HERO_CLIP={ idle:'Idle_10', strike:'Charged_Axe_Chop', shoot:'mage_soell_cast_7', cast:'mage_soell_cast_6', blitz:'360_Power_Spin_Jump', dodge:'Roll_Dodge_4', dead:'Dead', hit:'Male_Head_Down_Charge', victory:'Sword_Shout', intro:'Axe_Stance' };
 const _hHand=new THREE.Vector3();
 new GLTFLoader().load('assets/hero.glb', gltf=>{ heroGLTF=gltf; attachHero(); }, undefined, err=>console.error('hero load',err));
 function attachHero(){
@@ -812,8 +814,27 @@ function playHeroClip(name, loop, fade, ts){
 }
 function triggerHeroOneShot(slot,cap){ const nm=HERO_CLIP[slot]; if(!nm)return; heroOneShot=nm;
   const c=heroClips[nm]; heroOneShotT=Math.min(c?c.duration:cap, cap); }   // brief one-shot (hit flinch)
-// blitz is NOT in the loop list: it plays ONCE (25% slower) and holds its final pose for the rest of the blitz game
-const HERO_LOOP=[HERO_CLIP.idle,HERO_CLIP.strike,HERO_CLIP.shoot,HERO_CLIP.cast];   // clips that loop
+// Attack clips are NOT looped (looping showed mostly wind-up: Charged_Axe_Chop kneels for its
+// first ~30%). Instead each timing target cues the clip ONCE, phased so its visual IMPACT frame
+// lands exactly on the target — wind-up plays while the ring closes. `imp` = impact moment as a
+// fraction of the clip (from the clips' motion-energy peaks).
+// Blitz DOES loop: the 360 spin repeats through the whole multi-hit barrage (its one-shot
+// final frame is a low crouch that used to freeze for the rest of the game).
+const HERO_ATK={ strike:{clip:HERO_CLIP.strike, imp:0.40}, shoot:{clip:HERO_CLIP.shoot, imp:0.30}, cast:{clip:HERO_CLIP.cast, imp:0.37} };
+function heroAttackCue(action, lead){
+  const spec=HERO_ATK[action]; if(!spec) return;
+  const c=heroMixer && heroClips[spec.clip]; if(!c) return;
+  lead=Math.max(0.15, lead);
+  const I=spec.imp*c.duration;                       // impact time within the clip (s)
+  const ts=clamp(I/lead, 0.45, 2.2);                 // rate so impact hits in `lead` seconds…
+  const a=heroMixer.clipAction(c);
+  a.reset(); a.setLoop(THREE.LoopOnce,1); a.clampWhenFinished=true;
+  a.timeScale=ts; a.time=Math.max(0, I-ts*lead);     // …too-short gaps start mid-wind-up instead
+  a.enabled=true; a.setEffectiveWeight(1); a.fadeIn(0.1); a.play();
+  if(heroAction && heroAction!==a) heroAction.fadeOut(0.1);
+  heroAction=a; heroCurName=spec.clip;
+}
+const HERO_LOOP=[HERO_CLIP.idle,HERO_CLIP.blitz];   // clips that loop
 // dodge = the FULL roll clip, time-scaled to fit the gap before the next incoming hit; chained
 // dodges mid-roll restart it rotated another 90° CCW so the hero rolls AROUND, not a repeated lean.
 function heroDodgeRoll(){
@@ -1195,8 +1216,19 @@ function stripClipTravelXZ(clip){ if(!clip) return;
   const v=tr.values, x0=v[0], z0=v[2];
   for(let k=0;k<v.length;k+=3){ v[k]=x0; v[k+2]=z0; }
 }
+// Constant-shift a clip's hips XZ so its frame-0 root sits on `ref`'s frame-0 root.
+// The Sky Titan's idle (Combat_Stance) is authored ~39u off in hips X vs every other
+// boss3 clip, so it idled visibly offset from where its attacks/hits play out.
+function alignClipBaseXZ(clip, ref){ if(!clip||!ref) return;
+  const h=c=>c.tracks.find(t=>/(^|\.)Hips\.position$/.test(t.name));
+  const a=h(clip), r=h(ref); if(!a||!r) return;
+  const v=a.values, dx=r.values[0]-v[0], dz=r.values[2]-v[2];
+  for(let k=0;k<v.length;k+=3){ v[k]+=dx; v[k+2]+=dz; }
+}
 ENEMY_GLB.forEach((f,i)=>{ new GLTFLoader().load(f, g=>{ bossGLTF[i]=g;
   stripClipTravelXZ(g.animations.find(c=>c.name===ENEMY_ANIM[i].hit));   // stagger stays planted (once, at load)
+  alignClipBaseXZ(g.animations.find(c=>c.name===ENEMY_ANIM[i].idle),
+                  g.animations.find(c=>c.name===ENEMY_ANIM[i].hit));     // idle rests on the same spot the other clips play from
   swapEnemyToGLB(i);   // upgrade the fallback if this boss loaded mid-fight
   if(i===0){ const b=document.getElementById('startBtn'); if(b)b.textContent='ENTER BATTLE';
     if(_pendingStart!=null){ const s=_pendingStart; _pendingStart=null; startRun(s); } }   // player already clicked ENTER BATTLE -> start now
@@ -1530,6 +1562,7 @@ function beginOffense(action){
   if(action!=='blitz'){ const cd=abilityCd(level); cooldown[action]=cd; cooldownMax[action]=cd||1; }  // start the cooldown (L2+)
   playerPose=action; poseT=0;
   setPikeForm(off.targets[0]?off.targets[0].k:action, action);
+  heroAttackCue(action, off.targets[0]?off.targets[0].t:dur);   // impact frame lands on target 1 (blitz: loops via updateHero)
   sfx('tele');
 }
 
@@ -1617,6 +1650,9 @@ function resolveTarget(tg, grade, err){
   hitLog.push({t:+T.toFixed(3),kind:'atk:'+off.action,grade,err:err==null?null:+err.toFixed(3)});
   if(hitLog.length>60)hitLog.shift();
   poseT=0;
+  // re-cue the attack clip so its impact frame lands on the NEXT timing target (blitz just loops)
+  if(off.action!=='blitz'){ const nx=off.targets.find(t2=>!t2.resolved);
+    if(nx) heroAttackCue(off.action, (off.startT+nx.t)-T); }
   // enemy defeated?
   if(enemy.hp<=0){ enemy.hp=0; if(state==='combat') defeatEnemy(); }
 }
