@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.17.3</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.17.4</div>
   </div>
 </div>
 
@@ -1103,7 +1103,17 @@ function updateEnemySpark(){
 const bossGLTF=[null,null,null]; let _pendingStart=null;
 function bossReady(){ return !!(bossGLTF[0]&&bossGLTF[0].scene); }   // boss-1 model must exist before the first fight opens
 { const b=document.getElementById('startBtn'); if(b)b.textContent='LOADING…'; }
-ENEMY_GLB.forEach((f,i)=>{ new GLTFLoader().load(f, g=>{ bossGLTF[i]=g; swapEnemyToGLB(i);   // upgrade the fallback if this boss loaded mid-fight
+// Pin a clip's horizontal root travel at frame 0 (keep Y). The boss HIT clips must not translate the
+// model — the code knockback spring owns the shove; clip root drift (Cliffhorn's Hit_Reaction drifts
+// 112u in X) made the stagger warp sideways then pop back to idle.
+function stripClipTravelXZ(clip){ if(!clip) return;
+  const tr=clip.tracks.find(t=>/(^|\.)Hips\.position$/.test(t.name)); if(!tr) return;
+  const v=tr.values, x0=v[0], z0=v[2];
+  for(let k=0;k<v.length;k+=3){ v[k]=x0; v[k+2]=z0; }
+}
+ENEMY_GLB.forEach((f,i)=>{ new GLTFLoader().load(f, g=>{ bossGLTF[i]=g;
+  stripClipTravelXZ(g.animations.find(c=>c.name===ENEMY_ANIM[i].hit));   // stagger stays planted (once, at load)
+  swapEnemyToGLB(i);   // upgrade the fallback if this boss loaded mid-fight
   if(i===0){ const b=document.getElementById('startBtn'); if(b)b.textContent='ENTER BATTLE';
     if(_pendingStart!=null){ const s=_pendingStart; _pendingStart=null; startRun(s); } }   // player already clicked ENTER BATTLE -> start now
 }, undefined, err=>console.error('boss load '+i, err)); });
