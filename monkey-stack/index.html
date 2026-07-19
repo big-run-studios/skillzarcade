@@ -183,7 +183,7 @@
     </div>
 
     <div id="dbg"></div>
-    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.5.1</div>
+    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.5.2</div>
   </div>
   <audio id="unlockAudio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA"></audio>
 </div>
@@ -427,13 +427,26 @@ function spawnBrick(){
 }
 function rotateActive(){
   if(!active||state!=='descend') return;
+  const oldRot=active.rot, oldGeom=active.geom;
   active.rot=(active.rot+1)%4; active.geom=buildGeom(active.key,active.rot);
   active.x=clampAim(active.x);
+  if(!xAllowed(active.x)){ active.rot=oldRot; active.geom=oldGeom; return; }   // no rotating into a wall
   sfx.rotate(); tutDone('move'); tutDone('rotate');
 }
 function activeHalfW(){ const xs=active.geom.cells.map(c=>c.off.x); return (Math.max(...xs)-Math.min(...xs))/2+U/2; }
 function activeHalfH(){ return Math.max(...active.geom.cells.map(c=>c.off.y))+U/2; }
 function clampAim(x){ const hw=activeHalfW(); return clamp(x, W/2-(GRID_HALF+0.5)*U+hw, W/2+(GRID_HALF+0.5)*U-hw); }
+/* walls: once the brick has sunk below a neighbouring stack's top, it can't steer into it —
+   without this, a brick descending between two pieces could clip sideways through them */
+function xAllowed(nx){
+  if(!active) return true;
+  const gp=worldToGrid({x:nx,y:CFG.trayY});
+  const cis=[...new Set(active.geom.cells.map(c=>Math.round(gp.gx+c.off.x/U)))];
+  if(cis.some(i=>i<-GRID_HALF||i>GRID_HALF)) return false;
+  const rest=Math.max(...cis.map(stackH));
+  return CFG.trayY-rest*U >= active.y+activeHalfH()-6;
+}
+function steerTo(nx){ nx=clampAim(nx); if(xAllowed(nx)) active.x=nx; }
 function dropActive(){                      // SLAM = fast-forward the descent; the click itself is the landing
   if(!active||state!=='descend'||active.slam) return;
   active.slam=true; active.vy=CFG.slamSpeed;
@@ -811,6 +824,21 @@ function drawPeg(cx,cy,dir,cols,glow){
   ctx.drawImage(s.cvs, -s.pw/2-s.m, -U/2-s.ph-s.m, s.w, s.h);
   ctx.restore();
 }
+/* tiny cactus needles along the wedge's slopes — reads as "nothing stacks on me" */
+function drawWedgeNeedles(v,cols){
+  const cx=(v[0].x+v[1].x+v[2].x)/3, cy=(v[0].y+v[1].y+v[2].y)/3;
+  ctx.strokeStyle=cols[1]; ctx.lineWidth=1.8; ctx.lineCap='round';
+  for(const [a,b] of [[v[0],v[2]],[v[1],v[2]]]){
+    const dx=b.x-a.x, dy=b.y-a.y, L=Math.hypot(dx,dy);
+    let nx=-dy/L, ny=dx/L;
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    if(nx*(mx-cx)+ny*(my-cy)<0){ nx=-nx; ny=-ny; }               // point outward
+    for(let k=0;k<4;k++){
+      const tt=0.18+k*0.21, px=a.x+dx*tt, py=a.y+dy*tt;
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px+nx*7,py+ny*7); ctx.stroke();
+    }
+  }
+}
 function drawBrickBody(body,brick,alpha=1){
   const g=brick.geom, cols=COLORS[brick.color];
   ctx.save(); ctx.globalAlpha=alpha;
@@ -822,6 +850,7 @@ function drawBrickBody(body,brick,alpha=1){
     ctx.closePath(); ctx.fill();
     ctx.strokeStyle=cols[2]; ctx.lineWidth=1.6; ctx.stroke();
     ctx.strokeStyle=cols[1]; ctx.lineWidth=1.5; ctx.shadowColor=cols[1]; ctx.shadowBlur=7; ctx.stroke(); ctx.shadowBlur=0;
+    drawWedgeNeedles(g.wedgeVerts,cols);
     ctx.fillStyle='rgba(255,255,255,.25)'; ctx.beginPath();
     ctx.moveTo(g.wedgeVerts[2].x,g.wedgeVerts[2].y+3);
     ctx.lineTo(g.wedgeVerts[0].x+6,g.wedgeVerts[0].y-2); ctx.lineTo(g.wedgeVerts[0].x+12,g.wedgeVerts[0].y-2);
@@ -878,6 +907,7 @@ function drawPlaced(){
       ctx.moveTo(bx-U/2,by+U/2); ctx.lineTo(bx+1.5*U,by+U/2); ctx.lineTo(bx+U/2,by-U/2); ctx.closePath(); ctx.fill();
       ctx.strokeStyle=cols[2]; ctx.lineWidth=1.6; ctx.stroke();
       ctx.strokeStyle=cols[1]; ctx.lineWidth=1.5; ctx.shadowColor=cols[1]; ctx.shadowBlur=7; ctx.stroke(); ctx.shadowBlur=0;
+      drawWedgeNeedles([{x:bx-U/2,y:by+U/2},{x:bx+1.5*U,y:by+U/2},{x:bx+U/2,y:by-U/2}],cols);
     }else{
       for(const c of rec.cells) drawCellRect(c.i*U,-(c.j+0.5)*U,cols);
       for(const c of rec.cells) if(c.pegUp&&!occ.has(c.i+','+(c.j+1))) drawPeg(c.i*U,-(c.j+0.5)*U,{x:0,y:-1},cols);
@@ -1147,7 +1177,7 @@ app.addEventListener('pointermove',e=>{
   const mv=Math.max(Math.abs(p.x-downX),Math.abs(p.y-downY));
   if(mv>moved+2) lastMoveT=t;                                    // actively steering pauses the soft drop
   moved=Math.max(moved,mv);
-  active.x=clampAim(brickX0+dx*1.15);
+  steerTo(brickX0+dx*1.15);
 });
 app.addEventListener('pointerup',e=>{
   const was=dragging; dragging=false;
@@ -1168,8 +1198,8 @@ $('againBtn').addEventListener('click',()=>resetRun());
 window.addEventListener('keydown',e=>{
   if(e.repeat) return;
   if(state==='descend'){
-    if(e.key==='ArrowLeft'||e.key==='a') active.x=clampAim(active.x-U/2);
-    if(e.key==='ArrowRight'||e.key==='d') active.x=clampAim(active.x+U/2);
+    if(e.key==='ArrowLeft'||e.key==='a') steerTo(active.x-U/2);
+    if(e.key==='ArrowRight'||e.key==='d') steerTo(active.x+U/2);
     if(e.key==='ArrowUp'||e.key==='r'||e.key==='w') rotateActive();
     if(e.key===' '||e.key==='ArrowDown'||e.key==='s') dropActive();
   }
@@ -1250,7 +1280,7 @@ window.__game={
   bankNow, crashNow:()=>doCrash('debug'),
   spawn:k=>{ forceKey=k; if(state==='menu') resetRun(); },
   setSeq:a=>{ seq=a.slice(); },
-  setX:x=>{ if(active&&state==='descend') active.x=clampAim(x); },
+  setX:x=>{ if(active&&state==='descend') steerTo(x); },
   rot:rotateActive, drop:dropActive, hold:v=>{ forceHold=v!==false; },
   cand:()=>aimCand,
   torque:torqueLR, board:()=>board, occMap:()=>[...occ.keys()], cfg:CFG, dbg,
