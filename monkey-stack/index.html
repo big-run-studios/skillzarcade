@@ -183,7 +183,7 @@
     </div>
 
     <div id="dbg"></div>
-    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.5.3</div>
+    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.5.4</div>
   </div>
   <audio id="unlockAudio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA"></audio>
 </div>
@@ -331,6 +331,7 @@ function boardStep(dt){
   if(state==='crashing'){                                  // keel over freely, no monkey resistance
     board.angV+=grav/(CFG.boardI0+sumMr2)*dt + Math.sign(board.angle||1)*0.6*dt;
     board.angle=clamp(board.angle+board.angV*dt,-2.2,2.2);
+    if(Math.abs(board.angle)>=2.2) board.angV=0;           // came to rest — don't integrate forever
     return;
   }
   const I=CFG.boardI0+sumMr2;
@@ -580,7 +581,7 @@ function tick(dt){
   danger=clamp(Math.abs(a)/CFG.critTilt + Math.abs(board.angV)*0.15, 0, 1.35);
   dangerSide=Math.sign(a);
   if(danger>0.75&&state!=='crashing'&&state!=='banked') sfx.warn(clamp(danger-0.6,0,1));
-  if(Math.abs(board.angV)>0.5) sfx.creak(clamp(Math.abs(board.angV)*0.5,0,1));
+  if(Math.abs(board.angV)>0.5&&state!=='crashing'&&state!=='banked') sfx.creak(clamp(Math.abs(board.angV)*0.5,0,1));
   if(danger>0.62&&state!=='crashing'&&state!=='banked') sfx.uh();
   if(danger>0.5) tutDoneShow('balance','Keep the platform balanced!');
 
