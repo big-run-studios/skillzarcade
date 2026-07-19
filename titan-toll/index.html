@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.15.17</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.16.0</div>
   </div>
 </div>
 
@@ -570,13 +570,14 @@ function unlit(c,o){return new THREE.MeshBasicMaterial(Object.assign({color:c},o
   scene.add(new THREE.Mesh(g,m));
 })();
 
-/* ---- ground: low-poly rocky grass ---- */
+/* ---- ground: painted grass/rock texture (Andrew's art) over the low-poly terrain ---- */
+const GROUND_REPEAT=32;   // tiles across the 340u plane => ~10.6u per tile; raise for finer detail
 (function(){
   const seg=48, size=340;
   const geo=new THREE.PlaneGeometry(size,size,seg,seg);
   geo.rotateX(-Math.PI/2);
   const pos=geo.attributes.position; const col=[];
-  const grass=new THREE.Color(0x6fae4e), grass2=new THREE.Color(0x5c9a44), dirt=new THREE.Color(0x9c7a4a), rock=new THREE.Color(0x8f8a80);
+  const white=new THREE.Color(0xffffff), grass2=new THREE.Color(0x5c9a44), dirt=new THREE.Color(0xb08a52), rock=new THREE.Color(0x8f8a80);
   const rn=mulberry32(1337);
   for(let i=0;i<pos.count;i++){
     const x=pos.getX(i), z=pos.getZ(i);
@@ -585,14 +586,19 @@ function unlit(c,o){return new THREE.MeshBasicMaterial(Object.assign({color:c},o
     if(z<-30) y+=(-z-30)*0.06;                              // ground rises toward hills
     const dpl=Math.hypot(x-0.8, z-2.2); if(dpl<13) y*=clamp((dpl-7)/6,0,1); // flat combat clearing so the action ring sits on the ground
     pos.setY(i,y);
-    const c=new THREE.Color().copy(grass).lerp(grass2,rn());
-    if(y>0.5) c.lerp(rock,clamp((y-0.5)*0.7,0,0.6));
-    if(distLane<3.2 && z>-24 && z<12) c.lerp(dirt,0.55-distLane*0.1);
+    // vertex colors now only TINT the painted texture (multiply): near-white + gentle large-scale variation
+    const c=new THREE.Color().copy(white).lerp(grass2,rn()*0.14);
+    if(y>0.5) c.lerp(rock,clamp((y-0.5)*0.35,0,0.3));
+    if(distLane<3.2 && z>-24 && z<12) c.lerp(dirt,(0.55-distLane*0.1)*0.45);
     col.push(c.r,c.g,c.b);
   }
   geo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
   geo.computeVertexNormals();
-  scene.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({vertexColors:true,flatShading:true})));
+  const tex=new THREE.TextureLoader().load('assets/ground.webp');
+  tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.repeat.set(GROUND_REPEAT,GROUND_REPEAT);
+  tex.anisotropy=Math.min(8, renderer.capabilities.getMaxAnisotropy());   // low camera = glancing angle; keeps distant tiles crisp
+  scene.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({map:tex,vertexColors:true,flatShading:true})));
 })();
 
 /* ---- distant hills / mesas ---- */
