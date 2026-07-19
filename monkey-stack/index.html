@@ -183,7 +183,7 @@
     </div>
 
     <div id="dbg"></div>
-    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.6.1</div>
+    <div class="brand" id="brand">CRASHARCADE · STACK MONKEY v0.6.2</div>
   </div>
   <audio id="unlockAudio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA"></audio>
   <audio id="music" src="music.mp3" loop preload="auto"></audio>
@@ -1066,6 +1066,14 @@ function drawMonkeySprite(){
   ctx.restore();
   // body, feet planted at y=0
   ctx.drawImage(ART.body,-bw/2,-bh,bw,bh);
+  // fur shoulder caps blend the body's flat stub faces into the arms behind them
+  for(const s of [B.shl,B.shr]){
+    const cx=-bw/2+s.x*MK, cy=-bh+s.y*MK, r=13.5;
+    const gr=ctx.createRadialGradient(cx-r*0.3,cy-r*0.35,r*0.15,cx,cy,r);
+    gr.addColorStop(0,'#d97a30'); gr.addColorStop(0.55,'#cc6225'); gr.addColorStop(0.85,'#a8491a'); gr.addColorStop(1,'#8f3506');
+    ctx.fillStyle=gr;
+    ctx.beginPath(); ctx.ellipse(cx,cy,r,r*1.06,0,0,TAU); ctx.fill();
+  }
   // head on the neck stub, face escalating with danger
   const neck={x:-bw/2+B.neck.x*MK, y:-bh+B.neck.y*MK+2};
   const kind=d>0.9?'panic':(d>0.45?'strain':'calm');
