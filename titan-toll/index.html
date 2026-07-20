@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.29.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.29.1</div>
   </div>
 </div>
 
@@ -688,24 +688,8 @@ const GROUND_REPEAT=32;   // tiles across the 340u plane => ~10.6u per tile
     strip.position.set(-80, 7.5, -141.5);   // straddles the intersection height (~6-7.5u); bottom hides behind nearer terrain
     scene.add(strip);
   }
-  // (b) grass hummocks silhouetted against the painting: low mounds along the far terrain
-  //     so the seam reads as an irregular, broken edge instead of one straight line.
-  {
-    const hn=14, hg=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,1),
-      new THREE.MeshBasicMaterial({color:0x6b8c28}), hn);   // slightly DARKER than the lit grass — silhouettes, never highlights
-    const hr=mulberry32(777);
-    for(let i=0;i<hn;i++){
-      const x=-260+ i*(380/hn) + (hr()-0.5)*22;            // across the seam width, uneven spacing
-      const z=-100-hr()*40;                                 // deep depth spread (z -100..-140) so they read as scattered knolls, not a row
-      let y=Math.sin(x*0.12)*0.25+Math.cos(z*0.1)*0.3; if(z<-30) y+=(-z-30)*0.06;
-      const s=3+hr()*4;
-      _E.set(0,hr()*Math.PI*2,0); _Q.setFromEuler(_E);
-      _P.set(x, y+s*0.1, z); _S.set(s, s*(0.28+hr()*0.16), s*(0.7+hr()*0.5));
-      _M.compose(_P,_Q,_S); hg.setMatrixAt(i,_M);
-      hg.setColorAt(i,_C.setScalar(0.78+hr()*0.22));
-    }
-    scene.add(hg);
-  }
+  // (grass-knoll experiment removed — the flat unlit mounds clashed with the painted art style;
+  //  the gradient blend strip above does the seam-softening on its own)
 })();
 
 /* ---- painted horizon backdrop (Andrew's art) — replaces the procedural hills/mesas ---- */
