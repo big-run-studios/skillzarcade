@@ -311,7 +311,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.48.1</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.48.2</div>
   </div>
 </div>
 
@@ -740,6 +740,7 @@ const GROUND_REPEAT=32;   // tiles across the 340u plane => ~10.6u per tile
    and read as white smudges applied to the art) */
 
 /* action bar as a ground ring around the hero's feet (fills from the centre out) */
+const SHOW_ACT_RING=false;   // ground circle + READY label under the hero — OFF for now (Andrew v0.48.2); flip to bring both back
 const actGrp=new THREE.Group(); actGrp.rotation.x=-Math.PI/2; actGrp.position.y=0.05; actGrp.visible=false; scene.add(actGrp);
 const actRing=new THREE.Mesh(new THREE.RingGeometry(1.14,1.36,48), unlit(0x9fc0ff,{transparent:true,opacity:0.95,side:THREE.DoubleSide})); // solid; depth-tested so the hero stands in it
 const actDisc=new THREE.Mesh(new THREE.CircleGeometry(1.12,48), unlit(0x2f5fb0,{transparent:true,opacity:0.9,side:THREE.DoubleSide}));
@@ -2463,7 +2464,7 @@ function animatePlayer(rdt){
 
   // ---- ground ring around the feet = STRIKE cooldown (the payoff hit worth anticipating; v0.46) ----
   if(actGrp){
-    const showRing = state==='combat' && !off && !queuedAction;
+    const showRing = SHOW_ACT_RING && state==='combat' && !off && !queuedAction;
     actGrp.visible = showRing;
     if(showRing){
       actGrp.position.set(playerMesh.position.x, 0.05, playerMesh.position.z);
@@ -3044,7 +3045,7 @@ function overlayDraw(){
     octx.restore(); } }
 
   // "READY" on the ground ring when the strike is charged
-  if(playerMesh && state==='combat' && !off && !queuedAction && cooldown.strike<=0 && !enemyBusy()){
+  if(SHOW_ACT_RING && playerMesh && state==='combat' && !off && !queuedAction && cooldown.strike<=0 && !enemyBusy()){
     const s=toScreen(playerMesh.position.clone().add(new THREE.Vector3(0.4,0.14,0.85)));
     if(s.ok){ octx.save(); octx.font='800 15px Orbitron,sans-serif'; octx.textAlign='center'; octx.textBaseline='middle';
       octx.lineWidth=4; octx.strokeStyle='rgba(0,0,0,.6)'; octx.strokeText('READY',s.x,s.y); octx.fillStyle='#d6ffe8'; octx.fillText('READY',s.x,s.y); octx.restore(); }
