@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.41.1</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.42.0</div>
   </div>
 </div>
 
@@ -866,7 +866,50 @@ const HERO_H=2.05, HERO_YAW=1.85+Math.PI/2;   // target height + facing (rotated
 // trying Male_Head_Down_Charge, which read as running in place once root-pinned).
 const HERO_CLIP={ idle:'Idle_10', strike:'Axe_Spin_Attack', shoot:'mage_soell_cast_6', cast:'Charged_Spell_Cast_1', blitz:'360_Power_Spin_Jump', dodge:'Roll_Dodge_4', dead:'Dead', hit:'Arise', victory:'Sword_Shout', intro:'Axe_Stance' };
 const _hHand=new THREE.Vector3();
-new GLTFLoader().load('assets/hero.glb', gltf=>{ heroGLTF=gltf; attachHero(); }, undefined, err=>console.error('hero load',err));
+// FISTS (v0.42.0) — none of the four rigs has finger bones, so the T-pose flat hands are
+// baked into the skin. One-time bind-pose geometry edit at load: verts past the knuckle
+// line fold back toward the palm (bone-local +Y = finger axis in all 8 hands, wrist at
+// origin — verified offline against the GLB bind data). Clones (cloneRigged) and Gale's
+// mirrored-arm dups share this geometry, so they inherit the fists for free.
+// rCap guards Gale's scythe: it's skinned to RightHand and its verts sit at >3.5× the
+// hand's median radius, while every real hand fits inside 2.3× — 2.5× splits them.
+function curlFists(root){
+  root.traverse(mesh=>{
+    if(!mesh.isSkinnedMesh) return;
+    const pos=mesh.geometry.attributes.position, si=mesh.geometry.attributes.skinIndex, sw=mesh.geometry.attributes.skinWeight;
+    if(!pos||!si||!sw) return;
+    const bones=mesh.skeleton.bones, p=new THREE.Vector3();
+    for(const nm of ['LeftHand','RightHand']){
+      const bi=bones.findIndex(b=>b.name===nm); if(bi<0) continue;
+      const toBone=new THREE.Matrix4().multiplyMatrices(mesh.skeleton.boneInverses[bi], mesh.bindMatrix);
+      const back=toBone.clone().invert();
+      const idx=[], ds=[];
+      for(let v=0;v<pos.count;v++){
+        let w=0;
+        if(si.getX(v)===bi)w+=sw.getX(v); if(si.getY(v)===bi)w+=sw.getY(v);
+        if(si.getZ(v)===bi)w+=sw.getZ(v); if(si.getW(v)===bi)w+=sw.getW(v);
+        if(w<=0.5) continue;
+        idx.push(v); ds.push(p.fromBufferAttribute(pos,v).applyMatrix4(toBone).length());
+      }
+      if(!idx.length) continue;
+      const rCap=[...ds].sort((a,b)=>a-b)[ds.length>>1]*2.5;
+      let yMax=0;
+      for(let k=0;k<idx.length;k++){ if(ds[k]>rCap) continue;
+        p.fromBufferAttribute(pos,idx[k]).applyMatrix4(toBone); if(p.y>yMax) yMax=p.y; }
+      const y0=yMax*0.42;                                  // knuckle line
+      for(let k=0;k<idx.length;k++){
+        if(ds[k]>rCap) continue;
+        p.fromBufferAttribute(pos,idx[k]).applyMatrix4(toBone);
+        if(p.y<=y0) continue;
+        p.y=y0+(p.y-y0)*0.32;                              // fold the fingers back…
+        p.x*=1.12; p.z*=1.12;                              // …and fatten the fist for volume
+        p.applyMatrix4(back); pos.setXYZ(idx[k],p.x,p.y,p.z);
+      }
+      pos.needsUpdate=true;
+    }
+  });
+}
+new GLTFLoader().load('assets/hero.glb', gltf=>{ heroGLTF=gltf; curlFists(gltf.scene); attachHero(); }, undefined, err=>console.error('hero load',err));
 function attachHero(){
   if(!heroGLTF || !playerMesh || heroModel) return;
   const hero=heroGLTF.scene;
@@ -1238,7 +1281,7 @@ const ENEMY_SPARK=[
 // Gale's scythe is fused to the skinned mesh on RightHand (a leaf bone) and hangs pointing down; rotate it up.
 const ENEMY_BONEFIX=[
   null,                                    // Cliffhorn
-  [ { node:'RightForeArm', e:[0,Math.PI,0] } ],   // Gale — scythe forearm ROLLED 180° (Y = along the bone; X folded the arm on itself, Z slings it across the back)
+  null,                                    // Gale — rotation reverted (v0.42.0): the MIRROR is back and the original forearm is hidden instead
   null,                                    // Sky Titan
 ];
 function resolveBoneFix(model,i){
@@ -1257,7 +1300,7 @@ function resolveBoneFix(model,i){
 const ENEMY_ATK_SPEED=[1, 0.75, 1];   // Gale 0.5 -> 0.75 (v0.40.2): the projectile-timing fix made room to speed his casts back up 50%
 const ENEMY_ARMS=[
   null,                                                            // Cliffhorn
-  null,                                                            // Gale — dups removed (v0.41.0): the doubled scythe read as clutter; the real forearm is boneFix-rotated 180° instead
+  [ { fore:'RightForeArm', hand:'RightHand', flip:[Math.PI,0,0], hide:true } ],   // Gale — MIRROR ONLY (v0.42.0): the original forearm's triangles are stripped; the elbow-flipped copy replaces it
   null,                                                            // Sky Titan
 ];
 function buildLimbDuplicate(model, cfg){
@@ -1286,8 +1329,22 @@ function buildLimbDuplicate(model, cfg){
     _n.fromBufferAttribute(nor,oi).applyMatrix3(nmat).normalize(); N.push(_n.x,_n.y,_n.z);
     if(uv) U.push(uv.getX(oi),uv.getY(oi));
     SI.push(fi,0,0,0); SW.push(1,0,0,0); return n; };   // rigid to the forearm (elbow) bone → the mirror tracks the arm
-  const arr=idx?idx.array:null, tc=idx?idx.count:pos.count;
-  for(let t=0;t<tc;t+=3){ const a=idx?arr[t]:t,b=idx?arr[t+1]:t+1,c=idx?arr[t+2]:t+2; if(isW[a]&&isW[b]&&isW[c]) ni.push(remap(a),remap(b),remap(c)); }
+  // limb triangle list — CACHED on the (shared!) source geometry: with cfg.hide the original
+  // limb's tris are stripped from the index, so a rebuild could never re-find them there
+  const cacheKey='_limbTris_'+cfg.fore;
+  let tris=g.userData[cacheKey];
+  if(!tris){
+    tris=[];
+    const arr=idx?idx.array:null, tc=idx?idx.count:pos.count;
+    for(let t=0;t<tc;t+=3){ const a=idx?arr[t]:t,b=idx?arr[t+1]:t+1,c=idx?arr[t+2]:t+2; if(isW[a]&&isW[b]&&isW[c]) tris.push(a,b,c); }
+    g.userData[cacheKey]=tris;
+    if(cfg.hide){                                   // strip the ORIGINAL limb — the mirror replaces it
+      const keep=[];
+      for(let t=0;t<tc;t+=3){ const a=idx?arr[t]:t,b=idx?arr[t+1]:t+1,c=idx?arr[t+2]:t+2; if(!(isW[a]&&isW[b]&&isW[c])) keep.push(a,b,c); }
+      g.setIndex(keep);
+    }
+  }
+  for(let t=0;t<tris.length;t+=3) ni.push(remap(tris[t]),remap(tris[t+1]),remap(tris[t+2]));
   if(ni.length<3) return null;
   const wg=new THREE.BufferGeometry();
   wg.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
@@ -1396,6 +1453,7 @@ function capClipTravelXZ(clip, maxD){ if(!clip||!(maxD>0)) return;
 }
 const ATK_STOP_MARGIN=3.2;   // world units the titan's root stops short of the hero
 ENEMY_GLB.forEach((f,i)=>{ new GLTFLoader().load(f, g=>{ bossGLTF[i]=g;
+  curlFists(g.scene);                                                    // ball the flat T-pose hands (before any clone/mirror bakes the geometry)
   stripClipTravelXZ(g.animations.find(c=>c.name===ENEMY_ANIM[i].hit));   // stagger stays planted (once, at load)
   alignClipBaseXZ(g.animations.find(c=>c.name===ENEMY_ANIM[i].idle),
                   g.animations.find(c=>c.name===ENEMY_ANIM[i].hit));     // idle rests on the same spot the other clips play from
