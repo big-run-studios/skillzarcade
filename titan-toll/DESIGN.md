@@ -333,3 +333,27 @@ set multiplier, heal, god-mode, and a live **timing log** (per-input error in ms
 `curTargetErr()` / `nextHit()`, `forceAttack(id)`, `setLevel/setMult/fillAction/fillBlitz`,
 `cashout()`, `hitLog()`, `slow(f)`, plus framing helpers (`setCam/setFov/setPlayerHome/…`).
 Same seed + same input sequence ⇒ identical enemy order, upgrade order, and crit rolls.
+
+## 11. Battle camera (v0.31.0)
+
+State-driven **camera director** (`CAMS` literal + `directCamera()` in `frame()`), cosmetic only —
+reads sim state, never writes it. Four laws:
+
+1. **Both fully framed** — hero + entire titan on screen during any live-input beat.
+   Exempt (pure cinematics): intro, enemy death, end game.
+2. **Never off the art** — the painted backdrop lives at −z; every shot aims into the valley.
+   No reverse angles.
+3. **Cut or crawl** — fast changes are hard cuts; glides are slow + eased; FOV static per shot;
+   horizon always level (no roll, no FOV animation — dolly punches instead).
+4. **Additive layers only** — dolly-punch spring (hits), breathing sway, legacy shake; all small,
+   all decaying.
+
+Shots: **intro** titan reveal (look climbs the body, then one pull-back settles on HOME as
+`Axe_Stance` ends) · **home** + tighten drifts (telegraph / vuln window / rage phase / at-risk
+bank, slew-capped, total ≤ 0.12) · **blitz** hard-cut low-angle hero shot, static through the
+combo (per-foe pull-back in `CAMS.blitz.perFoe` keeps Gale's wings + the Sky Titan framed) ·
+**kill** cut-in push on the death dissolve · **victory / crash / cashout** end shots.
+
+Harness: `camOn(v)`, `camShot(name[,t])`, `camTight(v)`, `camDbg()`, `camCheck(margin)`
+(projects both real bounding boxes against the live camera; raw boxes overhang the visible
+silhouette — screenshots are the acceptance test, camCheck is for regressions).
