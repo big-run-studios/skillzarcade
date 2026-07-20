@@ -30,6 +30,10 @@
     font-size:17px;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.55),0 0 12px rgba(255,255,255,.25);
     white-space:nowrap;opacity:0;will-change:transform,opacity;}
   .pop.big{font-size:24px;}
+  .pop.dmg{text-align:center;}
+  .pop .plbl{font-size:14px;letter-spacing:2px;margin-bottom:1px;text-shadow:0 2px 5px rgba(0,0,0,.6);}
+  .pop .pnum{line-height:1;-webkit-text-stroke:1.2px rgba(0,0,0,.45);}
+  .pop .pnum span{display:inline-block;will-change:transform,opacity;opacity:0;}
 
   /* ---------- top HUD ---------- */
   #hudTL{position:absolute;left:12px;top:max(10px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:5px;pointer-events:none;max-width:56vw;}
@@ -183,7 +187,7 @@
     <div class="tag">Steer 🛞 &nbsp;Throw 📦 &nbsp;Smash the block 💥 &nbsp;Cash out 💰</div>
     <button id="startBtn">START ROUTE</button>
     <div id="menuBest"></div>
-    <div class="brand" id="brand">EXPRESS DELIVERY v0.1.5 · BIG RUN STUDIOS</div>
+    <div class="brand" id="brand">EXPRESS DELIVERY v0.1.6 · BIG RUN STUDIOS</div>
   </div>
 
   <div id="over">
@@ -201,7 +205,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.5',
+  ver:'0.1.6',
   // --- vehicle
   baseSpeed:8.5,          // forward m/s at run start
   speedGrowth:0.075,      // m/s gained per second
@@ -224,17 +228,19 @@ const CFG = {
   rampBoost:1.45,         // vy = speed * slope * boost
   rampEveryChunks:5,      // one ramp roughly every N chunks (after rampStartChunk)
   rampStartChunk:8,
-  // --- delivery zone base points
-  zonePts:{ property:100, walkway:200, porch:400, doorstep:750, doormat:1000 },
-  tierUpAt:400,           // deliveries scoring >= this base advance the package tier
+  // --- delivery zone base points: ANY touch on the door = full score; porch = 1/10 door
+  zonePts:{ property:250, walkway:500, porch:1000, door:10000 },
+  tierUpAt:1000,          // deliveries scoring >= this base advance the package tier
   // --- destruction base points
-  propPts:{ gnome:75, flamingo:75, birdbath:75, can:50, bin:50, mailbox:100, cone:25,
-            hedge:20, bike:40, news:15, toy:10, sprinkler:50, barrier:250, fence:20, sign:25 },
-  pedPts:150, dogPts:200,
+  propPts:{ gnome:750, flamingo:750, birdbath:750, can:500, bin:500, mailbox:1000, cone:250,
+            hedge:200, bike:400, news:150, toy:100, sprinkler:500, barrier:2500, fence:200, sign:250 },
+  pedPts:1500, dogPts:2000,
   // --- combo
   comboDur:3.2,           // seconds without a scoring event before combo drops
   comboSteps:[[10,5],[7,4],[4,3],[2,2]],  // [actions, multiplier]
-  bonusPts:500,           // named-bonus flat award
+  bonusPts:5000,          // named-bonus flat award
+  // --- damage-number feel (ported from Titan Guard): font scales with the hit, digits drop in one at a time
+  dmgFontMax:20000, dmgStagger:0.055, dmgReveal:0.16, dmgBasePx:26,
   // --- pacing / density (by distance m)
   pedStart:60, dogStart:300, joggerStart:450,
   densityRamp:900,        // distance where density reaches max
@@ -799,7 +805,7 @@ function retargetStack(){
 function pickupProp(pr){
   // scored like a smash, but the prop hops onto the scooter instead of flying away
   const pts=award(pr.pts,'destroy');
-  popup(pr.x,0,pr.z,'+'+fmt(pts),'', '#ffe14d');
+  popupPts(pts,null,'#ffe14d');
   comboAction();
   (SFX[pr.sfx]||SFX.plastic)();
   S.lastDestroyT=S.t;
@@ -878,12 +884,35 @@ function slowMo(){ S.timeScale=CFG.slowMoScale; S.slowT=CFG.slowMoTime; }
 
 /* ---------- score popups ---------- */
 const popPool=[];
-function popup(wx,wy,wz,text,cls='',color=''){
+function popGrab(){
   let el=popPool.find(p=>!p.busy);
   if(!el){ el={div:document.createElement('div'),busy:false,t:0,slot:0}; el.div.className='pop'; $('pops').appendChild(el.div); popPool.push(el); }
   el.busy=true; el.t=0;
   el.slot=popPool.reduce((n,p)=>n+(p.busy&&p!==el?1:0),0);   // stack simultaneous toasts
+  return el;
+}
+function popup(wx,wy,wz,text,cls='',color=''){
+  const el=popGrab();
+  el.kind='plain'; el.max=1.2;
   el.div.textContent=text; el.div.className='pop '+cls;
+  el.div.style.fontSize='';
+  el.div.style.color=color||'#fff'; el.div.style.opacity=1;
+}
+/* Titan Guard damage-number logic: size scales with the points, digits drop in one at a time,
+   then the whole number floats up and fades. */
+function popupPts(pts,label,color){
+  const el=popGrab();
+  el.kind='dmg'; el.max=1.35;
+  const num=(pts<0?'-':'+')+fmt(Math.abs(pts));
+  el.sizeScale=clamp(1+(Math.abs(pts)-500)/(CFG.dmgFontMax-500)*1.6,1,2.6);
+  el.fs=CFG.dmgBasePx*el.sizeScale;
+  el.div.className='pop dmg';
+  el.div.style.fontSize='';
+  el.div.innerHTML=(label?'<div class="plbl">'+label+'</div>':'')+
+    '<div class="pnum" style="font-size:'+el.fs.toFixed(1)+'px">'+
+    num.split('').map(c=>'<span>'+c+'</span>').join('')+'</div>';
+  el.lbl=el.div.querySelector('.plbl');
+  el.spans=[...el.div.querySelectorAll('.pnum span')];
   el.div.style.color=color||'#fff'; el.div.style.opacity=1;
 }
 function clearPopups(){ for(const p of popPool){ p.busy=false; p.div.style.opacity=0; } }
@@ -892,11 +921,29 @@ function updatePopups(dt){
   for(const p of popPool){
     if(!p.busy) continue;
     p.t+=dt;
-    if(p.t>1.2){ p.busy=false; p.div.style.opacity=0; continue; }
+    const max=p.max||1.2;
+    if(p.t>max){ p.busy=false; p.div.style.opacity=0; continue; }
     // fixed toast spot: dead center, halfway between middle and top — always obvious when you score
     p.div.style.left='50%';
-    p.div.style.top=(innerHeight*0.25 + p.slot*34 - p.t*26)+'px';
-    p.div.style.opacity=p.t<0.9?1:(1-(p.t-0.9)/0.3);
+    const gFade=p.t>max-0.3?clamp((max-p.t)/0.3,0,1):1;
+    if(p.kind==='dmg'){
+      const n=p.spans.length, STAG=CFG.dmgStagger, REV=CFG.dmgReveal;
+      const revealDone=(n-1)*STAG+REV;
+      const floatUp=Math.max(0,p.t-revealDone)*46;
+      p.div.style.top=(innerHeight*0.25 + p.slot*40 - floatUp)+'px';
+      p.div.style.opacity=1;
+      for(let i=0;i<n;i++){
+        const tt=p.t-i*STAG;
+        const a=tt<=0?0:tt<REV?tt/REV:1;
+        const yoff=(tt>0&&tt<REV)?-(1-tt/REV)*p.fs*0.55:0;
+        p.spans[i].style.opacity=(a*gFade).toFixed(2);
+        p.spans[i].style.transform='translateY('+yoff.toFixed(1)+'px)';
+      }
+      if(p.lbl) p.lbl.style.opacity=(Math.min(1,p.t/REV)*gFade).toFixed(2);
+    } else {
+      p.div.style.top=(innerHeight*0.25 + p.slot*34 - p.t*26)+'px';
+      p.div.style.opacity=p.t<0.9?1:gFade;
+    }
   }
 }
 
@@ -906,7 +953,7 @@ function smash(pr,vel,src){    // pr = prop rec, vel = impacting velocity vector
   pr.dead=true;
   if(src!=='runover'){
     const pts=award(pr.pts,'destroy');
-    popup(pr.x,pr.h+0.7,pr.z,'+'+fmt(pts),'', '#ffe14d');
+    popupPts(pts,null,'#ffe14d');
     comboAction();
     S.lastDestroyT=S.t;
     if(pr.kind==='mailbox') S.mailboxInCombo=true;
@@ -952,7 +999,7 @@ function tumbleChar(c,vel,pts,isDog){
   if(c.dead) return;
   c.dead=true; c.state='fly'; c.t=0;
   const p=award(pts,'destroy');
-  popup(c.grp.position.x,1.6,c.grp.position.z,'+'+fmt(p),'', isDog?'#ffb0d8':'#ffe14d');
+  popupPts(p,null,isDog?'#ffb0d8':'#ffe14d');
   comboAction();
   isDog?SFX.yelp():SFX.oof();
   S.lastDestroyT=S.t;
@@ -1082,7 +1129,7 @@ function updateMarker(){
   let x=(_v.x*0.5+0.5)*innerWidth, y=(-_v.y*0.5+0.5)*innerHeight;
   y=Math.max(y,90);                                        // clamp when the house is still far ahead
   m.style.left=x+'px'; m.style.top=y+'px'; m.style.opacity=1;
-  $('markerVal').textContent='UP TO '+fmt(CFG.zonePts.doormat*(veh.tier+1));
+  $('markerVal').textContent='UP TO '+fmt(CFG.zonePts.door*(veh.tier+1));
 }
 
 /* ==================================================== packages */
@@ -1130,35 +1177,39 @@ function toss(){
   S.shake=Math.min(S.shake+0.06+veh.tier*0.015,0.5);
   return true;
 }
+function scoreDelivery(pkg,zone){
+  const t=pkg.target;
+  if(!t||t.scored||t.missed) return;
+  const base=CFG.zonePts[zone];
+  const pts=award(base*(pkg.tier+1),'delivery');
+  comboAction();
+  t.scored=true; t.grp.userData.mat.material=M.mat;
+  S.deliveries++; S.biggestTier=Math.max(S.biggestTier,pkg.tier);
+  const names={property:'ON THE LOT',walkway:'WALKWAY',porch:'PORCH',door:'DOOR!'};
+  popupPts(pts,names[zone], zone==='door'?'#3affa4':zone==='porch'?'#8affc4':'#ffe14d');
+  if(zone==='door'){
+    S.perfects++; SFX.perfect(); slowMo();
+    if(S.t-S.lastDestroyT<2) namedBonus('EXPRESS COMBO');
+  } else SFX.chime(['property','walkway','porch'].indexOf(zone)+1);
+  if(pkg.thrownAir) namedBonus('AIR MAIL');
+  if(S.mailboxInCombo){ namedBonus('SPECIAL DELIVERY'); S.mailboxInCombo=false; }
+  if(base>=CFG.tierUpAt && veh.tier<CFG.tiers.length-1){
+    veh.tier++;
+    popup(0,0,0,'📦 '+CFG.tiers[veh.tier].name+'!','big','#ffc233');
+  }
+}
 function resolveDelivery(pkg){
   const t=pkg.target;
   if(!t||t.scored||t.missed) return;
   const x=pkg.x,z=pkg.z,zz=t.zones;
   const inR=r=>x>=r.x0&&x<=r.x1&&z>=r.z0&&z<=r.z1;
   let zone=null;
-  if(inR(zz.doormat)) zone='doormat';
-  else if(inR(zz.doorstep)) zone='doorstep';
+  if(inR(zz.doormat)||inR(zz.doorstep)) zone='door';       // settling at the door counts as a door hit
   else if(inR(zz.porch)) zone='porch';
   else if(inR(zz.walkway)) zone='walkway';
   else if(inR(zz.property)) zone='property';
   if(!zone){ popup(x,pkg.y+1,z,'✗','','#c8c8c8'); return; }
-  const base=CFG.zonePts[zone];
-  const pts=award(base*(pkg.tier+1),'delivery');
-  comboAction();
-  t.scored=true; t.grp.userData.mat.material=M.mat;
-  S.deliveries++; S.biggestTier=Math.max(S.biggestTier,pkg.tier);
-  const names={property:'ON THE LOT',walkway:'WALKWAY',porch:'PORCH',doorstep:'DOORSTEP',doormat:'PERFECT!'};
-  popup(x,pkg.y+1.2,z,names[zone]+' +'+fmt(pts),'big', zone==='doormat'?'#3affa4':zone==='doorstep'?'#8affc4':'#ffe14d');
-  if(zone==='doormat'){
-    S.perfects++; SFX.perfect(); slowMo();
-    if(S.t-S.lastDestroyT<2) namedBonus('EXPRESS COMBO');
-  } else SFX.chime(['property','walkway','porch','doorstep'].indexOf(zone));
-  if(pkg.thrownAir) namedBonus('AIR MAIL');
-  if(S.mailboxInCombo){ namedBonus('SPECIAL DELIVERY'); S.mailboxInCombo=false; }
-  if(base>=CFG.tierUpAt && veh.tier<CFG.tiers.length-1){
-    veh.tier++;
-    popup(veh.x,veh.y+2,veh.z,'📦 '+CFG.tiers[veh.tier].name+'!','big','#ffc233');
-  }
+  scoreDelivery(pkg,zone);
 }
 function updatePackages(dt){
   for(let i=world.packages.length-1;i>=0;i--){
@@ -1170,12 +1221,17 @@ function updatePackages(dt){
     p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt;
     const gy=groundYPkg(p.x,p.z), rest=gy+t.h*0.5;
     const sp=Math.hypot(p.vx,p.vz);
-    // house wall bounce
+    // house wall bounce — but ANY touch on the target's door scores full marks
     for(const h of world.houses){
       const w=h.zones.wall;
       if(Math.abs(p.z-h.hz)<5.4 && p.x>w.x-t.r && p.y<w.h && p.vx>0){
-        p.x=w.x-t.r; p.vx=-Math.abs(p.vx)*0.35; SFX.card();
-        popup(p.x,p.y+0.5,p.z,'BONK','','#ffd0a8');
+        if(h===p.target && !h.scored && !h.missed && Math.abs(p.z-h.hz)<0.9 && p.y<2.7){
+          scoreDelivery(p,'door');                         // touched the door itself
+        } else {
+          SFX.card();
+          popup(p.x,p.y+0.5,p.z,'BONK','','#ffd0a8');
+        }
+        p.x=w.x-t.r; p.vx=-Math.abs(p.vx)*0.35;
       }
     }
     for(const lz of world.lhouses){                        // left houses: wall bounce only (no delivery zones)
@@ -1308,7 +1364,7 @@ function updateVehicle(dt){
         } else {
           // stack is full — this one gets run over and COSTS points
           S.pot=Math.max(0,S.pot-pr.pts);
-          popup(pr.x,0,pr.z,'-'+fmt(pr.pts)+' RUN OVER','', '#ff6a5a');
+          popupPts(-pr.pts,'RUN OVER','#ff6a5a');
           SFX.bump();
           smash(pr,new THREE.Vector3(veh.vx*0.5,0,-veh.speed),'runover'); // flies away but scores nothing extra
         }
@@ -1501,7 +1557,7 @@ function endRun(cashed){
     ['Delivery points',fmt(S.deliveryScore)],
     ['Destruction points',fmt(S.destroyScore)],
     ['Best combo','×'+S.bestCombo],
-    ['Perfect deliveries',S.perfects],
+    ['Door hits',S.perfects],
     ['Biggest delivery',S.biggestTier>=0?CFG.tiers[S.biggestTier].name:'—'],
     ['Distance',Math.round(S.dist)+'m'],
     ['Best banked',fmt(best)],
