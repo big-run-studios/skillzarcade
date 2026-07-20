@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.25.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.26.0</div>
   </div>
 </div>
 
@@ -746,6 +746,12 @@ function buildPlayer(){
   const muzA=new THREE.Object3D(); muzA.position.y=MUZ_Y; pike.add(muzA); g.userData.muzzleAnchor=muzA;
   // rune ring for cast (hidden until casting)
   const rune=new THREE.Mesh(new THREE.TorusGeometry(0.32,0.03,6,20),unlit(0xc07bff)); rune.position.y=1.0; rune.rotation.x=Math.PI/2; rune.visible=false; pike.add(rune); g.userData.rune=rune;
+  // cast radiance: purple rings that swell outward off the shaft while casting (phase-staggered loop)
+  const castRings=[];
+  for(let i=0;i<3;i++){ const r=new THREE.Mesh(new THREE.TorusGeometry(0.3,0.028,6,24),
+      unlit(0xc07bff,{transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));
+    r.rotation.x=Math.PI/2; r.position.y=1.0; r.visible=false; pike.add(r); castRings.push(r); }
+  g.userData.castRings=castRings;
 
   // grip pike into right hand
   pike.position.set(0.05,-0.8,0.1);
@@ -801,6 +807,11 @@ function attachHero(){
     const it=hipsOf(heroClips[HERO_CLIP.intro]), id=hipsOf(heroClips[HERO_CLIP.idle]);
     if(it && id){ const v=it.values, n=v.length, dx=id.values[0]-v[n-3], dz=id.values[2]-v[n-1];
       for(let i=0;i<n;i+=3){ v[i]+=dx; v[i+2]+=dz; } }
+    // (3) hit flinch (Male_Head_Down_Charge) is authored as a forward CHARGE — pin its
+    //     root XZ at frame 0 so the flinch braces IN PLACE instead of sliding forward
+    const hh=hipsOf(heroClips[HERO_CLIP.hit]);
+    if(hh){ const v=hh.values, x0=v[0], z0=v[2];
+      for(let i=0;i<v.length;i+=3){ v[i]=x0; v[i+2]=z0; } }
   }
   playHeroClip(HERO_CLIP.idle, true, 0, 0.5);
 }
@@ -922,7 +933,7 @@ function attachSpear(){
   // the model's materials take over the Blitz gold charge-tint
   const mats=[];
   hold.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; if(o.material&&o.material.emissive&&!mats.includes(o.material)) mats.push(o.material); } });
-  if(mats.length) u.pikeMats=mats;
+  if(mats.length){ u.pikeMats=mats; u.realLance=true; }   // realLance: mats have an AUTHORED emissive map (default white/1) — drive intensity, don't stomp
   pike.add(hold); spearModel=hold;
   attachSpearBlitz();
 }
@@ -1196,13 +1207,16 @@ enemySpark.renderOrder=999; enemySpark.visible=false; enemySpark.scale.setScalar
 // big bazooka muzzle flash — starburst sprite popped at the bell mouth on shoot hits
 const muzzleSpark=new THREE.Sprite(new THREE.SpriteMaterial({ map:makeSparkTexture(), color:0x9fefff, transparent:true, opacity:0, depthTest:false, depthWrite:false, blending:THREE.AdditiveBlending }));
 muzzleSpark.renderOrder=999; muzzleSpark.visible=false; scene.add(muzzleSpark);
-const MUZ_FLASH=0.22; const _muzV=new THREE.Vector3();
+const muzzleCore=new THREE.Sprite(new THREE.SpriteMaterial({ map:makeSparkTexture(), color:0xffffff, transparent:true, opacity:0, depthTest:false, depthWrite:false, blending:THREE.AdditiveBlending }));
+muzzleCore.renderOrder=1000; muzzleCore.visible=false; scene.add(muzzleCore);
+const MUZ_FLASH=0.35; const _muzV=new THREE.Vector3();
 function muzzleFlash(big){
   const u=playerMesh&&playerMesh.userData; if(!u||!u.muzzleAnchor) return;
   u.muzzleFlashT=MUZ_FLASH; u.muzzleFlashBig=big?1.4:1;
   muzzleSpark.material.rotation=rf(0,Math.PI*2);
+  muzzleCore.material.rotation=rf(0,Math.PI*2);
   u.muzzleAnchor.getWorldPosition(_muzV);
-  burst(_muzV,'#9fefff', big?16:10);
+  burst(_muzV,'#9fefff', big?26:16); burst(_muzV,'#ffffff', big?10:6);
 }
 const _spkV=new THREE.Vector3(); let sparkForce=0;   // sparkForce = harness override for placement testing
 function updateEnemySpark(){
@@ -2048,7 +2062,7 @@ function offAnchor(tg){
 }
 
 const _pikeQT=new THREE.Quaternion(), _pikeAim=new THREE.Vector3(), _pikeDir=new THREE.Vector3(),
-      _pikeDown=new THREE.Vector3(0,-1,0), _pikeSideE=new THREE.Euler(-Math.PI/2,0,0);
+      _pikeDown=new THREE.Vector3(0,-1,0), _pikeUp=new THREE.Vector3(0,1,0), _pikeSideE=new THREE.Euler(-Math.PI/2,0,0);
 function animatePlayer(rdt){
   const u=playerMesh.userData; if(!u.body) return;
   const t=performance.now()/1000;
@@ -2077,34 +2091,54 @@ function animatePlayer(rdt){
   //      shoot  -> bazooka butt (local -Y) aimed at the titan's midsection
   //      else   -> upright
   if(introT>0) _pikeQT.setFromEuler(_pikeSideE);
-  else if(playerPose==='shoot' && enemyMesh && enemyMesh.userData.anchors){
+  else if((playerPose==='shoot'||playerPose==='strike') && enemyMesh && enemyMesh.userData.anchors){
+    // shoot: bazooka butt (local -Y) at the titan's core; strike: blade TIP (local +Y) drives at it
     enemyMesh.userData.anchors.core.getWorldPosition(_pikeAim);
     playerMesh.worldToLocal(_pikeAim);
     _pikeDir.copy(_pikeAim).sub(u.pike.position).normalize();
-    _pikeQT.setFromUnitVectors(_pikeDown, _pikeDir);
+    _pikeQT.setFromUnitVectors(playerPose==='shoot'?_pikeDown:_pikeUp, _pikeDir);
   }
   else _pikeQT.identity();
   u.pike.quaternion.slerp(_pikeQT, Math.min(1,rdt*12));
-  // ---- bazooka muzzle flash: pop big at the bell mouth, then fade ----
+  // ---- bazooka muzzle BLAST: big white-hot core + wide cyan halo, then fade ----
   let mf=0;
   if((u.muzzleFlashT||0)>0){
     u.muzzleFlashT-=rdt; mf=clamp(u.muzzleFlashT/MUZ_FLASH,0,1);
     u.muzzleAnchor.getWorldPosition(_muzV);
     muzzleSpark.position.copy(_muzV);
-    muzzleSpark.scale.setScalar((u.muzzleFlashBig||1)*(2.2+0.9*(1-mf)));
+    muzzleSpark.scale.setScalar((u.muzzleFlashBig||1)*(3.4+1.8*(1-mf)));
     muzzleSpark.material.opacity=mf;
     muzzleSpark.visible=mf>0;
-  } else muzzleSpark.visible=false;
-  // ---- Blitz charge: cross-fade to the charged lance skin as the bar fills (real model);
-  //      fallback = gold emissive tint on the procedural stand-in. Ribbons live in updateBlitzRibbons ----
+    muzzleCore.position.copy(_muzV);
+    muzzleCore.scale.setScalar((u.muzzleFlashBig||1)*(1.5+0.5*(1-mf)));
+    muzzleCore.material.opacity=Math.min(1,mf*1.6);
+    muzzleCore.visible=mf>0;
+  } else { muzzleSpark.visible=false; muzzleCore.visible=false; }
+  // ---- cast radiance: purple rings swell off the shaft; the lance's emissive surges violet ----
+  const castGlow = playerPose==='cast' ? 0.7+0.3*Math.sin(t*9) : 0;
+  if(u.castRings) for(let i=0;i<u.castRings.length;i++){ const r=u.castRings[i];
+    if(!castGlow){ r.visible=false; continue; }
+    const p=((t*0.85)+i/u.castRings.length)%1;
+    r.visible=true; r.scale.setScalar(0.5+p*3.4); r.position.y=0.7+p*0.9;
+    r.material.opacity=(1-p)*0.85;
+  }
+  // ---- Blitz charge: cross-fade to the charged lance skin as the bar fills, with a glow that
+  //      BUILDS through the transition (base lance ramps gold, charged skin brightens + over-glows).
+  //      Fallback = gold emissive tint on the procedural stand-in. Ribbons live in updateBlitzRibbons ----
   const bf=clamp(blitz/CFG.blitzMax,0,1);
   if(u.spearBlitzMats){
     u.spearBlitzModel.visible = bf>0.01;
-    const ei = bf*0.55 + (bf>=1 ? 0.3+0.2*Math.sin(t*11) : 0);   // authored emissive map glows with charge; pulses at full
-    for(const m of u.spearBlitzMats){ m.opacity=bf; m.emissiveIntensity=ei; }
+    const ei = bf*1.1 + (bf>=1 ? 0.35+0.25*Math.sin(t*11) : 0);   // authored emissive map glows with charge; pulses at full
+    const br = 1 + bf*0.45;                                       // and the charged skin's albedo brightens as it builds
+    for(const m of u.spearBlitzMats){ m.opacity=bf; m.emissiveIntensity=ei; m.color.setScalar(br); }
   }
-  else if(u.pikeMats){ const ge=bf*0.85; for(const m of u.pikeMats){ if(m.emissive) m.emissive.setRGB(ge,ge*0.72,ge*0.12); } }
-  u.tipLight.intensity = Math.max(tipInt.intensity, bf*1.6 + (bf>=1?0.8+Math.sin(t*11)*0.5:0), mf*6);
+  if(u.realLance){ // base lance: violet surge while casting, else gold glow ramping with the charge
+    for(const m of u.pikeMats){ if(!m.emissive) continue;
+      if(castGlow){ m.emissive.setRGB(0.75,0.4,1.5); m.emissiveIntensity=1+castGlow*1.6; }
+      else { m.emissive.setRGB(1+bf*1.1, 1+bf*0.6, 1); m.emissiveIntensity=1+bf*0.9; } }
+  }
+  else if(u.pikeMats){ const ge=Math.max(bf*0.85, castGlow*0.6); for(const m of u.pikeMats){ if(m.emissive) m.emissive.setRGB(ge*(castGlow?0.75:1), ge*(castGlow?0.4:0.72), ge*(castGlow?1.5:0.12)); } }
+  u.tipLight.intensity = Math.max(tipInt.intensity, bf*2.2 + (bf>=1?0.9+Math.sin(t*11)*0.5:0), mf*8);
 
   // ---- action bar as a ground ring around the feet (fills centre-out) ----
   if(actGrp){
