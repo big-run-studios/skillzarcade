@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.31.1</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.31.0</div>
   </div>
 </div>
 
@@ -388,7 +388,6 @@ const CFG={
   dodgeScorePerfect:1000, dodgeScoreGoodHi:750, dodgeScoreGoodLo:300, // dodge score by quality
   dmgFontMax:300,          // damage >= this draws at the 4x max size
   approachT:0.9,           // Juggernaut walk-in time before a MELEE attack (the dodge game starts on arrival)
-  galePreT:2.0,            // Gale's pre-attack tell: two slow head nods (the dodge game starts after)
   heroDashT:0.55,          // hero run-in time before a strike (the timing game starts on arrival)
 };
 
@@ -1411,11 +1410,9 @@ function buildEnemyGLB(i){
     const maxL=(distW-ATK_STOP_MARGIN)/((h/nat)*(ENEMY_SCALE[i]||1));
     for(const nm of new Set(ENEMY_ANIM[i].attacks)) capClipTravelXZ(clips[nm], maxL); }
   const spk=ENEMY_SPARK[i]; const sparkBone=spk?model.getObjectByName(spk.node):null;
-  let nodBone=model.getObjectByName('Head');                       // pre-attack nod tell (Gale)
-  if(!nodBone) model.traverse(o=>{ if(!nodBone && o.isBone && /head/i.test(o.name)) nodBone=o; });
   const handBone=model.getObjectByName('RightHand');   // hand-origin projectile VFX fire from here
   const armDups=ENEMY_ARMS[i]?ENEMY_ARMS[i].map(a=>buildLimbDuplicate(model,a)):null;   // mirrored forearms (Gale, both arms)
-  g.userData={...g.userData, height:h, model, mixer, clips, animMap:ENEMY_ANIM[i], baseYaw:ENEMY_YAW[i], rotMap:ENEMY_ROT[i]||{}, curClip:'', action:null, _rx:0, spark:spk, sparkBone, nodBone, boneFix:resolveBoneFix(model,i), armDups, armIdx:i, handBone};
+  g.userData={...g.userData, height:h, model, mixer, clips, animMap:ENEMY_ANIM[i], baseYaw:ENEMY_YAW[i], rotMap:ENEMY_ROT[i]||{}, curClip:'', action:null, _rx:0, spark:spk, sparkBone, boneFix:resolveBoneFix(model,i), armDups, armIdx:i, handBone};
   playEnemyClip(g.userData, ENEMY_ANIM[i].idle, true, 0);
   return g;
 }
@@ -1451,8 +1448,7 @@ let forcedAttack=-1;
 let godMode=false, paused=false;
 let defeatedT=0;
 let enemyKb=0, enemyKbV=0;                 // enemy hit-recoil spring (knockback away from player, scaled by damage)
-let pendingAtk=-1;                          // attack chosen but waiting on the pre-attack phase
-let preDur=0, approachMove=true;            // pre-attack length + whether it MOVES (Juggernaut walks; Gale nods in place)
+let pendingAtk=-1;                          // attack chosen but waiting on the approach walk-in
 let enemyHurtT=0;                          // >0 => play the boss hit-reaction clip (cosmetic; set when a player hit lands)
 let enemyDeathFx=null;                      // active slow red death dissolve
 const E_DEATH_FREEZE=0.45, E_DEATH_DUR=2.2, E_DEATH_HOLD=0.3, E_DEATH_COL=0xff2a1e, E_DEATH_MOTE='#ff6a4a';
@@ -1784,8 +1780,8 @@ function resolveTarget(tg, grade, err){
   if(dmg>0) resolveLockT=CFG.resolveLock;   // only lock cashout while real damage resolves (not a 0-dmg auto-miss)
   const anchor=off._anchorPos?off._anchorPos(tg):enemyMesh.userData.anchors.core.getWorldPosition(new THREE.Vector3());
   if(off.action==='shoot' && !isMiss) muzzleFlash(grade==='perfect'||crit);   // the bazooka end fires
-  if(grade==='perfect'){ sfx(crit?'crit':'perfect'); addFloater(anchor,crit?'CRITICAL':'PERFECT',crit?'#ff4fd8':'#ffe14d',crit?1.2:1.0,crit?30:24); hitPauseT=CFG.hitPause*(crit?1.6:1); shake(crit?0.5:0.28,0.28); burst(anchor,crit?'#ff4fd8':'#ffe14d',crit?18:10);}
-  else if(grade==='good'){ sfx(crit?'crit':'good'); addFloater(anchor,crit?'CRITICAL':'GOOD',crit?'#ff4fd8':'#8fe9ff',crit?1.1:0.85,crit?28:20); if(crit){hitPauseT=CFG.hitPause*1.4;shake(0.4,0.24);} burst(anchor,crit?'#ff4fd8':'#8fe9ff',crit?14:7);}
+  if(grade==='perfect'){ sfx(crit?'crit':'perfect'); addFloater(anchor,crit?'CRITICAL':'PERFECT',crit?'#ff4fd8':'#ffe14d',crit?1.2:1.0,crit?30:24); hitPauseT=CFG.hitPause*(crit?1.6:1); shake(crit?0.5:0.28,0.28); camPunch(crit?0.30:0.16); burst(anchor,crit?'#ff4fd8':'#ffe14d',crit?18:10);}
+  else if(grade==='good'){ sfx(crit?'crit':'good'); addFloater(anchor,crit?'CRITICAL':'GOOD',crit?'#ff4fd8':'#8fe9ff',crit?1.1:0.85,crit?28:20); if(crit){hitPauseT=CFG.hitPause*1.4;shake(0.4,0.24);} camPunch(crit?0.24:0.09); burst(anchor,crit?'#ff4fd8':'#8fe9ff',crit?14:7);}
   else { sfx('miss'); addFloater(anchor,'MISS','#8a99b8',0.8,18); }
   if(dmg>0) addDmgFloater(anchor.clone().add(new THREE.Vector3(0,-0.6,0)), dmg, crit?'#ff9ae0':'#ffffff', crit);
   hitLog.push({t:+T.toFixed(3),kind:'atk:'+off.action,grade,err:err==null?null:+err.toFixed(3)});
@@ -1904,7 +1900,7 @@ function startAttack(idx){
   } else {
     hits = s.hits.map(h=>({...h, at:h.at*CFG.timeScale, dmg:h.dmg, resolved:false, dodged:false, tele:false}));
   }
-  atk={setIdx:idx, set:s, startT:T, animTimed, hits, approached:enemyState==='approach'&&approachMove};   // approached: walked in — jump home after (Gale's nod doesn't move)
+  atk={setIdx:idx, set:s, startT:T, animTimed, hits, approached:enemyState==='approach'};   // approached: walked in — walk back during recovery
   last2Atk=lastAtk; lastAtk=idx;
   recentFast = isFast(s) ? recentFast+1 : 0;
   enemyState='telegraph'; enemyTimer=0;
@@ -1922,15 +1918,14 @@ function updateEnemy(dt){
       const idx=chooseAttack();
       const alist=ENEMY_ANIM[enemyIdx].attacks, clip=alist&&alist[idx%alist.length];
       const melee = enemyIdx===0 && !(ENEMY_FX[enemyIdx]&&ENEMY_FX[enemyIdx][clip]);   // Juggernaut walks in for MELEE attacks; projectiles fire from home
-      if(melee){ pendingAtk=idx; enemyState='approach'; enemyTimer=0; preDur=CFG.approachT; approachMove=true; }
-      else if(enemyIdx===1){ pendingAtk=idx; enemyState='approach'; enemyTimer=0; preDur=CFG.galePreT; approachMove=false; }   // Gale: two slow nods before every cast
+      if(melee){ pendingAtk=idx; enemyState='approach'; enemyTimer=0; }
       else startAttack(idx);
     }
     return;
   }
   if(enemyState==='approach'){
     enemyTimer+=dt;
-    if(enemyTimer>=preDur) startAttack(pendingAtk);   // pre-attack done -> the dodge game starts NOW (the tell never eats into it)
+    if(enemyTimer>=CFG.approachT) startAttack(pendingAtk);   // arrive -> the dodge game starts NOW (the walk never eats into it)
     return;
   }
   if(enemyState==='telegraph'||enemyState==='active'){
@@ -1972,7 +1967,7 @@ function landHit(hit){
   mult=Math.max(1,mult-1); multMeter=0;
   blitz=Math.min(CFG.blitzMax, blitz + hit.dmg*CFG.blitzOnHit);
   resolveLockT=CFG.resolveLock;
-  hitPauseT=CFG.hitPause*1.4; shake(0.6+hit.dmg*0.01,0.4);
+  hitPauseT=CFG.hitPause*1.4; shake(0.6+hit.dmg*0.01,0.4); camPunch(-0.18-hit.dmg*0.004);   // recoil pull-back when the hero takes it
   sfx('hurt');
   addFloater(playerMesh.position.clone().setY(2.6), '-'+dmg, '#ff5a6e', 1.05, 24);
   hitLog.push({t:+T.toFixed(3),kind:'HIT',grade:'took '+dmg,err:null});
@@ -2271,7 +2266,6 @@ function animatePlayer(rdt){
     }
   }
 }
-const _nodQ=new THREE.Quaternion(), _nodE=new THREE.Euler();
 function animateEnemy(rdt){
   if(!enemyMesh)return; const u=enemyMesh.userData; const t=performance.now()/1000;
   if(enemyDeathFx) return;                 // pose frozen during the death dissolve
@@ -2282,7 +2276,7 @@ function animateEnemy(rdt){
   // attack, then JUMP home at recovery start — a fast ballistic arc (no jump clip authored;
   // the parabola + Stand_Dodge hop pose sell it). Cosmetic — the dodge game anchors on arrival.
   let apT=0, jumpY=0, snap=false;
-  if(enemyState==='approach') apT=approachMove?clamp(enemyTimer/preDur,0,1):0;   // Gale's nod tell stays planted
+  if(enemyState==='approach') apT=clamp(enemyTimer/CFG.approachT,0,1);
   else if(atk && atk.approached && (enemyState==='telegraph'||enemyState==='active')) apT=1;
   else if(atk && atk.approached && enemyState==='recovery'){
     const p=clamp(enemyTimer/0.45,0,1);
@@ -2321,14 +2315,9 @@ function animateEnemy(rdt){
   if(u.mixer){
     u.mixer.update(rdt);
     if(u.boneFix){ for(const f of u.boneFix){ if(f.bone) f.bone.quaternion.premultiply(f.q); } }   // corrective bone rotations on top of the animation
-    if(enemyState==='approach' && !approachMove && u.nodBone){                 // Gale's tell: two slow head nods over the pre-attack window
-      const p=clamp(enemyTimer/preDur,0,1);
-      _nodQ.setFromEuler(_nodE.set(Math.max(0,Math.sin(p*Math.PI*4))*0.5,0,0));
-      u.nodBone.quaternion.multiply(_nodQ);                                    // local pitch, applied after the mixer like boneFix
-    }
     const map=u.animMap; let want=map.idle, loop=true, spd=map.idleSpd||1;   // per-boss idle pace (Cliffhorn 0.5)
     if(enemyHurtT>0 || enemyState==='stagger'){ want=map.hit; loop=false; spd=1; }
-    else if(enemyState==='approach' && approachMove && u.clips['Walking']){ want='Walking'; loop=true; spd=1.15; }   // walk in (jump home keeps the idle pose — the arc sells it; Stand_Dodge read silly)
+    else if(enemyState==='approach' && u.clips['Walking']){ want='Walking'; loop=true; spd=1.15; }   // walk in (jump home keeps the idle pose — the arc sells it; Stand_Dodge read silly)
     else if(atk && (enemyState==='telegraph'||enemyState==='active')){       // attack: fit the clip to the dodge-game window
       want=map.attacks[(atk.setIdx||0)%map.attacks.length]; loop=false;
       if(atk.animTimed){ spd=1; }                                            // animation-driven: play natural so the swing aligns with the taps
@@ -2346,6 +2335,135 @@ function animateEnemy(rdt){
   }
 }
 
+/* =========================================================================
+   CAMERA DIRECTOR — cinematic battle camera. COSMETIC ONLY: reads sim state,
+   never writes it (same contract as animateEnemy). Four laws:
+     1. Hero + entire titan fully in frame during any live-input beat
+        (intro / enemy-death / end-game shots are exempt — pure cinematics).
+     2. Never aim outside the painted wedge: the backdrop lives at -z, so every
+        shot looks toward the valley. No reverse angles, ever.
+     3. Cut or crawl: fast changes are hard cuts (vestibularly neutral); glides
+        are slow + eased; FOV is static per shot; the horizon stays level.
+     4. Layers (punch / sway / shake) are additive, small, decaying.
+   CAMS.on=false restores the legacy fixed CAM (for harness framing tools).
+   ========================================================================= */
+const CAMS={
+  on:true,
+  glideRate:6.0,                        // exp chase toward the shot goal (authored tracks carry their own easing)
+  crawlRate:1.2, crawlMax:1.0,          // HOME drifts: slew-limited so they can never read as camera motion
+  swayAmp:0.05, swayT:7.3,              // breathing layer — imperceptible as motion, perceptible as life
+  punchK:150, punchC:14, punchMax:0.55, // dolly-punch spring along the view axis (Law 4: replaces FOV kicks)
+  // HOME tighten stack (fractions of the pos->look distance); validated via camCheck at tightenCap
+  tele:0.035, vuln:0.055, rageCue:0.05, rage:[0,0.022,0.045], bankRef:25000, bankMax:0.04, tightenCap:0.12,
+  // low-angle hero shot (hard cut); per-foe pull-back keeps Gale's wings + the Sky Titan fully framed (screenshot-verified all 3)
+  blitz:{dx:2.2, dy:0.74, dz:4.9, lookMix:0.32, lookDx:-0.3, lookH:2.0, lookHe:0.17, fov:52,
+         perFoe:[null, {dx:2.4, dz:6.1, lookDx:0}, {dx:2.4, dz:6.1, lookDx:0}]},
+  intro:{d:8.0, az:0.5, y0:1.0, y1:2.0, look0:0.10, look1:0.86, rise:0.45},      // titan reveal -> glide to HOME
+  kill:{d0:1.45, d1:0.98, az:0.42, yF:0.42, lookF:0.52},                         // push-in on the dissolve (x titan height)
+  victory:{dx:3.2, dy:1.15, dz:4.6, lookDx:-0.3, lookY:1.2, fov:44},
+  crash:{rise:4.2, back:7.0, dur:4.0, lookY:0.5},
+  cashout:{rise:6.5, back:3.5, dur:4.5, lookY:1.2},
+};
+const _camCur={pos:CAM.pos.clone(), look:CAM.look.clone(), fov:41};
+const _cg={pos:new THREE.Vector3(), look:new THREE.Vector3(), fov:41, cut:false, rate:CAMS.glideRate, max:0};
+let _camShotId='home', _camShotT=0, _camPunch=0, _camPunchV=0, _camSway=0, _camRageCueT=0;
+let _camForce=null, _camForceT=null, _camTightForce=null;
+const _camV1=new THREE.Vector3(), _camV2=new THREE.Vector3();
+function camPunch(a){ _camPunchV+=a*12; }             // impulse along the view axis; the spring pulls it home
+function _camEnemyH(){ return enemyMesh ? (enemyMesh.userData.height||10)*enemyMesh.scale.x : 8; }
+function _camShotGoal(g,id,t){
+  const eH=_camEnemyH(), ep=enemyMesh?enemyMesh.position:CAM.look;
+  const hx=playerMesh?playerMesh.position.x:PHOME.x, hz=playerMesh?playerMesh.position.z:PHOME.z;
+  g.cut=false; g.rate=CAMS.glideRate; g.max=0; g.fov=41;
+  switch(id){
+    case 'intro':{ // EXEMPT: open low at the titan's feet, the look climbs its body, then one eased pull-back home
+      const C=CAMS.intro, p=clamp(1-introT/CFG.introDur,0,1);
+      const px=ep.x+Math.sin(C.az)*C.d, pz=ep.z+Math.cos(C.az)*C.d;
+      if(p<C.rise){ const q=smooth(p/C.rise);
+        g.pos.set(px, lerp(C.y0,C.y1,q), pz);
+        g.look.set(ep.x, eH*lerp(C.look0,C.look1,q), ep.z);
+      }else{ const q=smooth((p-C.rise)/(1-C.rise));
+        g.pos.set(lerp(px,CAM.pos.x,q), lerp(C.y1,CAM.pos.y,q), lerp(pz,CAM.pos.z,q));
+        g.look.set(lerp(ep.x,CAM.look.x,q), lerp(eH*C.look1,CAM.look.y,q), lerp(ep.z,CAM.look.z,q));
+      }
+      g.cut=true; break; }                            // cut IN on startRun; at p=1 the goal IS home, so the exit cut is seamless
+    case 'kill':{  // EXEMPT: slow push toward the dissolving titan (cut in on the killing blow's shake)
+      const C=CAMS.kill, q=smooth(clamp(defeatedT/E_DEATH_DUR,0,1)), d=eH*lerp(C.d0,C.d1,q);
+      g.pos.set(ep.x+Math.sin(C.az)*d, eH*C.yF, ep.z+Math.cos(C.az)*d);
+      g.look.set(ep.x, eH*C.lookF, ep.z);
+      g.cut=true; break; }
+    case 'blitz':{ // low-angle hero shot, static through the whole combo (its timing targets stay readable)
+      const C={...CAMS.blitz, ...(CAMS.blitz.perFoe[enemyIdx]||{})};
+      g.pos.set(hx+C.dx, C.dy, hz+C.dz);
+      g.look.set(lerp(hx,ep.x,C.lookMix)+C.lookDx, C.lookH+eH*C.lookHe, lerp(hz,ep.z,C.lookMix*1.4));
+      g.fov=C.fov; g.cut=true; break; }
+    case 'victory':{ // EXEMPT: the titan is gone — a close heroic angle on the Sword_Shout
+      const C=CAMS.victory;
+      g.pos.set(hx+C.dx, C.dy, hz+C.dz); g.look.set(hx+C.lookDx, C.lookY, hz);
+      g.fov=C.fov; g.cut=true; break; }
+    case 'crash': case 'cashout':{ // EXEMPT: level pull-away (crash) / crane up-and-back (cashout)
+      const C=CAMS[id], q=smooth(clamp(t/C.dur,0,1));
+      g.pos.set(CAM.pos.x, CAM.pos.y+C.rise*q, CAM.pos.z+C.back*q);
+      g.look.set(lerp(CAM.look.x,hx,q), lerp(CAM.look.y,C.lookY,q), lerp(CAM.look.z,hz,q));
+      break; }
+    default:{ // HOME + in-combat tighten drifts (telegraph / vuln window / rage / at-risk bank)
+      let tight=0;
+      if(state==='combat'){
+        const dodgeGame=(enemyState==='telegraph'||enemyState==='active'), vulnW=(enemyState==='stagger'||enemyState==='recovery');
+        tight=(dodgeGame?CAMS.tele:0)+(vulnW?CAMS.vuln:0)+CAMS.rage[ragePhase]
+             +CAMS.bankMax*Math.min(1,bankValue()/CAMS.bankRef)
+             +(_camRageCueT>0?CAMS.rageCue*(_camRageCueT/1.4):0);
+        tight=Math.min(tight,CAMS.tightenCap);
+      }
+      if(_camTightForce!=null) tight=_camTightForce;
+      _camV1.copy(CAM.look).sub(CAM.pos);
+      g.pos.copy(CAM.pos).addScaledVector(_camV1,tight);
+      g.pos.y-=tight*2.2;                             // "a touch lower" as the frame closes in
+      g.look.copy(CAM.look);
+      g.rate=CAMS.crawlRate; g.max=CAMS.crawlMax;
+    }
+  }
+}
+function directCamera(rdt){
+  if(!CAMS.on){ // legacy fixed camera + shake (harness framing mode)
+    const sx=(Math.random()-0.5)*shakeAmt*0.5, sy=(Math.random()-0.5)*shakeAmt*0.5;
+    camera.position.set(CAM.pos.x+sx,CAM.pos.y+sy,CAM.pos.z); camera.lookAt(CAM.look.x+sx,CAM.look.y+sy,CAM.look.z);
+    return;
+  }
+  _camRageCueT=Math.max(0,_camRageCueT-rdt);
+  let id='home';
+  if(_camForce) id=_camForce;
+  else if(state==='combat' && introT>0) id='intro';
+  else if(state==='defeated') id='kill';
+  else if(state==='result') id = heroDead?'crash' : (resultTitle==='CASHED OUT'?'cashout':'victory');
+  else if(state==='combat' && off && off.action==='blitz') id='blitz';
+  const prevCut=_cg.cut, changed=(id!==_camShotId);
+  if(changed) _camShotT=0; else if(!paused) _camShotT+=rdt;
+  _camShotId=id;
+  _camShotGoal(_cg, id, _camForceT!=null?_camForceT:_camShotT);
+  if(changed && (_cg.cut||prevCut)){ _camCur.pos.copy(_cg.pos); _camCur.look.copy(_cg.look); }
+  else{
+    const k=1-Math.exp(-rdt*_cg.rate);
+    _camV1.copy(_cg.pos).sub(_camCur.pos); let d=_camV1.length()*k; if(_cg.max)d=Math.min(d,_cg.max*rdt);
+    if(_camV1.lengthSq()>1e-8) _camCur.pos.addScaledVector(_camV1.normalize(),d);
+    _camV1.copy(_cg.look).sub(_camCur.look); d=_camV1.length()*k; if(_cg.max)d=Math.min(d,_cg.max*rdt*0.8);
+    if(_camV1.lengthSq()>1e-8) _camCur.look.addScaledVector(_camV1.normalize(),d);
+  }
+  if(changed) _camCur.fov=_cg.fov;                    // FOV only ever changes on a shot boundary (Law 3)
+  // additive layers: dolly-punch spring, breathing sway (pos only — the fixation point stays put), legacy shake
+  _camPunchV+=(-CAMS.punchK*_camPunch-CAMS.punchC*_camPunchV)*rdt;
+  _camPunch=clamp(_camPunch+_camPunchV*rdt,-CAMS.punchMax,CAMS.punchMax);
+  _camSway+=rdt;
+  const swx=Math.sin(_camSway*(Math.PI*2)/CAMS.swayT)*CAMS.swayAmp,
+        swy=Math.sin(_camSway*(Math.PI*2)/(CAMS.swayT*0.63)+1.7)*CAMS.swayAmp*0.6;
+  const sx=(Math.random()-0.5)*shakeAmt*0.5, sy=(Math.random()-0.5)*shakeAmt*0.5;
+  _camV1.copy(_camCur.look).sub(_camCur.pos).normalize();
+  _camV2.copy(_camCur.pos).addScaledVector(_camV1,_camPunch);
+  camera.position.set(_camV2.x+sx+swx, _camV2.y+sy+swy, _camV2.z);
+  camera.lookAt(_camCur.look.x+sx, _camCur.look.y+sy, _camCur.look.z);
+  if(camera.fov!==_camCur.fov){ camera.fov=_camCur.fov; camera.updateProjectionMatrix(); }
+}
+
 let last=performance.now(), fps=60;
 function frame(nw){
   requestAnimationFrame(frame);
@@ -2355,9 +2473,8 @@ function frame(nw){
   try{ if(playerMesh)animatePlayer(rdt); if(enemyMesh)animateEnemy(rdt); updateHero(rdt); updateBlitzRibbons(rdt); updateEnemySpark(); }catch(err){ console.error('anim',err); }
   if(playerMesh){ heroLight.position.set(playerMesh.position.x,1.7,playerMesh.position.z); heroLight.intensity = heroFlashT>0 ? (heroFlashT/0.5)*14 : 0; }
   if(enemyMesh && ragePhase>0){ enemyMesh.userData.anchors.core.getWorldPosition(enemyRageLight.position); enemyRageLight.intensity=(ragePhase===1?1.4:2.8)*(0.8+0.2*Math.sin(performance.now()/140)); } else enemyRageLight.intensity=0;
-  // camera shake
-  const sx=(Math.random()-0.5)*shakeAmt*0.5, sy=(Math.random()-0.5)*shakeAmt*0.5;
-  camera.position.set(CAM.pos.x+sx,CAM.pos.y+sy,CAM.pos.z); camera.lookAt(CAM.look.x+sx,CAM.look.y+sy,CAM.look.z);
+  // camera director: cinematic base shot + additive layers (punch / sway / shake)
+  try{ directCamera(rdt); }catch(err){ console.error('cam',err); }
   // 3d particles
   syncParticles();
   renderer.render(scene,camera);
@@ -2737,7 +2854,7 @@ function rageCallout(word,color){
 function onRageChange(rp){
   if(rp<=0) return;
   rageCallout(rp===1?'ANGRY!':'ENRAGED!', rp===1?'#ffb14d':'#ff4f6e');
-  shake(rp===1?0.7:0.95, 0.6); sfx('blitz');
+  shake(rp===1?0.7:0.95, 0.6); sfx('blitz'); _camRageCueT=1.4;   // brief extra camera push while the toast flies
   if(enemyMesh) burst(enemyMesh.userData.anchors.core.getWorldPosition(new THREE.Vector3()), rp===1?'#ffb14d':'#ff4f6e', 18);
 }
 // level-up notification: text flyout + golden beams around the hero
@@ -2845,6 +2962,22 @@ window.__game={
   setEnemyZ:(z)=>{ if(enemyMesh)enemyMesh.position.z=z; },
   setEnemyScale:(s)=>{ if(enemyMesh)enemyMesh.scale.setScalar(s); },
   setFov:(f)=>{ camera.fov=f; camera.updateProjectionMatrix(); },
+  camOn:(v=true)=>{ CAMS.on=!!v; },
+  camShot:(name=null,t=null)=>{ _camForce=name; _camForceT=t; return _camForce||'(auto)'; },   // force a shot (+optional shot-time) for posing; camShot() releases
+  camTight:(v=null)=>{ _camTightForce=v; return v; },                                          // force the HOME tighten for Law-1 validation
+  camDbg:()=>({ shot:_camShotId, t:+_camShotT.toFixed(2), fov:_camCur.fov, punch:+_camPunch.toFixed(3),
+    pos:_camCur.pos.toArray().map(n=>+n.toFixed(2)), look:_camCur.look.toArray().map(n=>+n.toFixed(2)) }),
+  camCheck:(m=0.04)=>{ if(!playerMesh||!enemyMesh) return '(need a run)';   // Law 1 vs the LIVE camera: both real bounding boxes inside an m-margin frame
+    const box=new THREE.Box3(), c=new THREE.Vector3(), out={ok:true};
+    for(const [nm,mesh] of [['hero',playerMesh],['enemy',enemyMesh]]){
+      mesh.updateWorldMatrix(true,true); box.setFromObject(mesh);
+      let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9,vis=true;
+      for(let i=0;i<8;i++){ c.set(i&1?box.max.x:box.min.x, i&2?box.max.y:box.min.y, i&4?box.max.z:box.min.z);
+        const s=toScreen(c); if(!s.ok)vis=false; x0=Math.min(x0,s.x);x1=Math.max(x1,s.x);y0=Math.min(y0,s.y);y1=Math.max(y1,s.y); }
+      const inF=vis && x0>=cw*m && x1<=cw*(1-m) && y0>=ch*m && y1<=ch*(1-m);
+      out[nm]={x:[Math.round(x0),Math.round(x1)], y:[Math.round(y0),Math.round(y1)], in:inF}; if(!inF)out.ok=false;
+    }
+    out.frame=[cw,ch]; return out; },
   _dbg:()=>({ pPos:playerMesh?playerMesh.position.toArray().map(n=>+n.toFixed(2)):null,
     pFeet:playerMesh?(s=>({x:Math.round(s.x),y:Math.round(s.y),ok:s.ok}))(toScreen(playerMesh.position.clone().setY(0.05))):null,
     pHead:playerMesh?(s=>({x:Math.round(s.x),y:Math.round(s.y),ok:s.ok}))(toScreen(playerMesh.position.clone().setY(2.4))):null,
