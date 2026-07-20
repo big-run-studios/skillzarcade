@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.24.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.25.0</div>
   </div>
 </div>
 
@@ -766,10 +766,11 @@ let heroRollT=0, heroRollYawOff=0;   // dodge roll: remaining time + accumulated
 let introT=0;                        // sim-clocked intro gate: battle starts after the hero's full stance
 const heroClips={};
 const HERO_H=2.05, HERO_YAW=1.85+Math.PI/2;   // target height + facing (rotated 90° CCW to face the titan)
-// Andrew's mapping from the Animation Lab (sandbox.html).
-// hit was 'Arise' (starts flat on the ground -> hero collapsed on every hit taken);
-// Male_Head_Down_Charge is a 0.53s standing brace that fits the 0.6s flinch cap exactly.
-const HERO_CLIP={ idle:'Idle_10', strike:'Charged_Axe_Chop', shoot:'mage_soell_cast_7', cast:'mage_soell_cast_6', blitz:'360_Power_Spin_Jump', dodge:'Roll_Dodge_4', dead:'Dead', hit:'Male_Head_Down_Charge', victory:'Sword_Shout', intro:'Axe_Stance' };
+// Andrew's mapping from the Animation Lab (sandbox.html), 2026-07-19 export.
+// hit stays 'Male_Head_Down_Charge' (NOT the lab's 'Arise', which starts flat on the
+// ground -> hero collapsed on every hit taken); it's a 0.53s standing brace that fits
+// the 0.6s flinch cap exactly.
+const HERO_CLIP={ idle:'Idle_10', strike:'Axe_Spin_Attack', shoot:'mage_soell_cast_6', cast:'Charged_Spell_Cast_1', blitz:'360_Power_Spin_Jump', dodge:'Roll_Dodge_4', dead:'Dead', hit:'Male_Head_Down_Charge', victory:'Sword_Shout', intro:'Axe_Stance' };
 const _hHand=new THREE.Vector3();
 new GLTFLoader().load('assets/hero.glb', gltf=>{ heroGLTF=gltf; attachHero(); }, undefined, err=>console.error('hero load',err));
 function attachHero(){
@@ -830,7 +831,7 @@ function triggerHeroOneShot(slot,cap){ const nm=HERO_CLIP[slot]; if(!nm)return; 
 // fraction of the clip (from the clips' motion-energy peaks).
 // Blitz DOES loop: the 360 spin repeats through the whole multi-hit barrage (its one-shot
 // final frame is a low crouch that used to freeze for the rest of the game).
-const HERO_ATK={ strike:{clip:HERO_CLIP.strike, imp:0.40}, shoot:{clip:HERO_CLIP.shoot, imp:0.30}, cast:{clip:HERO_CLIP.cast, imp:0.37} };
+const HERO_ATK={ strike:{clip:HERO_CLIP.strike, imp:0.35}, shoot:{clip:HERO_CLIP.shoot, imp:0.37}, cast:{clip:HERO_CLIP.cast, imp:0.41} };   // imp = per-clip motion-energy peak
 function heroAttackCue(action, lead){
   const spec=HERO_ATK[action]; if(!spec) return;
   const c=heroMixer && heroClips[spec.clip]; if(!c) return;
@@ -936,7 +937,12 @@ function attachSpearBlitz(){
   hold.position.copy(spearModel.position);
   const mats=[];
   hold.traverse(o=>{ if(o.isMesh){ o.castShadow=false; o.frustumCulled=false; o.renderOrder=10;   // no double shadow; draw after the base skin
-    const m=o.material; if(m){ m.transparent=true; m.opacity=0; m.depthWrite=false; if(!mats.includes(m)) mats.push(m); } } });
+    const m=o.material; if(m){ m.transparent=true; m.opacity=0; m.depthWrite=false;
+      // Meshy exports metallicFactor 1.0 — with no scene envMap a full metal has ~no diffuse,
+      // so the gold charged texture rendered near-BLACK (looked identical to the base lance).
+      // De-metal it so the albedo reads, and let its authored emissive glow scale with charge.
+      m.metalness=0.35; m.roughness=0.55; m.emissiveIntensity=0;
+      if(!mats.includes(m)) mats.push(m); } } });
   u.spearBlitzMats=mats;
   hold.visible=false;
   pike.add(hold); spearBlitzModel=hold; u.spearBlitzModel=hold;
@@ -1603,9 +1609,8 @@ function setPikeForm(kind,action){
   else if(action==='cast'||casty) col=0xc07bff;
   else if(action==='blitz') col=0xffd23a;
   u.tipLight.color.setHex(col);
-  // shoot = flip the weapon end-over-end (grip is the pivot) so the bazooka butt aims up
-  // at the titan; the tip light rides whichever end is live
-  u.pikeFlip=(action==='shoot')?Math.PI:0;
+  // shoot = the weapon swings around (grip is the pivot) so the bazooka butt aims at the
+  // titan's midsection (aim itself lives in animatePlayer); the tip light rides the live end
   u.tipLight.position.y=(action==='shoot')?u.muzY:u.tipY;
   u.rune.visible=(action==='cast'); if(u.rune.visible)u.rune.material.color.setHex(col);
 }
@@ -1692,7 +1697,7 @@ function endOffense(){
   }
   if(off) use[off.action]+=0.0;
   off=null; playerPose='idle'; poseT=0;
-  const u=playerMesh.userData; if(u){ u.rune.visible=false; u.tipLight.color.setHex(0xffd23a); u.pikeFlip=0; u.tipLight.position.y=u.tipY; }
+  const u=playerMesh.userData; if(u){ u.rune.visible=false; u.tipLight.color.setHex(0xffd23a); u.tipLight.position.y=u.tipY; }
 }
 function interruptOffense(){
   if(!off)return;
@@ -2042,6 +2047,8 @@ function offAnchor(tg){
   return base;
 }
 
+const _pikeQT=new THREE.Quaternion(), _pikeAim=new THREE.Vector3(), _pikeDir=new THREE.Vector3(),
+      _pikeDown=new THREE.Vector3(0,-1,0), _pikeSideE=new THREE.Euler(-Math.PI/2,0,0);
 function animatePlayer(rdt){
   const u=playerMesh.userData; if(!u.body) return;
   const t=performance.now()/1000;
@@ -2064,8 +2071,20 @@ function animatePlayer(rdt){
   u.armL.rotation.x=lerp(u.armL.rotation.x,playerPose==='cast'?-1.6:(playerPose==='shoot'?-1.4:-0.3),0.3);
   u.cloak.rotation.x=Math.sin(t*3)*0.05+bodyLean*0.3;
 
-  // ---- shoot form: fast end-over-end flip (grip = pivot) so the bazooka butt points up at the titan ----
-  u.pike.rotation.x += ((u.pikeFlip||0)-u.pike.rotation.x)*Math.min(1,rdt*14);
+  // ---- weapon orientation (slerped, grip = pivot):
+  //      intro  -> held SIDEWAYS (blade level, toward the titan) so the long staff never
+  //                stabs through the ground during the low Axe_Stance crouch
+  //      shoot  -> bazooka butt (local -Y) aimed at the titan's midsection
+  //      else   -> upright
+  if(introT>0) _pikeQT.setFromEuler(_pikeSideE);
+  else if(playerPose==='shoot' && enemyMesh && enemyMesh.userData.anchors){
+    enemyMesh.userData.anchors.core.getWorldPosition(_pikeAim);
+    playerMesh.worldToLocal(_pikeAim);
+    _pikeDir.copy(_pikeAim).sub(u.pike.position).normalize();
+    _pikeQT.setFromUnitVectors(_pikeDown, _pikeDir);
+  }
+  else _pikeQT.identity();
+  u.pike.quaternion.slerp(_pikeQT, Math.min(1,rdt*12));
   // ---- bazooka muzzle flash: pop big at the bell mouth, then fade ----
   let mf=0;
   if((u.muzzleFlashT||0)>0){
@@ -2081,8 +2100,8 @@ function animatePlayer(rdt){
   const bf=clamp(blitz/CFG.blitzMax,0,1);
   if(u.spearBlitzMats){
     u.spearBlitzModel.visible = bf>0.01;
-    const pe = bf>=1 ? 0.22+0.14*Math.sin(t*11) : 0;    // full charge: gentle emissive pulse on the charged skin
-    for(const m of u.spearBlitzMats){ m.opacity=bf; if(m.emissive)m.emissive.setRGB(pe,pe*0.8,pe*0.35); }
+    const ei = bf*0.55 + (bf>=1 ? 0.3+0.2*Math.sin(t*11) : 0);   // authored emissive map glows with charge; pulses at full
+    for(const m of u.spearBlitzMats){ m.opacity=bf; m.emissiveIntensity=ei; }
   }
   else if(u.pikeMats){ const ge=bf*0.85; for(const m of u.pikeMats){ if(m.emissive) m.emissive.setRGB(ge,ge*0.72,ge*0.12); } }
   u.tipLight.intensity = Math.max(tipInt.intensity, bf*1.6 + (bf>=1?0.8+Math.sin(t*11)*0.5:0), mf*6);
@@ -2597,6 +2616,16 @@ setInterval(()=>{ if(el('dbg').classList.contains('on')){ el('dbgLog').textConte
    HARNESS
    ========================================================================= */
 window.__game={
+  spearDbg:()=>{ const u=playerMesh&&playerMesh.userData; if(!u) return '(no player)';
+    const info=m=>{ if(!m) return null; const b=new THREE.Box3().setFromObject(m);
+      return {vis:m.visible, scl:+m.scale.x.toFixed(4), pos:m.position.toArray().map(v=>+v.toFixed(2)), bb:[b.min.y,b.max.y].map(v=>+v.toFixed(2))}; };
+    return { base:info(spearModel), blitz:info(spearBlitzModel),
+      blitzMats:u.spearBlitzMats?u.spearBlitzMats.map(m=>({op:+m.opacity.toFixed(2),tr:m.transparent,dw:m.depthWrite,map:!!(m.map&&m.map.image),ro:null})):null,
+      pikeMats:u.pikeMats?u.pikeMats.length:0, bf:+clamp(blitz/CFG.blitzMax,0,1).toFixed(2),
+      pose:playerPose, introT:+introT.toFixed(2), pikeQ:u.pike.quaternion.toArray().map(v=>+v.toFixed(3)) }; },
+  spearSet:(p)=>{ const u=playerMesh&&playerMesh.userData; if(!u||!u.spearBlitzMats) return '(none)';
+    for(const m of u.spearBlitzMats){ Object.assign(m,p); m.needsUpdate=true; } return 'ok'; },
+  spearBaseVis:(v)=>{ if(spearModel) spearModel.visible=!!v; return spearModel?spearModel.visible:'(none)'; },
   get s(){ return {state, seed, T:+T.toFixed(2), enemyIdx, enemy:enemy?enemy.name:null,
     enemyHP:enemy?Math.round(enemy.hp):0, enemyMax:enemy?enemy.maxHp:0, hp:Math.round(hp), score:Math.round(score),
     mult, multMeter:+multMeter.toFixed(2), blitz:Math.round(blitz), blitzReady:blitz>=CFG.blitzMax, xp:Math.round(xp), levelUps, lv:{...lv}, use:{strike:+use.strike.toFixed(0),shoot:+use.shoot.toFixed(0),cast:+use.cast.toFixed(0),blitz:+use.blitz.toFixed(0)},
