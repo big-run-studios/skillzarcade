@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.43.1</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.43.2</div>
   </div>
 </div>
 
@@ -2646,8 +2646,8 @@ function frame(nw){
     const k=(0.45+ragePhase*0.35)*(0.85+0.15*Math.sin(performance.now()/140));
     for(const e of u2.eyeGlows){
       e.material.opacity=Math.min(1, k+fl*(1.15-k));                    // blaze through the tap window…
-      e.material.color.setRGB(1, 0.14+fl*0.5, 0.09+fl*0.25);            // …tinting toward hot orange-white
-      const s0=e.userData.s0||11; e.scale.setScalar(s0*(1+fl*0.9));     // …and swelling to ~2x
+      e.material.color.setRGB(1, 0.10+fl*0.10, 0.06+fl*0.06);           // …staying DEEP RED (the orange ramp read yellow)
+      const s0=e.userData.s0||11; e.scale.setScalar(s0*(1+fl*2.8));     // …and swelling to ~4x (2x the old flash)
     } }
   // camera director: cinematic base shot + additive layers (punch / sway / shake)
   try{ directCamera(rdt); }catch(err){ console.error('cam',err); }
