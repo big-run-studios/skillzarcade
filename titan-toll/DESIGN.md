@@ -84,33 +84,34 @@ then dodge cleanly on theirs.
 
 ---
 
-## 3. Player action system
+## 3. Player action system (v0.46: cooldown weave — no action bar)
 
-| Action | When | Commit time | Timing feel | Damage | Niche |
+| Action | When | Cooldown | Commit time | Damage | Niche |
 |---|---|---|---|---|---|
-| **Strike** | Action Bar full | short (~0.5–2.0s) | easiest | consistent, lower ceiling | short openings; safe mult building |
-| **Shoot** | Action Bar full | medium (~0.6–2.5s) | precise reticles | high crit | mobile/airborne weak points; **Gale Reaper** vuln |
-| **Cast** | Action Bar full | long (~0.8–3.3s) | ordered glyphs | highest normal ceiling | long recoveries; **Cliffhorn** (armour) vuln |
-| **Blitz** | Blitz Bar full only | longest (~2.5–4.5s) | 5–9 inputs, hard finisher | biggest | staggers a *starting* attack; burst window |
+| **Shoot** | own cooldown up | **4 s** | shortest | weakest (base 62) | the filler — always coming back |
+| **Cast** | own cooldown up | **8 s** | medium | middle (base 112) | the mid hit; **Cliffhorn** vuln |
+| **Strike** | own cooldown up | **13 s** | long | the payoff (base 200) | the big beat; ground ring shows it charging |
+| **Blitz** | Blitz Bar full only | none (meter) | longest | **tops every chart** (base 160 ×1.35) | earned by dodging; staggers a *starting* attack |
 
-**Action Bar** fills in **2.7 s**, stays full until you choose. **Unified tap** (unambiguous
-because only one timing game is live): while attacking, any tap = the current attack input;
-while the enemy attacks, any tap = dodge; otherwise taps do nothing (dodge only activates when
-there's an incoming attack, so you're never "accidentally dodging" while trying to time a hit).
+**No action bar.** Every attack runs its own **flat cooldown** that starts when it fires and
+**ticks at all times** — through your other attacks and through the enemy's turns — so skilled play
+is a weave: strike on its beat, casts and shots stitched between. The enemy's turn clock also runs
+through your offense (its attack still never *starts* mid-offense), so hyper-aggression can't
+starve the dodge game. **Unified tap** unchanged: one timing game live at a time.
 
-**Mobile HUD (diegetic-first).** The action bar is a **ground ring around the hero's feet** that
-fills centre-out (green + pulsing when ready); action selection is a **radial wheel of circle
-buttons** in the lower-right that only appears when a choice is available, each button carrying its
-level and an escalating ring at the 3/6/9 milestones. **Blitz has no bar** — it's shown on the pike
-itself: the weapon tints to glowing gold and rune ribbons swirl at the tip as it charges, full when
-ready. Multiplier + score + the **Cash Out** button sit in one container top-left; **HP** is a bar
-across the bottom; the **XP bar is hidden** — a level-up instead fires a text flyout + a ring of
-golden beams up around the hero. This keeps the battlefield clear.
+**Mobile HUD (diegetic-first).** The **ground ring** around the hero's feet now charges with
+**Strike** (blue filling → strike-red pulse when the payoff hit is ready). Action selection is the
+lower-right **radial wheel** — each button is a piece of **per-level icon art (L1–L9)**, so every
+level-up visibly upgrades all three buttons at once (that art escalation IS the level indicator);
+cooling buttons grey under a conic sweep + seconds countdown. **Blitz still has no bar** — the pike
+tints gold as it charges. Bottom-left is the **hero plate** (`assets/hero-plate.webp`): portrait +
+**Lv.** + the **HP bar** (with a delayed amber damage chip), replacing the old full-width bottom
+bar; **Cash Out** sits just above it. Multiplier + score stay top-left; XP stays hidden.
 
-### Ability levels & 3/6/9 evolutions
-Each action has a level 1–9. Milestones at **3 / 6 / 9** swap in a **new, longer timing
-sequence** (see `SEQ` in code); levels between milestones give numeric buffs (more base
-damage `lvDmg`, wider Good window `lvGood`, higher crit `lvCrit`).
+### One global level & 3/6/9 evolutions
+The player has **one level, 1–9** — every attack ramps together (+20% damage per level via
+`lvDmg`, wider Good window `lvGood`, higher crit `lvCrit`). Milestones at **3 / 6 / 9** swap in
+**new, longer timing sequences for all attacks at once** (see `SEQ`).
 
 | Level | Strike | Shoot | Cast | Blitz |
 |---|---|---|---|---|
@@ -119,12 +120,13 @@ damage `lvDmg`, wider Good window `lvGood`, higher crit `lvCrit`).
 | **6** | launcher + aerial finisher | barrage + charged shot | charge + detonation | 8-input, branching weak-points + launcher |
 | **9** | extended combo + delayed heavy | multi-target + explosive weak-point | full 5-glyph + big detonation | ultimate 9-input, hard final window |
 
-### XP / mastery
-Dealing damage grants mastery XP to the used action *and* the global XP meter
-(`xpPerDmg 0.55`, `+xpAction`, Blitz `+xpBlitz`). When the meter fills, the **seed** picks
-which ability levels up, **weighted by how much you've used each** (`usageBase 0.55 +
-usageWeight 3.2 × share`), abilities at L9 excluded. **Max 8 level-ups per run**
-(`xpThresh` = `[210,290,380,480,590,710,850,1000]`). Verified: a perfect full-clear rolls ~6.
+### XP (v0.46: skill events, not damage)
+XP is granted **per graded event**: Perfect tap **+12**, Good tap **+4**, Perfect dodge **+20**,
+Good dodge **+8**; misses and taken hits give **0**. Level-ups are fully deterministic (no seed
+pick — the one global level just increments). **Max 8 level-ups** (`xpThresh` =
+`[35,40,45,50,54,58,62,66]`), fitted to the perfect-run event budget so clean play reaches **L9
+for the Sky Titan finale**. Bot-verified: perfect clear 51 s reaching L9 at ~80%; careful-but-
+imprecise (±200 ms) clears ~103 s at L9; sloppy dodge discipline dies at the boss-3 wall.
 
 ---
 
@@ -136,9 +138,9 @@ usageWeight 3.2 × share`), abilities at L9 excluded. **Max 8 level-ups per run*
   (+0.15) / Perfect (+0.32) dodges, and a clean-sequence bonus (+0.28). Each full meter = +1×.
   **Getting hit drops one full level and clears the meter.** Only affects future scoring —
   never the score already banked.
-- **Blitz Bar (0–100):** mostly from damage dealt (`0.052/dmg`, +3 on crit), moderate from
-  dodges (+4.5 / +8 perfect), and a **small** comeback from damage taken (`0.06 × hit`) —
-  tuned so being hit is never net-positive.
+- **Blitz Bar (0–100), v0.46 — dodge-earned:** Good dodge **+8**, Perfect dodge **+15**; damage
+  dealt only trickles it (`0.0015/dmg`, +2 on crit); **no charge from taking hits**. Blitz is the
+  star move and you work for it: roughly one per boss for a clean dodger.
 - **Cashout:** persistent button showing live score; ends the run immediately and banks the
   score. **Locked ~0.30 s (`resolveLockT`) whenever damage is resolving**, so you can't get a
   contradictory "cashed out AND died in the same frame" outcome.
@@ -226,28 +228,28 @@ enemy's remaining-HP fraction; low-HP enrage sets gated by `maxHpFrac`. With the
 
 | Group | Value | Setting |
 |---|---|---|
-| **Player** | HP | 120 |
-| **Enemy HP** | E1 / E2 / E3 | 850 / 1500 / 2800 |
-| **Enemy dmg scale** | E1 / E2 / E3 | 0.55 / 0.68 / 0.96 |
-| **Enemy breather** | E1 / E2 / E3 (s) | 1.45 / 1.05 / 0.62 |
-| **Action Bar** | fill time | 2.7 s |
-| **Dodge** | window / perfect | ±0.20 / ±0.09 s |
+| **Player** | HP | 1000 |
+| **Enemy HP** | E1 / E2 / E3 | 4250 / 7500 / 14000 |
+| **Enemy dmg scale** | E1 / E2 / E3 | 5.5 / 6.8 / 9.6 |
+| **Enemy breather** | E1 / E2 / E3 (s) | 3.4 / 2.6 / 2.0 (turn clock runs through player offense) |
+| **Cooldowns** | shoot / cast / strike | 4 / 8 / 13 s (flat, always ticking; blitz = meter) |
+| **Dodge** | early / late / perfect | −0.32 / +0.20 / ±0.09 s (× speed scale) |
 | **Offense** | good / perfect / center | ±0.115 (+0.004/lv) / ±0.05 / ±0.022 s |
 | **Grade dmg** | miss / good / perfect | ×0.18 / ×1.0 / ×1.55 |
 | **Crit** | mult / good% / perfect% / per-lv | ×1.9 / 0.08 / 0.24 / +0.012 |
 | **Vulnerability** | dmg / mult bonus | ×1.6 / +0.14 meter |
 | **Multiplier** | max / good / perfect | 5 / +0.10 / +0.20 |
 | | dodge / perfect-dodge / clean | +0.15 / +0.32 / +0.28 |
-| **Blitz** | max / per-dmg / crit | 100 / 0.052 / +3 |
-| | dodge / perfect / on-hit (comeback) | +4.5 / +8 / +0.06×hit |
-| **Action base dmg** | strike/shoot/cast/blitz | 15 / 17 / 22 / 20 (× weights × lv × grade × crit) |
-| **XP** | per-dmg / action / blitz | 0.55 / 6 / 48 |
-| | thresholds (8) | 210,290,380,480,590,710,850,1000 |
-| | max level-ups / ability cap | 8 / L9 |
-| | usage weighting | base 0.55 + 3.2×share |
+| **Blitz** | max / per-dmg / crit | 100 / 0.0015 / +2 |
+| | dodge / perfect dodge / on-hit | +8 / +15 / 0 (dodge-earned) |
+| **Action base dmg** | shoot/cast/strike/blitz | 62 / 112 / 200 / 160×1.35 (× weights × lvDmg × grade × crit) |
+| **Level ramp** | lvDmg | +20%/level (×2.6 at L9), one global level |
+| **XP** | perfect tap / good tap | +12 / +4 |
+| | perfect dodge / good dodge | +20 / +8 |
+| | thresholds (8) / cap | 35,40,45,50,54,58,62,66 / L9 |
 | **Cashout** | resolve lock / full-clear bonus | 0.30 s / +30% |
 | **Feel** | hit-pause / seq tail / blitz stagger | 0.07 / 0.35 / 1.4 s |
-| **Camera** | FOV / enemy scale | 60 / [1.15,1.22,0.96] |
+| **Target curve** | perfect / careful / sloppy | ~51 s clear · ~103 s clear · dies at boss 3 (bot-verified) |
 
 ---
 

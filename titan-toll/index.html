@@ -51,8 +51,8 @@
   #multBar{position:relative;flex:1;height:9px;border-radius:6px;background:rgba(6,10,26,.55);border:1.5px solid rgba(255,255,255,.16);overflow:hidden;}
   #multFill{position:absolute;inset:0;width:100%;transform-origin:left;background:linear-gradient(90deg,#ffc233,#ffe89a);}
 
-  /* ---------- cash out: the standard button (.bigbtn), bottom-left above the HP bar ---------- */
-  #cashBtn{position:absolute;left:16px;bottom:calc(30px + env(safe-area-inset-bottom));z-index:24;
+  /* ---------- cash out: green circle, bottom-left ABOVE the hero plate (v0.46) ---------- */
+  #cashBtn{position:absolute;left:16px;bottom:calc(12px + min(22vw,122px) + env(safe-area-inset-bottom));z-index:24;
     width:78px;height:78px;border-radius:50%;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.02;
     color:#06231a;background:radial-gradient(120% 120% at 50% 26%,#8affc4,#2fd67a 58%,#16ad5e);
     box-shadow:0 4px 16px rgba(0,0,0,.45),0 0 20px rgba(94,255,168,.5),inset 0 0 0 2.5px rgba(255,255,255,.45);
@@ -78,42 +78,44 @@
   #dodgeShield.full .shOutline{stroke:#ffffff;stroke-width:6;}
   #dodgeShield:active{transform:scale(.93);}
 
-  /* ---------- HP at the bottom ---------- */
-  #hpBottom{position:absolute;left:8px;right:8px;bottom:calc(7px + env(safe-area-inset-bottom));height:17px;border-radius:9px;
-    background:rgba(6,10,26,.62);border:1.5px solid rgba(255,255,255,.18);overflow:hidden;}
-  #hpFill{position:absolute;inset:0;width:100%;transform-origin:left;background:linear-gradient(90deg,#ff4d63,#ff8a7a);transition:transform .14s;}
-  #hpLab{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-family:var(--display);font-weight:800;font-size:10px;letter-spacing:2px;color:#fff;text-shadow:0 1px 2px #000;z-index:2;}
-  #hpVal{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-family:var(--display);font-weight:800;font-size:12px;color:#fff;text-shadow:0 1px 2px #000;z-index:2;}
+  /* ---------- hero plate: bottom-left portrait + Lv + HP (v0.46) ---------- */
+  #heroPlate{position:absolute;left:4px;bottom:calc(2px + env(safe-area-inset-bottom));width:min(58vw,320px);aspect-ratio:1695/643;
+    pointer-events:none;z-index:22;container-type:inline-size;}
+  #plateImg{position:absolute;inset:0;width:100%;height:100%;user-select:none;-webkit-user-select:none;}
+  /* live regions mapped as % of the plate art (Lv strip x34-87 y20-42, HP recess x46.5-87.5 y46-63) */
+  #lvVal{position:absolute;left:46%;top:20%;height:22%;display:flex;align-items:center;
+    font-family:var(--display);font-weight:900;font-size:6.4cqw;color:#4a3413;letter-spacing:.5px;
+    text-shadow:0 1px 0 rgba(255,244,214,.55);}
+  #hpPlateWrap{position:absolute;left:47.2%;top:47.6%;width:39.4%;height:14.2%;border-radius:999px;overflow:hidden;}
+  #hpPlateChip{position:absolute;inset:0;width:100%;transform-origin:left;background:linear-gradient(90deg,#ffd9a0,#ffb14d);transition:transform .5s ease .12s;}
+  #hpPlateFill{position:absolute;inset:0;width:100%;transform-origin:left;background:linear-gradient(90deg,#ff4d63,#ff8a7a);transition:transform .14s;}
+  #hpNumVal{position:absolute;right:6%;top:50%;transform:translateY(-50%);font-family:var(--display);font-weight:800;font-size:4cqw;
+    color:#fff;text-shadow:0 1px 2px #000;}
+  #heroPlate.flare #plateImg{animation:plateFlare 1.1s ease-out;}
+  @keyframes plateFlare{0%{filter:brightness(1);}18%{filter:brightness(1.9) drop-shadow(0 0 18px rgba(255,210,58,.95));}100%{filter:brightness(1);}}
 
   /* ---------- radial action menu (lower-right, shown only when selectable) ---------- */
   #radial{position:absolute;right:0;bottom:0;width:320px;height:360px;pointer-events:none;opacity:0;visibility:hidden;transform:scale(.85);transition:opacity .16s,transform .16s;}
   #radial.show{opacity:1;visibility:visible;transform:scale(1);}   /* hidden radial is fully non-interactive (no descendant eats taps) */
   .rbtn{position:absolute;width:86px;height:86px;border-radius:50%;border:none;cursor:pointer;pointer-events:auto;color:#fff;
-    display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(120% 120% at 50% 28%,rgba(30,40,74,.96),rgba(9,14,32,.97));
-    box-shadow:0 3px 12px rgba(0,0,0,.5),inset 0 0 0 2px rgba(255,255,255,.12);
+    display:flex;align-items:center;justify-content:center;background:none;padding:0;
     opacity:.38;filter:grayscale(.6);transition:transform .08s,opacity .12s,filter .12s;}
-  .rbtn .ic{font-size:40px;line-height:1;color:currentColor;text-shadow:0 0 8px currentColor;}
-  .rbtn .rlv{position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);white-space:nowrap;padding:3px 10px;border-radius:999px;
-    font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:.5px;color:#0b1226;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.55);}
+  /* per-level icon art fills the button (the icon frame escalates L1->L9 = the level indicator) */
+  .rbtn .icimg{width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-select:none;pointer-events:none;
+    filter:drop-shadow(0 3px 8px rgba(0,0,0,.55));}
   #radial:not(.show) .rbtn{pointer-events:none;}   /* a hidden radial must never eat taps -> tap-anywhere keeps working */
+  /* action color coding lives in the READY glow behind the art (icons themselves stay untinted) */
   .rbtn.strike{color:var(--strike);} .rbtn.shoot{color:var(--shoot);} .rbtn.cast{color:var(--cast);} .rbtn.blitz{color:var(--blitz);}
   .rbtn.on{opacity:1;filter:none;} .rbtn.on:active{transform:scale(.9);}
+  .rbtn.on .icimg{filter:drop-shadow(0 3px 8px rgba(0,0,0,.55)) drop-shadow(0 0 9px currentColor);}
+  .rbtn.lvpop .icimg{animation:lvpop .55s cubic-bezier(.2,1.6,.4,1);}
+  @keyframes lvpop{0%{transform:scale(1);}35%{transform:scale(1.28);}100%{transform:scale(1);}}
   /* cooldown: dark conic sweep + remaining-seconds countdown (level 2+) */
   .rbtn .rcd{position:absolute;inset:0;border-radius:50%;display:none;align-items:center;justify-content:center;
     font-family:var(--display);font-weight:900;font-size:19px;color:#fff;text-shadow:0 1px 3px #000;pointer-events:none;
     background:conic-gradient(from -90deg, rgba(4,8,20,.78) calc(var(--cd,0)*360deg), rgba(4,8,20,.14) 0);}
   .rbtn.cooling{opacity:.8;filter:grayscale(.3);}
-  .rbtn.cooling .ic{opacity:.2;} .rbtn.cooling .rcd{display:flex;}
-  /* per-level milestone states (Lv3 / Lv6 / Lv9) — escalating ring + glow */
-  .rbtn.on.t1{box-shadow:0 3px 12px rgba(0,0,0,.5),inset 0 0 0 2.5px currentColor;}
-  .rbtn.on.t2{box-shadow:0 3px 14px rgba(0,0,0,.5),inset 0 0 0 3px currentColor,0 0 12px -3px currentColor;}
-  .rbtn.on.t3{box-shadow:0 3px 16px rgba(0,0,0,.5),inset 0 0 0 3.5px currentColor,0 0 20px -2px currentColor;animation:t3pulse 1.2s infinite;}
-  .rbtn.on.t0{box-shadow:0 3px 12px rgba(0,0,0,.5),inset 0 0 0 2px currentColor;}
-  @keyframes t3pulse{0%,100%{filter:brightness(1);}50%{filter:brightness(1.32);}}
-  .rbtn.t3 .rlv{background:var(--blitz);color:#3a2600;}
-  .rbtn.blitz.on{animation:blitzBtn .9s infinite;}
-  @keyframes blitzBtn{0%,100%{box-shadow:0 3px 12px rgba(0,0,0,.5),inset 0 0 0 2.5px var(--blitz);}50%{box-shadow:0 3px 24px rgba(255,210,58,.75),inset 0 0 0 3.5px #fff2b0;}}
+  .rbtn.cooling .icimg{opacity:.3;} .rbtn.cooling .rcd{display:flex;}
   .rbtn.queued{opacity:1;filter:none;animation:queuedPulse .7s infinite;}
   .rbtn.queued::after{content:'▶ QUEUED';position:absolute;top:-16px;left:50%;transform:translateX(-50%);white-space:nowrap;
     font-family:var(--display);font-weight:800;font-size:8px;letter-spacing:1px;color:#0b1226;background:#fff;padding:2px 6px;border-radius:6px;}
@@ -129,8 +131,6 @@
   #blitzBtn .bic{font-size:42px;line-height:1;color:#5a3a00;text-shadow:0 0 10px rgba(255,245,200,.9);}
   #blitzBtn .blab{font-family:var(--display);font-weight:900;font-size:12px;letter-spacing:2px;color:#4a2f00;margin-top:-2px;}
   #blitzBtn .bring{position:absolute;inset:-7px;border-radius:50%;border:2px dashed rgba(255,244,190,.75);animation:blitzRing 3.4s linear infinite;}
-  #blitzBtn .rlv{position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);white-space:nowrap;padding:3px 10px;border-radius:999px;
-    font-family:var(--display);font-weight:800;font-size:12px;color:#3a2600;background:#fff2b0;box-shadow:0 1px 5px rgba(0,0,0,.55);}
   #blitzBtn.queued{animation:none;filter:brightness(1.12);}
   @keyframes blitzGlow{0%,100%{box-shadow:0 4px 18px rgba(0,0,0,.55),0 0 20px rgba(255,206,51,.5),inset 0 0 0 3px rgba(255,255,255,.5);}
     50%{box-shadow:0 4px 18px rgba(0,0,0,.55),0 0 36px rgba(255,224,120,.95),inset 0 0 0 4px #fff6d0;}}
@@ -165,7 +165,7 @@
   #muteBtn{left:56px;top:max(12px,env(safe-area-inset-top));font-size:15px;}
   #dbgBtn{left:100px;top:max(12px,env(safe-area-inset-top));font-size:15px;border-color:rgba(255,255,255,.25);opacity:.7;}
   /* hide the combat HUD on the menu so it doesn't bleed behind the overlay */
-  .ui.menumode #topbar,.ui.menumode #hudLeft,.ui.menumode #hpBottom,.ui.menumode #cashBtn,.ui.menumode #radial,.ui.menumode #dodgeShield,.ui.menumode #muteBtn{display:none;}
+  .ui.menumode #topbar,.ui.menumode #hudLeft,.ui.menumode #heroPlate,.ui.menumode #cashBtn,.ui.menumode #radial,.ui.menumode #dodgeShield,.ui.menumode #muteBtn{display:none;}
 
   /* ---------- overlays ---------- */
   .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;
@@ -231,18 +231,22 @@
     <!-- bottom-left: cash out (circle button), above the HP bar -->
     <button id="cashBtn"><span class="ct">CASH</span><span class="cb">OUT</span></button>
 
-    <!-- bottom: HP -->
-    <div id="hpBottom"><div id="hpFill"></div><span id="hpLab">HP</span><span id="hpVal">100</span></div>
+    <!-- bottom-left: hero plate — portrait + Lv + HP (v0.46, replaces the bottom HP bar) -->
+    <div id="heroPlate">
+      <img id="plateImg" src="assets/hero-plate.webp" alt="" draggable="false">
+      <span id="lvVal">1</span>
+      <div id="hpPlateWrap"><div id="hpPlateChip"></div><div id="hpPlateFill"></div><span id="hpNumVal">1000</span></div>
+    </div>
 
     <!-- lower-right radial: the 3 core actions, appears only when a selection is available -->
     <div id="radial">
-      <button class="rbtn strike" id="btnStrike"><span class="ic">⚔</span><span class="rlv" id="btnStrikeLv">1</span><span class="rcd" id="btnStrikeCd"></span></button>
-      <button class="rbtn shoot"  id="btnShoot"><span class="ic">◎</span><span class="rlv" id="btnShootLv">1</span><span class="rcd" id="btnShootCd"></span></button>
-      <button class="rbtn cast"   id="btnCast"><span class="ic">✦</span><span class="rlv" id="btnCastLv">1</span><span class="rcd" id="btnCastCd"></span></button>
+      <button class="rbtn strike" id="btnStrike"><img class="icimg" id="btnStrikeIc" src="assets/icons/strike_01.webp" alt="Strike" draggable="false"><span class="rcd" id="btnStrikeCd"></span></button>
+      <button class="rbtn shoot"  id="btnShoot"><img class="icimg" id="btnShootIc" src="assets/icons/shoot_01.webp" alt="Shoot" draggable="false"><span class="rcd" id="btnShootCd"></span></button>
+      <button class="rbtn cast"   id="btnCast"><img class="icimg" id="btnCastIc" src="assets/icons/cast_01.webp" alt="Cast" draggable="false"><span class="rcd" id="btnCastCd"></span></button>
     </div>
 
     <!-- dedicated Blitz button: lower-right corner (interrupts enemy attacks); shows only when charged -->
-    <button id="blitzBtn"><span class="bring"></span><span class="bic">✹</span><span class="blab">BLITZ</span><span class="rlv" id="btnBlitzLv">1</span></button>
+    <button id="blitzBtn"><span class="bring"></span><span class="bic">✹</span><span class="blab">BLITZ</span></button>
 
     <!-- lower-right: dodge shield — a shield fills the shield as the hit nears; tap anywhere to dodge -->
     <button id="dodgeShield" aria-label="Dodge">
@@ -271,10 +275,10 @@
       <h1>TITAN<br><span class="a">GUARD</span></h1>
       <div class="sub">One warrior. One pike, three forms. Three colossal foes. Build your score — then <b style="color:var(--cash)">cash out before you fall</b>.</div>
       <div class="howto">
-        <div><span class="k">CHOOSE</span> When the ring at your feet fills, pick <b style="color:var(--strike)">Strike</b> / <b style="color:var(--shoot)">Shoot</b> / <b style="color:var(--cast)">Cast</b> from the wheel.</div>
+        <div><span class="k">CHOOSE</span> Attacks recharge on their own — <b style="color:var(--shoot)">Shoot</b> fast &amp; light, <b style="color:var(--cast)">Cast</b> heavier, <b style="color:var(--strike)">Strike</b> slow &amp; devastating.</div>
         <div><span class="k">HIT</span> Line the shrinking ring up with the <b>glowing target</b> on the titan.</div>
         <div><span class="k">DODGE</span> When the titan strikes, <b>tap anywhere</b> the instant it lands.</div>
-        <div><span class="k">BLITZ</span> Charge the gold — your pike blazes — then unleash the ultimate combo.</div>
+        <div><span class="k">BLITZ</span> <b>Dodging charges the gold</b> — when your pike blazes, unleash the ultimate combo.</div>
         <div><span class="k">CASH</span> Bank your score anytime. Fall first and you lose it all.</div>
       </div>
       <button class="bigbtn" id="startBtn">ENTER BATTLE</button>
@@ -299,17 +303,15 @@
       <div class="r">force <select id="dForce" style="width:150px"></select></div>
       <div class="r"><button id="dForceGo">fire attack</button><button id="dEhp">enemy −50%</button></div>
       <h4>Player</h4>
-      <div class="r">STR<input id="dLvS" type="number" min="1" max="9" value="1">SHT<input id="dLvH" type="number" min="1" max="9" value="1"></div>
-      <div class="r">CST<input id="dLvC" type="number" min="1" max="9" value="1">BLZ<input id="dLvB" type="number" min="1" max="9" value="1"></div>
-      <div class="r"><button id="dLvSet">set levels</button><button id="dLvUp">+1 rnd</button></div>
-      <div class="r"><button id="dFillAct">fill action</button><button id="dFillBlz">fill blitz</button></div>
+      <div class="r">LV<input id="dLv" type="number" min="1" max="9" value="1"><button id="dLvSet">set</button><button id="dLvUp">+1</button></div>
+      <div class="r"><button id="dFillAct">clear cds</button><button id="dFillBlz">fill blitz</button></div>
       <div class="r">mult<input id="dMult" type="range" min="1" max="5" value="1" style="width:80px"><span id="dMultV">1</span></div>
       <div class="r"><button id="dHeal">heal</button><button id="dGod">god: off</button></div>
       <h4>Timing log <button id="dClearLog" style="float:right">clear</button></h4>
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.45.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.46.0</div>
   </div>
 </div>
 
@@ -344,7 +346,7 @@ const rf=(a,b)=>a+Math.random()*(b-a);   // cosmetic only (never gameplay)
 const CFG={
   playerHP:1000,          // x10 (v0.37.0, with 10x enemy damage — bigger numbers, same ratio)
   enemyDmgScale:[5.5,6.8,9.6],    // per-enemy incoming-damage multiplier x10 (E1 forgiving -> E3 lethal)
-  actionFill:2.7,          // s to fill the action bar
+  cds:{shoot:4, cast:8, strike:13},  // v0.46: no action bar — each attack on its own flat cooldown (fast/weak -> slow/strong)
   introDur:6.1,            // hero intro stance plays FULLY before battle starts (Axe_Stance clip length)
   // dodge — asymmetric: anticipatory dodging (before the hit) is natural, so the early side is wider
   dodgeWinEarly:0.32,      // s BEFORE impact that still saves (anticipatory)
@@ -355,7 +357,6 @@ const CFG={
   winPerLv:0.004,          // +good window per ability level
   closureBase:1.25,        // flat ring-closure speed: +25% over the old L1 at EVERY level (v0.45: level-ups grant damage/windows, not speed — predictable leads for the camera)
   minSeqGap:0.22,          // floor on the gap between attack targets so high levels stay tappable
-  cdPerLevel:3,            // ability cooldown grows 3s/level beyond the action bar; starts at level 2
   // grade -> damage
   dmgMiss:0.18, dmgGood:1.0, dmgPerfect:1.55,
   critMult:1.9,
@@ -365,20 +366,19 @@ const CFG={
   // multiplier
   multMax:5,
   mGood:0.10, mPerfect:0.20, mDodge:0.15, mPerfDodge:0.32, mClean:0.28,
-  // blitz (0..100)
-  blitzMax:100, blitzPerDmg:0.0052, blitzCrit:3, blitzDodge:4.5, blitzPerfDodge:8, blitzOnHit:0.06,
-  // xp
-  xpPerDmg:0.055, xpAction:6, xpBlitz:48,
-  xpThresh:[95,130,175,225,285,350,420,500,590,690,800,920],  // easier + faster level-ups (12 entries)
-  maxLevelUps:12,          // more upgrades per run so milestones/cooldowns/closure come to life
-  usageBase:0.55, usageWeight:3.2,       // level-up ability weighting
+  // blitz (0..100) — v0.46: charge is DODGE-driven; damage only trickles it. You earn the star move.
+  blitzMax:100, blitzPerDmg:0.0015, blitzCrit:2, blitzDodge:8, blitzPerfDodge:15,
+  // xp — v0.46: per graded EVENT (clean taps + dodges), not damage; dodging is the leveling engine too
+  xpTap:{perfect:12, good:4}, xpDodge:{perfect:20, good:8},
+  xpThresh:[35,40,45,50,54,58,62,66],  // 8 level-ups (L1->L9), fitted to the perfect-run event budget (~450 XP) so clean play reaches L9 for the finale
+  maxLevelUps:8,
   // scoring
   clearBonus:0.30,
   // feel
   resolveLock:0.30,        // cashout locked while damage resolves
   hitPause:0.07,
   seqTail:0.35,            // pause after last offensive target before bar frees
-  breather:[1.45,1.05,0.62],// idle gap before next enemy telegraph, per enemy
+  breather:[3.4,2.6,2.0],  // idle gap before the next enemy telegraph, per enemy (v0.46: ticks THROUGH player offense — sets the enemy's turn cadence, so it's wall-clock now)
   staggerTime:1.4,         // blitz stagger: enemy can't start a set for this long
   timeScale:2,             // global slowdown for telegraphs + attack/sequence pacing (higher = easier to read)
   timeBonusPerSec:10,      // +10 score for every second survived (at risk until cashout)
@@ -393,15 +393,15 @@ const CFG={
   offLeadIn:0.75,          // get-ready beat: the timing UI animates in for this long before target 1 goes live
 };
 
-/* action base damage units + per-action character */
-const ABASE={strike:150, shoot:170, cast:220, blitz:200};   // x10 (v0.35.0) — big numbers; enemy HP x5 => hits strip 2x the bar
+/* action base damage units + per-action character (v0.46): damage tracks cooldown —
+   shoot = fast filler, cast = mid, strike = slow payoff; blitz (meter) tops every chart */
+const ABASE={strike:200, shoot:62, cast:112, blitz:160};
 // commitment = sum of target gaps; longer for cast (more exposure)
 
-/* per-level numeric scaling */
-function lvDmg(lv){return 1+0.13*(lv-1);}            // base damage grows with level
+/* per-level numeric scaling (v0.46: ONE global player level, all attacks ramp together) */
+function lvDmg(lv){return 1+0.20*(lv-1);}            // +20%/level -> x2.6 at L9 (noticeable ramp)
 function lvGood(lv){return CFG.goodWin+CFG.winPerLv*(lv-1);}
 function closureSpeed(lv){return CFG.closureBase;}   // flat (v0.45, was 1.25^(lv-1)) — signature kept for the call sites
-function abilityCd(lv){return lv>=2 ? CFG.actionFill+CFG.cdPerLevel*(lv-1) : 0;}  // cooldown: none at L1, then bar + 5s/level
 function lvCrit(lv){return CFG.critPerLv*(lv-1);}
 
 /* tier from ability level: 0=L1-2 .. 3=L9 (milestones @3,6,9) */
@@ -1579,9 +1579,7 @@ let hp=100, score=0, finalScore=0, resultTitle='', resultBreak='';
 let mult=1, multMeter=0;
 let blitz=0;
 let xp=0, levelUps=0;
-let lv={strike:1,shoot:1,cast:1,blitz:1};
-let use={strike:1,shoot:1,cast:1,blitz:1};   // damage-weighted usage for level-up weighting
-let actBar=0;               // 0..1
+let lv=1;                   // ONE global player level (v0.46) — every attack levels together
 let off=null;               // active offensive sequence
 let queuedAction=null;      // action committed while the enemy is attacking; fires after their attack
 let cooldown={strike:0,shoot:0,cast:0};      // per-ability cooldown remaining (s); blitz is gated by its bar
@@ -1682,8 +1680,8 @@ function startRun(sd){
   document.getElementById('seedIn').value=seed;
   document.getElementById('dSeed').value=seed;
   hp=CFG.playerHP; score=0; mult=1; multMeter=0; blitz=0; xp=0; levelUps=0;
-  lv={strike:1,shoot:1,cast:1,blitz:1}; use={strike:1,shoot:1,cast:1,blitz:1};
-  actBar=0; off=null; queuedAction=null; cooldown={strike:0,shoot:0,cast:0}; cooldownMax={strike:1,shoot:1,cast:1};
+  lv=1;
+  off=null; queuedAction=null; cooldown={strike:0,shoot:0,cast:0}; cooldownMax={strike:1,shoot:1,cast:1};
   T=0; runClock=0; ragePhase=0; resolveLockT=0; castStreak=0; staggerT=0; forcedAttack=-1;
   hitLog.length=0; floaters.length=0; particles.length=0; enemyFx.length=0; _fxStartT=-1; paused=false;
   for(const w of waveFx){ if(w.mesh){ scene.remove(w.mesh); w.mesh.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material)o.material.dispose(); }); } } waveFx.length=0;
@@ -1816,9 +1814,9 @@ const enemyAttacking=()=> !!atk && (enemyState==='telegraph'||enemyState==='acti
 const enemyBusy=()=> enemyAttacking() || enemyState==='approach';   // approach = attack committed, dodge game imminent: player actions queue
 function commit(action){
   if(state!=='combat'||off||queuedAction||introT>0) return;   // already attacking / queued / intro still playing
-  if(action==='blitz'){ if(blitz<CFG.blitzMax) return; } else { if(actBar<1) return; if(cooldown[action]>0) return; }  // can't pick a cooling ability
+  if(action==='blitz'){ if(blitz<CFG.blitzMax) return; } else if(cooldown[action]>0) return;  // v0.46: each attack gates ONLY on its own cooldown
   // consume the resource now
-  if(action==='blitz') blitz=0; else actBar=0;
+  if(action==='blitz') blitz=0;
   // Blitz INTERRUPTS: it cancels an in-progress enemy attack outright (panic button), then unleashes now.
   if(action==='blitz'){
     if(enemyState==='telegraph'||enemyState==='active'||enemyState==='approach'){
@@ -1833,7 +1831,7 @@ function commit(action){
   else beginOffense(action);
 }
 function beginOffense(action){
-  const level=lv[action], tier=tierOf(level);
+  const level=lv, tier=tierOf(level);
   const seqList = action==='blitz' ? SEQ.blitz[tier] : SEQ[action][tier];
   const targets=[]; let t=0;
   const cs=closureSpeed(level);   // flat 1.25x ring speed at every level (v0.45)
@@ -1846,7 +1844,7 @@ function beginOffense(action){
     addFloater(playerMesh.position.clone().setY(3),'BLITZ!','#ffc233',1.2,30);
   }
   if(action==='cast') castStreak++; else castStreak=0;
-  if(action!=='blitz'){ const cd=abilityCd(level); cooldown[action]=cd; cooldownMax[action]=cd||1; }  // start the cooldown (L2+)
+  if(action!=='blitz'){ const cd=CFG.cds[action]; cooldown[action]=cd; cooldownMax[action]=cd; }  // flat per-action cooldown, starts when it fires
   // pre-roll: strike runs in first (heroDashT), then EVERY action gets an offLeadIn beat where
   // the timing UI animates in before target 1 goes live — no surprise starts (Andrew v0.38.0).
   const dash = action==='strike' ? CFG.heroDashT : 0;
@@ -1921,12 +1919,12 @@ function resolveTarget(tg, grade, err){
     enemyKbV -= Math.min(24, dmg*0.018);   // hit-recoil impulse, shoved back away from the player, ∝ damage
     enemyHurtT=0.35;                       // trigger the boss hit-reaction clip (rigged models)
     blitz=Math.min(CFG.blitzMax, blitz + dmg*CFG.blitzPerDmg + (crit?CFG.blitzCrit:0));
-    addXP(dmg*CFG.xpPerDmg + CFG.xpAction*0.15 + (off.action==='blitz'?CFG.xpBlitz*0.11:0), off.action, dmg);
   }
-  // multiplier gain
+  // multiplier + XP on the graded event (v0.46: XP is skill-driven — clean taps, not damage)
   if(!isMiss){
     let g=(grade==='perfect'?CFG.mPerfect:CFG.mGood)+(vuln?CFG.vulnMultBonus:0);
     addMult(g);
+    addXP(grade==='perfect'?CFG.xpTap.perfect:CFG.xpTap.good);
   }
   // fx + feedback
   if(dmg>0) resolveLockT=CFG.resolveLock;   // only lock cashout while real damage resolves (not a 0-dmg auto-miss)
@@ -1951,7 +1949,6 @@ function endOffense(){
     addMult(CFG.mClean);
     addFloater(playerMesh.position.clone().setY(3.4),'FLAWLESS','#9bffcf',0.9,18);
   }
-  if(off) use[off.action]+=0.0;
   // strike ended away from home -> JUMP back (ballistic arc in animatePlayer, no walk)
   if(off.action==='strike' && playerMesh && Math.hypot(playerMesh.position.x-PHOME.x, playerMesh.position.z-PHOME.z)>2)
     playerMesh.userData.jumpBack={t:0, x:playerMesh.position.x, z:playerMesh.position.z};
@@ -1994,7 +1991,7 @@ function tapDodge(now, offset, forcedHit){
   score += pts;
   addMult(perfect?CFG.mPerfDodge:CFG.mDodge);
   blitz=Math.min(CFG.blitzMax, blitz+(perfect?CFG.blitzPerfDodge:CFG.blitzDodge));
-  addXP(CFG.xpAction*0.3,'blitz',6);   // small xp toward blitz for dodging well
+  addXP(perfect?CFG.xpDodge.perfect:CFG.xpDodge.good);   // dodging is the leveling engine (v0.46)
   sfx(perfect?'pdodge':'dodge');
   const p=playerMesh.position.clone().setY(2.4);
   addFloater(p,(perfect?'PERFECT DODGE':'DODGE')+'  +'+pts,perfect?'#eafcff':'#bfe6ff',perfect?1.05:0.85,perfect?24:18);
@@ -2075,8 +2072,8 @@ function updateEnemy(dt){
   // Blitz-stagger of a telegraph nulls atk; route to a post-stagger vuln window that doesn't read atk.
   if(enemyState==='stagger'){ enemyTimer+=dt; if(staggerT<=0){enemyState='recovery';enemyTimer=0;recDur=0.9;vulnAction=pickVuln();} return; }
   if(enemyState==='idle'){
-    if(off) return;                          // enemy waits while the player is attacking (never two timing games)
-    enemyTimer-=dt;
+    enemyTimer-=dt;                          // v0.46: the enemy's turn clock runs even while the player attacks…
+    if(off) return;                          // …but its attack can never START mid-offense (never two timing games)
     if(enemyTimer<=0 && staggerT<=0){
       const idx=chooseAttack();
       const alist=ENEMY_ANIM[enemyIdx].attacks, clip=alist&&alist[idx%alist.length];
@@ -2126,8 +2123,7 @@ function landHit(hit){
   if(hp>0 && dmg>0) triggerHeroOneShot('hit',0.6);   // brief flinch (fatal hits play the death anim instead)
   interruptOffense();
   // mult punish: drop a full level + clear meter
-  mult=Math.max(1,mult-1); multMeter=0;
-  blitz=Math.min(CFG.blitzMax, blitz + hit.dmg*CFG.blitzOnHit);
+  mult=Math.max(1,mult-1); multMeter=0;   // (v0.46: no blitz consolation for getting hit — dodge to charge it)
   resolveLockT=CFG.resolveLock;
   hitPauseT=CFG.hitPause*1.4; shake(0.6+hit.dmg*0.01,0.4); camPunch(-0.18-hit.dmg*0.004);   // recoil pull-back when the hero takes it
   sfx('hurt');
@@ -2147,8 +2143,7 @@ function addMult(g){
     addFloater(playerMesh.position.clone().setY(3.6),'×'+mult,'#ffc233',0.85,22); }
   if(mult>=CFG.multMax) multMeter=Math.min(multMeter,1);
 }
-function addXP(amt, action, dmgForUse){
-  if(action&&dmgForUse) use[action]+=dmgForUse;
+function addXP(amt){
   if(levelUps>=CFG.maxLevelUps) return;
   xp+=amt;
   while(levelUps<CFG.maxLevelUps && xp>=CFG.xpThresh[levelUps]){
@@ -2156,18 +2151,11 @@ function addXP(amt, action, dmgForUse){
   }
 }
 function doLevelUp(){
-  // weighted by usage; exclude maxed abilities
-  const acts=['strike','shoot','cast','blitz'];
-  const tot=use.strike+use.shoot+use.cast+use.blitz;
-  const cands=acts.filter(a=>lv[a]<9);
-  if(!cands.length) return;
-  let weights=cands.map(a=>CFG.usageBase + CFG.usageWeight*(use[a]/tot));
-  let sum=weights.reduce((x,y)=>x+y,0);
-  let r=rngXp()*sum, pick=cands[cands.length-1];
-  for(let i=0;i<cands.length;i++){ r-=weights[i]; if(r<=0){pick=cands[i];break;} }
-  lv[pick]++;
+  // v0.46: one global level, fully deterministic (no rngXp pick) — every attack ramps together
+  if(lv>=9) return;
+  lv++;
   sfx('levelup');
-  levelUpFX(pick, lv[pick]);
+  levelUpFX(lv);
   updateHudStatic();
 }
 
@@ -2301,7 +2289,6 @@ function step(dt){
   { const rp = runClock>=CFG.enrageAt?2 : runClock>=CFG.angryAt?1 : 0; if(rp>ragePhase){ ragePhase=rp; onRageChange(rp); } }
   resolveLockT=Math.max(0,resolveLockT-dt);
   cooldown.strike=Math.max(0,cooldown.strike-dt); cooldown.shoot=Math.max(0,cooldown.shoot-dt); cooldown.cast=Math.max(0,cooldown.cast-dt);
-  if(!off && !queuedAction && actBar<1){ actBar=Math.min(1, actBar+dt/CFG.actionFill); }
   if(off){
     // auto-miss expired targets, end when done
     const good=lvGood(off.level);
@@ -2414,17 +2401,18 @@ function animatePlayer(rdt){
   else if(u.pikeMats){ const ge=Math.max(bf*0.85, castGlow*0.6); for(const m of u.pikeMats){ if(m.emissive) m.emissive.setRGB(ge*(castGlow?0.75:1), ge*(castGlow?0.4:0.72), ge*(castGlow?1.5:0.12)); } }
   u.tipLight.intensity = Math.max(tipInt.intensity, bf*2.2 + (bf>=1?0.9+Math.sin(t*11)*0.5:0), mf*8);
 
-  // ---- action bar as a ground ring around the feet (fills centre-out) ----
+  // ---- ground ring around the feet = STRIKE cooldown (the payoff hit worth anticipating; v0.46) ----
   if(actGrp){
     const showRing = state==='combat' && !off && !queuedAction;
     actGrp.visible = showRing;
     if(showRing){
       actGrp.position.set(playerMesh.position.x, 0.05, playerMesh.position.z);
-      actDisc.scale.setScalar(Math.max(0.001, actBar));
-      const ready = actBar>=1;
+      const f = 1-clamp(cooldown.strike/(cooldownMax.strike||1),0,1);
+      actDisc.scale.setScalar(Math.max(0.001, f));
+      const ready = cooldown.strike<=0;
       const pulse = ready ? 0.9+Math.sin(t*6)*0.1 : 1;
-      actDisc.material.color.setHex(ready?0x2fae64:0x2f5fb0); actDisc.material.opacity=0.9*pulse;
-      actRing.material.color.setHex(ready?0x8bffc0:0x9fc0ff); actRing.material.opacity=0.95*pulse;
+      actDisc.material.color.setHex(ready?0xae2f47:0x2f5fb0); actDisc.material.opacity=0.9*pulse;   // charging blue -> strike-red ready
+      actRing.material.color.setHex(ready?0xff8ba0:0x9fc0ff); actRing.material.opacity=0.95*pulse;
     }
   }
 }
@@ -2993,8 +2981,8 @@ function overlayDraw(){
     for(let k=0;k<8;k++){ const ang=k/8*Math.PI*2+b.life*4; octx.beginPath(); octx.moveTo(s.x+Math.cos(ang)*R*0.4,s.y+Math.sin(ang)*R*0.2); octx.lineTo(s.x+Math.cos(ang)*R,s.y+Math.sin(ang)*R*0.5); octx.stroke(); }
     octx.restore(); } }
 
-  // "READY" on the action ring when it is full
-  if(playerMesh && state==='combat' && !off && !queuedAction && actBar>=1 && !enemyBusy()){
+  // "READY" on the ground ring when the strike is charged
+  if(playerMesh && state==='combat' && !off && !queuedAction && cooldown.strike<=0 && !enemyBusy()){
     const s=toScreen(playerMesh.position.clone().add(new THREE.Vector3(0.4,0.14,0.85)));
     if(s.ok){ octx.save(); octx.font='800 15px Orbitron,sans-serif'; octx.textAlign='center'; octx.textBaseline='middle';
       octx.lineWidth=4; octx.strokeStyle='rgba(0,0,0,.6)'; octx.strokeText('READY',s.x,s.y); octx.fillStyle='#d6ffe8'; octx.fillText('READY',s.x,s.y); octx.restore(); }
@@ -3074,8 +3062,12 @@ function syncHud(){
   el('ehpFill').style.transform=`scaleX(${ef})`;
   if(_lastHud.ehpChip==null||ef>_lastHud.ehpChip-0.001) el('ehpChip').style.transform=`scaleX(${ef})`;
   _lastHud.ehpChip=ef;
-  // hp (bottom bar)
-  el('hpFill').style.transform=`scaleX(${clamp(hp/CFG.playerHP,0,1)})`; el('hpVal').textContent=Math.round(hp);
+  // hero plate (bottom-left): HP fill + delayed damage chip + numeric
+  { const hf=clamp(hp/CFG.playerHP,0,1);
+    el('hpPlateFill').style.transform=`scaleX(${hf})`;
+    if(_lastHud.hpChip==null||hf>_lastHud.hpChip-0.001) el('hpPlateChip').style.transform=`scaleX(${hf})`;
+    _lastHud.hpChip=hf;
+    el('hpNumVal').textContent=Math.round(hp); }
   // upper-left: score total + multiplier
   el('scoreVal').textContent=bankValue().toLocaleString();
   el('multBadge').textContent='×'+mult+(mult>=CFG.multMax?' MAX':'');
@@ -3096,7 +3088,7 @@ function syncHud(){
   { const hf=hp/CFG.playerHP, lo=el('lowhp'); const o = hf<0.5 ? clamp((0.5-hf)/0.5,0,1) : 0;
     lo.style.opacity=(o*0.9).toFixed(2); lo.classList.toggle('crit', hf>0 && hf<0.25); }
   // radial = the 3 core actions (shown when a selection is available / queued); Blitz is its own corner button
-  const canAct=!off&&!queuedAction&&actBar>=1&&state==='combat'&&!enemyBusy();  // radial clears during the dodge game so you can tap anywhere to dodge
+  const canAct=!off&&!queuedAction&&state==='combat'&&!enemyBusy();  // radial clears during the dodge game so you can tap anywhere to dodge
   const blitzReadyNow=!off&&!queuedAction&&blitz>=CFG.blitzMax&&state==='combat';
   el('radial').classList.toggle('show', canAct||!!queuedAction);
   const bid={strike:'btnStrike',shoot:'btnShoot',cast:'btnCast'};
@@ -3106,20 +3098,26 @@ function syncHud(){
     if(cooling){ b.style.setProperty('--cd', clamp(cd/(cooldownMax[a]||1),0,1).toFixed(3)); el(bid[a]+'Cd').textContent=Math.ceil(cd); }
     b.classList.toggle('on', ((canAct&&!cooling) || queuedAction===a));
     b.classList.toggle('queued', queuedAction===a);
-    const t=tierOf(lv[a]); b.classList.toggle('t0',t===0); b.classList.toggle('t1',t===1); b.classList.toggle('t2',t===2); b.classList.toggle('t3',t===3);
   }
   // dedicated Blitz button (corner)
   const bb=el('blitzBtn'); bb.classList.toggle('show', blitzReadyNow||queuedAction==='blitz'); bb.classList.toggle('queued', queuedAction==='blitz');
-  { const t=tierOf(lv.blitz); bb.classList.toggle('t3',t===3); }
 }
 function updateHudStatic(){
   el('enemyName').textContent=enemy?enemy.name:'—';
   el('enemyTag').textContent='FOE '+(enemyIdx+1)+'/3';
   const pips=document.querySelectorAll('.epip'); pips.forEach((p,i)=>{ p.className='epip'+(i<enemyIdx?' done':i===enemyIdx?' cur':''); });
-  const ms=l=>(l>=3?(l>=6?(l>=9?'★':'✦'):'•'):'');   // milestone marker on the level badge
-  el('btnStrikeLv').textContent='LVL '+lv.strike; el('btnShootLv').textContent='LVL '+lv.shoot;
-  el('btnCastLv').textContent='LVL '+lv.cast; el('btnBlitzLv').textContent='LVL '+lv.blitz;
+  el('lvVal').textContent=lv;          // hero plate carries THE level (one global level, v0.46)
+  syncRadialIcons();                   // per-level icon art on the action buttons
 }
+/* per-level icon art: all three buttons upgrade together on level-up — that IS the ramp feedback */
+const ICON_ACTS={strike:'btnStrike',shoot:'btnShoot',cast:'btnCast'};
+function iconSrc(a,l){ return 'assets/icons/'+a+'_0'+clamp(l,1,9)+'.webp'; }
+let _iconLv=0;
+function syncRadialIcons(){
+  if(_iconLv===lv) return; _iconLv=lv;
+  for(const a in ICON_ACTS){ const img=el(ICON_ACTS[a]+'Ic'); if(img) img.src=iconSrc(a,lv); }
+}
+(function preloadIcons(){ for(const a in ICON_ACTS) for(let l=1;l<=9;l++){ const i=new Image(); i.src=iconSrc(a,l); } })();
 // rage escalation: dramatic centered flyout + shake + growl (enemy red glow handled in the loop)
 function rageCallout(word,color){
   const rt=el('rageToast'); if(!rt) return;
@@ -3132,13 +3130,15 @@ function onRageChange(rp){
   shake(rp===1?0.7:0.95, 0.6); sfx('blitz'); _camRageCueT=1.4;   // brief extra camera push while the toast flies
   if(enemyMesh) burst(enemyMesh.userData.anchors.core.getWorldPosition(new THREE.Vector3()), rp===1?'#ffb14d':'#ff4f6e', 18);
 }
-// level-up notification: text flyout + golden beams around the hero
-function levelUpFX(pick, level){
+// level-up notification: text flyout + golden beams around the hero + plate flare + icon pop
+function levelUpFX(level){
   goldBeamBurst(); groundBeams('#ffe08a');
   const milestone=(level===3||level===6||level===9);
-  if(playerMesh) addFloater(playerMesh.position.clone().setY(3.6), pick.toUpperCase()+' Lv'+level+(milestone?' ★':''), milestone?'#ffc233':'#ffe89a', milestone?1.2:1.0, milestone?26:22);
-  const lt=el('levelToast'); lt.innerHTML='<div class="big">'+pick.toUpperCase()+' · LV '+level+(milestone?' ★':'')+'</div><div class="sm">'+(milestone?'NEW POWER':'LEVEL UP')+'</div>';
+  if(playerMesh) addFloater(playerMesh.position.clone().setY(3.6), 'LV '+level+(milestone?' ★':''), milestone?'#ffc233':'#ffe89a', milestone?1.2:1.0, milestone?26:22);
+  const lt=el('levelToast'); lt.innerHTML='<div class="big">LV '+level+(milestone?' ★':'')+'</div><div class="sm">'+(milestone?'NEW COMBO TIER':'ALL ATTACKS +20%')+'</div>';
   lt.classList.remove('show'); void lt.offsetWidth; lt.classList.add('show');
+  const hp2=el('heroPlate'); if(hp2){ hp2.classList.remove('flare'); void hp2.offsetWidth; hp2.classList.add('flare'); }
+  for(const a in ICON_ACTS){ const b=el(ICON_ACTS[a]); if(b){ b.classList.remove('lvpop'); void b.offsetWidth; b.classList.add('lvpop'); } }
 }
 
 /* =========================================================================
@@ -3164,9 +3164,9 @@ el('dEhp').addEventListener('click',()=>{ if(enemy){enemy.hp=Math.max(1,enemy.hp
 el('dRestart').addEventListener('click',()=>{ startRun(el('dSeed').value.trim()); });
 el('dPause').addEventListener('click',()=>{ paused=!paused; el('dPause').textContent=paused?'resume':'pause'; });
 el('dSpeed').addEventListener('input',()=>{ const v=parseInt(el('dSpeed').value)/100; slowF=v; slowT=v<1?1e9:0; el('dSpeedV').textContent=v.toFixed(1)+'x'; });
-el('dLvSet').addEventListener('click',()=>{ lv.strike=+el('dLvS').value;lv.shoot=+el('dLvH').value;lv.cast=+el('dLvC').value;lv.blitz=+el('dLvB').value; updateHudStatic(); });
+el('dLvSet').addEventListener('click',()=>{ lv=clamp(+el('dLv').value||1,1,9); updateHudStatic(); });
 el('dLvUp').addEventListener('click',()=>{ doLevelUp(); });
-el('dFillAct').addEventListener('click',()=>{ actBar=1; });
+el('dFillAct').addEventListener('click',()=>{ cooldown.strike=0;cooldown.shoot=0;cooldown.cast=0; });
 el('dFillBlz').addEventListener('click',()=>{ blitz=CFG.blitzMax; });
 el('dMult').addEventListener('input',()=>{ mult=parseInt(el('dMult').value); multMeter=0; el('dMultV').textContent=mult; });
 el('dHeal').addEventListener('click',()=>{ hp=CFG.playerHP; });
@@ -3191,8 +3191,8 @@ window.__game={
   spearBaseVis:(v)=>{ if(spearModel) spearModel.visible=!!v; return spearModel?spearModel.visible:'(none)'; },
   get s(){ return {state, seed, T:+T.toFixed(2), enemyIdx, enemy:enemy?enemy.name:null,
     enemyHP:enemy?Math.round(enemy.hp):0, enemyMax:enemy?enemy.maxHp:0, hp:Math.round(hp), score:Math.round(score),
-    mult, multMeter:+multMeter.toFixed(2), blitz:Math.round(blitz), blitzReady:blitz>=CFG.blitzMax, xp:Math.round(xp), levelUps, lv:{...lv}, use:{strike:+use.strike.toFixed(0),shoot:+use.shoot.toFixed(0),cast:+use.cast.toFixed(0),blitz:+use.blitz.toFixed(0)},
-    actBar:+actBar.toFixed(2), off:off?{action:off.action,tier:off.tier,left:off.targets.filter(t=>!t.resolved).length}:null, queued:queuedAction,
+    mult, multMeter:+multMeter.toFixed(2), blitz:Math.round(blitz), blitzReady:blitz>=CFG.blitzMax, xp:Math.round(xp), levelUps, lv,
+    off:off?{action:off.action,tier:off.tier,left:off.targets.filter(t=>!t.resolved).length}:null, queued:queuedAction,
     enemyState, atk:atk?atk.set.name:null, atkLeft:atk?atk.hits.filter(h=>!h.resolved).length:0, vuln:vulnAction, lock:+resolveLockT.toFixed(2),
     runClock:+runClock.toFixed(2), ragePhase, bank:bankValue(), introT:+introT.toFixed(2), forced:forcedAttack,
     cd:{strike:+cooldown.strike.toFixed(1),shoot:+cooldown.shoot.toFixed(1),cast:+cooldown.cast.toFixed(1)}, draws:renderer.info.render.calls }; },
@@ -3208,8 +3208,8 @@ window.__game={
   curTargetErr:()=>{ if(!off)return null; const tg=off.targets.find(t=>!t.resolved); return tg?+(T-(off.startT+tg.t)).toFixed(3):null; },
   nextHit:()=>{ if(!atk||enemyState!=='active')return null; let best=null,bd=1e9; for(let i=0;i<atk.hits.length;i++){const h=atk.hits[i];if(h.resolved)continue;const d=(atk.startT+h.at)-T;if(Math.abs(d)<bd){bd=Math.abs(d);best={id:atk.startT.toFixed(3)+':'+i,dt:+d.toFixed(3),sp:h.sp,dmg:h.dmg};}} return best; },
   forceAttack:i=>{ if(typeof i==='string'){const m=ATTACK_INDEX[i]||ATTACK_INDEX[enemy.key+':'+i]; i=m?m.si:0;} forcedAttack=i; if(enemyState!=='idle'){enemyState='idle';enemyTimer=0;atk=null;} else enemyTimer=0; },
-  setLevel:(a,l)=>{ lv[a]=clamp(l,1,9); updateHudStatic(); },
-  fillAction:()=>{actBar=1;}, fillBlitz:()=>{blitz=CFG.blitzMax;}, setMult:m=>{mult=clamp(m,1,5);multMeter=0;},
+  setLevel:(l)=>{ lv=clamp(l,1,9); updateHudStatic(); },
+  fillAction:()=>{cooldown.strike=0;cooldown.shoot=0;cooldown.cast=0;}, fillBlitz:()=>{blitz=CFG.blitzMax;}, setMult:m=>{mult=clamp(m,1,5);multMeter=0;},
   hurt:d=>{hp=Math.max(0,hp-d);}, heal:()=>{hp=CFG.playerHP;}, enemyHurt:d=>{if(enemy)enemy.hp=Math.max(0,enemy.hp-d);},
   slow:f=>{slowF=f;slowT=f<1?1e9:0;}, god:(v=true)=>{godMode=v;},
   _kill:()=>{ if(enemy&&state==='combat'){enemy.hp=0;defeatEnemy();} },
