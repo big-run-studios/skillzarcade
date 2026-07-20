@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.42.1</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.43.0</div>
   </div>
 </div>
 
@@ -1273,7 +1273,7 @@ const ENEMY_EYE=[
 // TAP-WINDOW SPARKLE — a character-anchored twinkle on each boss's signature body part,
 // lit only while the dodge tap window is open (brightest at the perfect-tap instant).
 const ENEMY_SPARK=[
-  { node:'RightHand', tint:0xffd23a, off:[0,0,0], scale:2.4 },   // Cliffhorn — right fist (amber)
+  { eyes:true },                                                 // Cliffhorn — the RED EYES flash with the tap window (was an amber fist sparkle)
   { node:'Spine02',   tint:0x8fe9ff, off:[0,0,0], scale:2.4 },   // Gale — chest (ice-cyan)
   { node:'headfront', tint:0xffe14d, off:[0,0.2,0], scale:1.8 }, // Sky Titan — eyes (gold)
 ];
@@ -1411,7 +1411,8 @@ function updateEnemySpark(){
       if(d>=-wE && d<=wL) amt=Math.max(amt, 1-Math.abs(d)/(d<0?wE:wL)); }
   }
   if(sparkForce) amt=1;
-  if(amt<=0 || !bone){ enemySpark.visible=false; return; }
+  if(u) u._eyeFlash = (spk && spk.eyes) ? amt : 0;          // eye-flash bosses: the glow updater consumes this
+  if(!spk || spk.eyes || amt<=0 || !bone){ enemySpark.visible=false; return; }
   bone.getWorldPosition(_spkV); if(spk.off){ _spkV.x+=spk.off[0]; _spkV.y+=spk.off[1]; _spkV.z+=spk.off[2]; }
   enemySpark.position.copy(_spkV);
   const t=performance.now()/1000, twk=0.8+0.2*Math.sin(t*24);        // fast twinkle
@@ -1547,7 +1548,7 @@ function buildEnemyGLB(i){
       for(const sgn of [-1,1]){
         const sp=new THREE.Sprite(new THREE.SpriteMaterial({ map:makeSparkTexture(), color:0xff2418, transparent:true, opacity:0.5, depthTest:true, depthWrite:false, blending:THREE.AdditiveBlending }));
         sp.position.set(sgn*E.lx, E.ly, E.lz);
-        sp.scale.setScalar(E.s);
+        sp.scale.setScalar(E.s); sp.userData.s0=E.s;
         nb.add(sp); eyeGlows.push(sp);
       }
       g.userData.eyeGlows=eyeGlows;
@@ -2641,8 +2642,13 @@ function frame(nw){
   try{ update(rdt); }catch(err){ console.error('update',err); }
   try{ if(playerMesh)animatePlayer(rdt); if(enemyMesh)animateEnemy(rdt); updateHero(rdt); updateBlitzRibbons(rdt); updateEnemySpark(); updateWaveFx(); updateImpactFlashes(rdt); }catch(err){ console.error('anim',err); }
   if(playerMesh){ heroLight.position.set(playerMesh.position.x,1.7,playerMesh.position.z); heroLight.intensity = heroFlashT>0 ? (heroFlashT/0.5)*14 : 0; }
-  if(enemyMesh && enemyMesh.userData.eyeGlows){ const k=(0.45+ragePhase*0.35)*(0.85+0.15*Math.sin(performance.now()/140));
-    for(const e of enemyMesh.userData.eyeGlows) e.material.opacity=k; }
+  if(enemyMesh && enemyMesh.userData.eyeGlows){ const u2=enemyMesh.userData, fl=u2._eyeFlash||0;
+    const k=(0.45+ragePhase*0.35)*(0.85+0.15*Math.sin(performance.now()/140));
+    for(const e of u2.eyeGlows){
+      e.material.opacity=Math.min(1, k+fl*(1.15-k));                    // blaze through the tap window…
+      e.material.color.setRGB(1, 0.14+fl*0.5, 0.09+fl*0.25);            // …tinting toward hot orange-white
+      const s0=e.userData.s0||11; e.scale.setScalar(s0*(1+fl*0.9));     // …and swelling to ~2x
+    } }
   // camera director: cinematic base shot + additive layers (punch / sway / shake)
   try{ directCamera(rdt); }catch(err){ console.error('cam',err); }
   // 3d particles
