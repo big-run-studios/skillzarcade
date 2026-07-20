@@ -312,7 +312,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.49.2</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.50.0</div>
   </div>
 </div>
 
@@ -950,6 +950,126 @@ function attachHero(){
   }
   playHeroClip(HERO_CLIP.idle, true, 0, 0.5);
 }
+/* =========================================================================
+   TIERED ARMOR — Azure Aegis overlay (L3 legs / L6 body / L9 helmet).
+   Same 24-bone Meshy rig as the hero, so the armor skeleton is a PUPPET:
+   bone locals copied from the hero every frame — no second mixer, no clip
+   maps, tracks every current and future clip by construction. The fused
+   mesh splits into LEGS/BODY/HEAD by argmax bone-weight buckets (every
+   vertex lands in exactly one region — no dropped slivers). Each region
+   materializes with a REVERSED enemy-death dissolve in armor blue.
+   At L9 the hero's own head region hides (hair would poke the closed helm).
+   Cosmetic only. Harness: armorSet(t, fx).
+   ========================================================================= */
+let armorGLTF=null, armorModel=null, armorPairs=null;
+const armorRegion={legs:null, body:null, head:null};
+const heroRegion={legs:null, body:null, head:null};   // the hero split the same way — covered regions HIDE (sneakers/fingers poked through the shell)
+const ARMOR_EDGE=0x49b6ff, ARMOR_REVEAL=1.25, ARMOR_MOTE='#63c8ff';
+const armorFx=[];
+const ARMOR_BONES={
+  legs:['Hips','LeftUpLeg','LeftLeg','LeftFoot','LeftToeBase','RightUpLeg','RightLeg','RightFoot','RightToeBase'],
+  body:['Spine','Spine01','Spine02','LeftShoulder','LeftArm','LeftForeArm','LeftHand','RightShoulder','RightArm','RightForeArm','RightHand'],
+  head:['neck','Head','head_end','headfront'],
+};
+new GLTFLoader().load('assets/hero-armor.glb', g=>{ armorGLTF=g; attachArmor(); }, undefined, ()=>{});
+function _armorRegionOf(name){ for(const k in ARMOR_BONES) if(ARMOR_BONES[k].includes(name)) return k; return 'body'; }
+// split one fused SkinnedMesh into per-region siblings (shared attribute buffers, own index).
+// withRest: also emit 'rest' = every triangle not claimed by the requested keys (used on the hero for the head swap).
+function splitSkinnedByRegion(sm, keys, withRest, regionFn){
+  const geo=sm.geometry, si=geo.attributes.skinIndex, sw=geo.attributes.skinWeight, pos=geo.attributes.position;
+  const idx=geo.index?geo.index.array:null, vc=pos.count, KI={legs:0,body:1,head:2};
+  const boneBucket=sm.skeleton.bones.map(b=>KI[(regionFn||_armorRegionOf)(b.name)]);
+  const vb=new Uint8Array(vc);
+  for(let v=0;v<vc;v++){ let a0=0,a1=0,a2=0;
+    for(let j=0;j<4;j++){ const w=sw.getComponent(v,j); if(w<=0)continue; const k=boneBucket[si.getComponent(v,j)];
+      if(k===0)a0+=w; else if(k===1)a1+=w; else a2+=w; }
+    vb[v]= (a0>=a1&&a0>=a2)?0 : (a1>=a2?1:2);
+  }
+  const lists=[[],[],[]], tc=idx?idx.length:vc;
+  for(let t=0;t<tc;t+=3){ const a=idx?idx[t]:t, b=idx?idx[t+1]:t+1, c=idx?idx[t+2]:t+2;
+    const ba=vb[a],bb=vb[b],bc=vb[c];
+    lists[(ba===bb||ba===bc)?ba:(bb===bc?bb:ba)].push(a,b,c); }
+  const build=(li,rk)=>{
+    if(!li.length) return null;
+    const g2=new THREE.BufferGeometry();
+    for(const an in geo.attributes) g2.setAttribute(an, geo.attributes[an]);   // share buffers
+    g2.setIndex(li);
+    const m=new THREE.SkinnedMesh(g2, (Array.isArray(sm.material)?sm.material[0]:sm.material).clone());
+    m.frustumCulled=false; m.castShadow=true;
+    sm.parent.add(m);
+    m.position.copy(sm.position); m.quaternion.copy(sm.quaternion); m.scale.copy(sm.scale);
+    m.bind(sm.skeleton, sm.bindMatrix);                                        // proven buildLimbDuplicate pattern
+    m.userData.rk=rk;
+    return m;
+  };
+  const out={};
+  for(const k of keys) out[k]=build(lists[KI[k]], k);
+  if(withRest){ const rest=[]; for(const k in KI) if(!keys.includes(k)) rest.push(...lists[KI[k]]); out.rest=build(rest,'rest'); }
+  return out;
+}
+function attachArmor(){
+  if(!armorGLTF || !playerMesh || !heroModel || armorModel) return;
+  const a=armorGLTF.scene;
+  // IDENTICAL transform to the hero root — same rig => the two skeletons coincide exactly
+  a.scale.copy(heroModel.scale); a.rotation.copy(heroModel.rotation); a.position.copy(heroModel.position);
+  a.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.castShadow=true; if(o.material) o.material.side=THREE.FrontSide; } });
+  a.updateMatrixWorld(true);
+  playerMesh.add(a); armorModel=a;
+  let sm=null; a.traverse(o=>{ if(!sm && o.isSkinnedMesh) sm=o; });
+  Object.assign(armorRegion, splitSkinnedByRegion(sm, ['legs','body','head'], false));
+  for(const k in armorRegion) if(armorRegion[k]) armorRegion[k].visible=false;
+  sm.visible=false;
+  // puppet pairs: hero bone -> armor bone, matched by name
+  armorPairs=[];
+  for(const ab of sm.skeleton.bones){ const hb=heroModel.getObjectByName(ab.name); if(hb) armorPairs.push([hb,ab]); }
+  // split the hero the same way — the argmax buckets partition EVERY triangle, so the three
+  // regions together are pixel-identical to the original; covered ones hide per tier
+  let hsm=null; heroModel.traverse(o=>{ if(!hsm && o.isSkinnedMesh) hsm=o; });
+  // hero split keeps his PELVIS with the body (Hips->body): hiding it left a see-through gap
+  // under the swinging jacket hem at tier 1 — the armor's waist plate covers the overlap anyway
+  if(hsm){ Object.assign(heroRegion, splitSkinnedByRegion(hsm, ['legs','body','head'], false,
+      n=>n==='Hips'?'body':_armorRegionOf(n)));
+    if(heroRegion.legs&&heroRegion.body&&heroRegion.head) hsm.visible=false;
+    else { heroRegion.legs=heroRegion.body=heroRegion.head=null; } }   // safety: keep the original if any bucket came back empty
+  applyArmorTier(false);
+}
+function armorTierFor(){ return lv>=9?3 : lv>=6?2 : lv>=3?1 : 0; }
+function applyArmorTier(animate, forceT){
+  if(!armorModel) return;
+  const t=(forceT!=null)?forceT:armorTierFor();
+  ['legs','body','head'].forEach((k,i)=>{ const m=armorRegion[k]; if(!m) return;
+    const want=t>=i+1;
+    if(want && !m.visible){ m.visible=true; if(animate) startArmorReveal(m); }
+    else if(!want && m.visible){ m.visible=false; stopArmorFx(m); }
+    if(heroRegion[k]) heroRegion[k].visible=!want;   // the armored shell REPLACES the flesh region underneath
+  });
+}
+function startArmorReveal(mesh){
+  stopArmorFx(mesh);
+  // region world-Y span from its BONES (posed-accurate), padded for the shell + helmet crest
+  let y0=1e9,y1=-1e9; const _bw=new THREE.Vector3();
+  for(const b of mesh.skeleton.bones){ if(_armorRegionOf(b.name)!==mesh.userData.rk) continue;
+    b.getWorldPosition(_bw); if(_bw.y<y0)y0=_bw.y; if(_bw.y>y1)y1=_bw.y; }
+  const pad=mesh.userData.rk==='head'?0.55:0.35; y0-=pad; y1+=pad;
+  const noise=Math.max(0.06,(y1-y0)*0.12);
+  const u={uDis:{value:1},uFreeze:{value:1},uCutTop:{value:y1+noise+0.1},uCutBot:{value:y0-noise-0.1},uNoise:{value:noise},uEdge:{value:new THREE.Color(ARMOR_EDGE)}};
+  const orig=mesh.material;
+  mesh.material=eDissolveMat(orig, u);                      // same shader as the enemy death — driven in REVERSE below
+  armorFx.push({mesh,u,orig,t:0});
+}
+function updateArmorFx(rdt){
+  for(let i=armorFx.length-1;i>=0;i--){ const f=armorFx[i]; f.t+=rdt;
+    const p=Math.min(1, f.t/ARMOR_REVEAL);
+    f.u.uDis.value=1-p; f.u.uFreeze.value=1-p;              // cut RISES bottom->top; blue-hot birth settles to the real material
+    if(p<1 && Math.random()<0.55 && playerMesh){
+      const cy=f.u.uCutTop.value*p + f.u.uCutBot.value*(1-p);
+      burst(new THREE.Vector3(playerMesh.position.x+rf(-0.55,0.55), cy+rf(-0.08,0.08), playerMesh.position.z+rf(-0.4,0.4)), ARMOR_MOTE, 2);
+    }
+    if(p>=1){ f.mesh.material=f.orig; armorFx.splice(i,1); }
+  }
+}
+function stopArmorFx(mesh){ const i=armorFx.findIndex(f=>f.mesh===mesh); if(i>=0){ mesh.material=armorFx[i].orig; armorFx.splice(i,1); } }
+
 // Two actions per clip (original + clone) so a clip can crossfade into ITSELF — chained
 // dodge rolls and attack re-cues used to hard-reset the live action (a visible pop/chop).
 const heroClipAB={};
@@ -1020,6 +1140,13 @@ function updateHero(rdt){
   if(!victFrozen){
     heroMixer.update(rdt);
     if(heroRightForeArm) heroRightForeArm.rotateY(HERO_FORE_ROLL);   // roll the pike hand onto the shaft (post-mixer — clips reset the bone every update)
+  }
+  // armor = puppet of the hero rig: bone locals AND the model ROOT (the victory turn eases
+  // heroModel.rotation — without the root copy the armor kept animating facing the old way)
+  if(armorModel && heroModel){
+    armorModel.position.copy(heroModel.position); armorModel.quaternion.copy(heroModel.quaternion); armorModel.scale.copy(heroModel.scale);
+    if(armorPairs) for(let i=0;i<armorPairs.length;i++){ const p=armorPairs[i];
+      p[1].position.copy(p[0].position); p[1].quaternion.copy(p[0].quaternion); p[1].scale.copy(p[0].scale); }
   }
   if(heroOneShotT>0) heroOneShotT-=rdt;
   if(heroRollT>0) heroRollT-=rdt;
@@ -1696,6 +1823,8 @@ function startRun(sd){
   if(!playerMesh){playerMesh=buildPlayer(); scene.add(playerMesh);}
   attachHero();                 // swap in the GLB hero once it (and the player rig) exist
   attachSpear();                // same for the real spear model (art WIP — no-ops until spear.glb exists)
+  attachArmor();                // tiered Azure Aegis overlay (loader cb OR here, whichever lands last)
+  applyArmorTier(false);        // fresh run starts bare (lv resets)
   heroDead=false; heroCurName=''; heroOneShotT=0; heroRollT=0; heroRollYawOff=0;
   introT=CFG.introDur;          // battle is gated until the hero's full intro stance completes
   resultShowT=0;                // cancel a pending celebration->menu pop from a previous run
@@ -2174,6 +2303,7 @@ function doLevelUp(){
   lv++;
   sfx('levelup');
   levelUpFX(lv);
+  applyArmorTier(true);   // L3 greaves / L6 cuirass / L9 helm — blue reverse-dissolve reveal
   updateHudStatic();
 }
 
@@ -2745,7 +2875,7 @@ function frame(nw){
   const rdt=Math.min((nw-last)/1000,1/30); last=nw;
   if(cw!==app.clientWidth||ch!==app.clientHeight) resize();
   try{ update(rdt); }catch(err){ console.error('update',err); }
-  try{ if(playerMesh)animatePlayer(rdt); if(enemyMesh)animateEnemy(rdt); updateHero(rdt); updateBlitzRibbons(rdt); updateEnemySpark(); updateWaveFx(); updateImpactFlashes(rdt); updateLandPuff(rdt); }catch(err){ console.error('anim',err); }
+  try{ if(playerMesh)animatePlayer(rdt); if(enemyMesh)animateEnemy(rdt); updateHero(rdt); updateBlitzRibbons(rdt); updateEnemySpark(); updateWaveFx(); updateImpactFlashes(rdt); updateLandPuff(rdt); updateArmorFx(rdt); }catch(err){ console.error('anim',err); }
   if(playerMesh){ heroLight.position.set(playerMesh.position.x,1.7,playerMesh.position.z); heroLight.intensity = heroFlashT>0 ? (heroFlashT/0.5)*14 : 0; }
   if(enemyMesh && enemyMesh.userData.eyeGlows){ const u2=enemyMesh.userData, fl=u2._eyeFlash||0;
     const k=(0.45+ragePhase*0.35)*(0.85+0.15*Math.sin(performance.now()/140));
@@ -3322,6 +3452,8 @@ window.__game={
   setFov:(f)=>{ camera.fov=f; camera.updateProjectionMatrix(); },
   camOn:(v=true)=>{ CAMS.on=!!v; },
   puffTest:()=>{ if(playerMesh) spawnLandPuff(playerMesh.position.x, playerMesh.position.z); return 'puff'; },   // replay the landing smoke ring
+  armorSet:(t=3,fx=true)=>{ applyArmorTier(fx,t); return 'armor tier '+t+(armorModel?'':' (WARN: armor not loaded)'); },   // force the look: 0 bare / 1 legs / 2 +body / 3 full
+  _armorDbg:()=>({fx:armorFx.map(f=>({rk:f.mesh.userData.rk,t:+f.t.toFixed(2)})), dis:['legs','body','head'].map(k=>armorRegion[k]?armorRegion[k].material.hasOwnProperty('customProgramCacheKey'):null)}),
 
   camShot:(name=null,t=null)=>{ _camForce=name; _camForceT=t; return _camForce||'(auto)'; },   // force a shot (+optional shot-time) for posing; camShot() releases
   camTight:(v=null)=>{ _camTightForce=v; return v; },                                          // force the HOME tighten for Law-1 validation
