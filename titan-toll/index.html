@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.35.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.36.0</div>
   </div>
 </div>
 
@@ -447,8 +447,9 @@ const SEQ={
 let runClock=0, ragePhase=0;                   // total combat time (s) + rage phase (0 calm / 1 angry / 2 enraged)
 const LEAD={slow:0.9, med:0.58, fast:0.34};   // telegraph lead per speed (base; scaled by CFG.timeScale)
 const LD=sp=>LEAD[sp]*CFG.timeScale*CFG.rageTele[ragePhase];  // telegraph lead (rage shortens it)
-const dwin=()=>CFG.dodgeWin*CFG.rageWin[ragePhase];           // dodge window AFTER impact (reaction side)
-const dwinE=()=>CFG.dodgeWinEarly*CFG.rageWin[ragePhase];     // dodge window BEFORE impact (anticipatory side, wider)
+const WINSCALE={slow:1.45, med:1.0, fast:0.7};                // 3 tap-window sizes (v0.36.0) — picked per tap by the gap since the previous tap
+const dwin=(sp)=>CFG.dodgeWin*CFG.rageWin[ragePhase]*(sp?WINSCALE[sp]:1);        // dodge window AFTER impact (reaction side)
+const dwinE=(sp)=>CFG.dodgeWinEarly*CFG.rageWin[ragePhase]*(sp?WINSCALE[sp]:1);  // dodge window BEFORE impact (anticipatory side, wider)
 const pdwin=()=>CFG.perfectDodgeWin*CFG.rageWin[ragePhase];   // current perfect-dodge window
 const bankValue=()=>Math.round(score)+Math.floor(runClock*CFG.timeBonusPerSec);  // at-risk total = score + survival bonus
 const H=(sp,dmg,at)=>({sp,dmg,at});
@@ -1205,7 +1206,7 @@ const ENEMY_TAPS=[
 const ENEMY_FX=[
   { 'Punch_Pose':'wave' },                                                                                        // Cliffhorn — Attack 8: concussive wave from the right hand
   { 'mage_soell_cast':'lightning','mage_soell_cast_6':'lightning','mage_soell_cast_2':'windbeam','mage_soell_cast_4':'beam' },  // Gale — A1/8 & A4/7 sky-lightning; A2/5 wind beam; A3/6 solid beam
-  { 'Shrug':'meteor','Neck_Slashing_Gesture':'slash','Angry_Ground_Stomp_2':'crack' },                           // Sky Titan — A1 meteor, A2 red slash, A3 ground crack
+  { 'Shrug':'meteor','Neck_Slashing_Gesture':'slash' /* red force-push */,'Angry_Ground_Stomp_2':'crack' },                           // Sky Titan — A1 meteor, A2 red slash, A3 ground crack
 ];
 // TAP-WINDOW SPARKLE — a character-anchored twinkle on each boss's signature body part,
 // lit only while the dodge tap window is open (brightest at the perfect-tap instant).
@@ -1315,8 +1316,8 @@ function updateEnemySpark(){
   const u=enemyMesh&&enemyMesh.userData, spk=u&&u.spark, bone=u&&u.sparkBone;
   let amt=0;
   if(atk && (enemyState==='telegraph'||enemyState==='active')){      // brighten toward each unresolved hit's impact, within its tap window
-    const rel=T-atk.startT, wE=dwinE(), wL=dwin();
-    for(const h of atk.hits){ if(h.resolved) continue; const d=rel-h.at;   // d<0 = before impact (anticipatory side)
+    const rel=T-atk.startT;
+    for(const h of atk.hits){ if(h.resolved) continue; const d=rel-h.at, wE=dwinE(h.sp), wL=dwin(h.sp);   // d<0 = before impact (anticipatory side)
       if(d>=-wE && d<=wL) amt=Math.max(amt, 1-Math.abs(d)/(d<0?wE:wL)); }
   }
   if(sparkForce) amt=1;
@@ -1365,6 +1366,7 @@ ENEMY_GLB.forEach((f,i)=>{ new GLTFLoader().load(f, g=>{ bossGLTF[i]=g;
   stripClipTravelXZ(g.animations.find(c=>c.name===ENEMY_ANIM[i].hit));   // stagger stays planted (once, at load)
   alignClipBaseXZ(g.animations.find(c=>c.name===ENEMY_ANIM[i].idle),
                   g.animations.find(c=>c.name===ENEMY_ANIM[i].hit));     // idle rests on the same spot the other clips play from
+  if(i===2) stripClipTravelXZ(g.animations.find(c=>c.name==='Lunge_Spin_Kick'));   // spin kick: authored travel + the FACE yaw fix carried him off to the RIGHT in-game — spin in place
   swapEnemyToGLB(i);   // upgrade the fallback if this boss loaded mid-fight
   if(i===0){ const b=document.getElementById('startBtn'); if(b)b.textContent='ENTER BATTLE';
     if(_pendingStart!=null){ const s=_pendingStart; _pendingStart=null; startRun(s); } }   // player already clicked ENTER BATTLE -> start now
@@ -1858,13 +1860,13 @@ function tapDodge(now, offset, forcedHit){
     if(hit.resolved) continue;
     const imp=atk.startT+hit.at;
     const err=(offset!=null?offset:(now-imp));                 // err<0 = tapped before impact
-    if(err>=-dwinE() && err<=dwin() && Math.abs(err)<bestErr){ best=hit; bestErr=Math.abs(err); best._err=err; }
+    if(err>=-dwinE(hit.sp) && err<=dwin(hit.sp) && Math.abs(err)<bestErr){ best=hit; bestErr=Math.abs(err); best._err=err; }
   }
   if(!best){ return; }   // outside both sides = fail (hit will still land)
   best.resolved=true; best.dodged=true;
   const perfect=bestErr<=pdwin();
   // dodge score by quality: perfect => 1000; good scales GoodHi..GoodLo by precision (per-side span)
-  const span=Math.max(1e-4,(best._err<0?dwinE():dwin())-pdwin());
+  const span=Math.max(1e-4,(best._err<0?dwinE(best.sp):dwin(best.sp))-pdwin());
   const pts = perfect ? CFG.dodgeScorePerfect
     : Math.round(lerp(CFG.dodgeScoreGoodHi, CFG.dodgeScoreGoodLo, clamp((bestErr-pdwin())/span,0,1)));
   score += pts;
@@ -1923,11 +1925,17 @@ function startAttack(idx){
   const td = clip && ENEMY_TAPS[enemyIdx] ? ENEMY_TAPS[enemyIdx][clip] : null;
   let hits, animTimed=false;
   const aspd=ENEMY_ATK_SPEED[enemyIdx]||1;   // clip playback rate: tap at clip-second t lands at wall-time t/aspd
+  // WINDOW RULE (v0.36.0): each tap gets the LARGEST of the 3 window classes that fits the gap
+  // since the previous tap (first tap always 'slow' = max). Class scales window AND telegraph lead.
+  const spFromGap=(gap)=> gap>=1.0 ? 'slow' : gap>=0.55 ? 'med' : 'fast';
   if(td && td.taps && td.taps.length){
     animTimed=true;
-    hits = td.taps.map((t,j)=>{ const src=s.hits[j%s.hits.length]; return {sp:src.sp, dmg:src.dmg, at:Math.max(0.05, t/aspd-dwin()), resolved:false, dodged:false, tele:false}; });
+    const imps=td.taps.map(t=>t/aspd);
+    hits = imps.map((imp,j)=>{ const src=s.hits[j%s.hits.length]; const sp=spFromGap(j===0?9:imp-imps[j-1]);
+      return {sp, dmg:src.dmg, at:Math.max(0.05, imp-dwin(sp)), resolved:false, dodged:false, tele:false}; });
   } else {
     hits = s.hits.map(h=>({...h, at:h.at*CFG.timeScale/aspd, dmg:h.dmg, resolved:false, dodged:false, tele:false}));
+    for(let j=0;j<hits.length;j++) hits[j].sp=spFromGap(j===0?9:hits[j].at-hits[j-1].at);
   }
   atk={setIdx:idx, set:s, startT:T, animTimed, hits, approached:enemyState==='approach'&&approachMove};   // approached: walked in — jump home after (Gale's nod doesn't move)
   last2Atk=lastAtk; lastAtk=idx;
@@ -1961,18 +1969,18 @@ function updateEnemy(dt){
   if(enemyState==='telegraph'||enemyState==='active'){
     const rel=T-atk.startT;
     // 'active' must open no later than the dodge window's early edge, so the first hit's full ±dodgeWin is dodgeable.
-    enemyState = rel<atk.hits[0].at-Math.max(LD(atk.hits[0].sp)*0.15, dwinE()) ? 'telegraph':'active';   // 'active' opens no later than the anticipatory edge
+    enemyState = rel<atk.hits[0].at-Math.max(LD(atk.hits[0].sp)*0.15, dwinE(atk.hits[0].sp)) ? 'telegraph':'active';   // 'active' opens no later than the anticipatory edge
     // per-hit telegraph audio
     for(const hit of atk.hits){
       if(!hit.tele){ const lead=LD(hit.sp); if(rel>=hit.at-lead){ hit.tele=true; } }
       // resolve at window close if undodged
       if(!hit.resolved){
         const imp=hit.at;
-        if(rel>=imp+dwin()){ hit.resolved=true; landHit(hit); }
+        if(rel>=imp+dwin(hit.sp)){ hit.resolved=true; landHit(hit); }
       }
     }
     const last=atk.hits[atk.hits.length-1];
-    if(rel>=last.at+dwin()+0.02 && atk.hits.every(h=>h.resolved)){
+    if(rel>=last.at+dwin(last.sp)+0.02 && atk.hits.every(h=>h.resolved)){
       enemyState='recovery'; enemyTimer=0; recDur=atk.set.rec; vulnAction=pickVuln();
     }
     return;
@@ -2365,7 +2373,7 @@ function animateEnemy(rdt){
       want=map.attacks[(atk.setIdx||0)%map.attacks.length]; loop=false;
       if(atk.animTimed){ spd=ENEMY_ATK_SPEED[enemyIdx]||1; }                 // animation-driven: play at the boss's rate so the swing aligns with the (rescaled) taps
       else { const clip=u.clips[want];
-        if(clip){ const winLen=Math.max(0.35, atk.hits[atk.hits.length-1].at + dwin());   // attack start -> last dodge window closes
+        if(clip){ const lastH=atk.hits[atk.hits.length-1]; const winLen=Math.max(0.35, lastH.at + dwin(lastH.sp));   // attack start -> last dodge window closes
           spd=clamp(clip.duration/winLen, 0.25, 4); } }                      // stretch/squeeze so one play == the window
     }
     playEnemyClip(u, want, loop, 0.14, spd);
@@ -2374,8 +2382,8 @@ function animateEnemy(rdt){
   if(atk && atk.startT!==_fxStartT){ _fxStartT=atk.startT;
     const am=u.animMap, cl=am&&am.attacks?am.attacks[(atk.setIdx||0)%am.attacks.length]:null;
     const ty=cl&&ENEMY_FX[enemyIdx]?ENEMY_FX[enemyIdx][cl]:null;
-    if(ty) for(const h of atk.hits){ const impactT=atk.startT+h.at+dwin();   // arrive at the window CLOSE = the damage moment (the authored impact frame)
-      if(ty==='wave') waveFx.push({impactT});                                // Juggernaut force-push: real 3D projectile, not the 2D overlay
+    if(ty) for(const h of atk.hits){ const impactT=atk.startT+h.at+dwin(h.sp);   // arrive at the window CLOSE = the damage moment (the authored impact frame)
+      if(ty==='wave'||ty==='slash') waveFx.push({impactT, red:ty==='slash'});   // force-push 3D projectile (wave=gold, slash=RED), not the 2D overlay
       else enemyFx.push({type:ty, impactT, sp:h.sp, seed:rf(0,100)}); }
   }
 }
@@ -2616,13 +2624,13 @@ const enemyFx=[]; let _fxStartT=-1;
         fired from the right hand at the player, arriving exactly at the dodge-window close.
         (The 2D overlay version read as drawn-on and slow.) Cosmetic — timing reads sim T. ---- */
 const waveFx=[]; const WAVE_FLIGHT=0.55;
-function makeWaveMesh(){
+function makeWaveMesh(red){
   const grp=new THREE.Group();
   const shell=new THREE.Mesh(new THREE.SphereGeometry(0.55,18,14),
-    new THREE.MeshBasicMaterial({color:0xffd88a, transparent:true, opacity:0.5, depthWrite:false, blending:THREE.AdditiveBlending}));
+    new THREE.MeshBasicMaterial({color:red?0xff6a55:0xffd88a, transparent:true, opacity:0.5, depthWrite:false, blending:THREE.AdditiveBlending}));
   grp.add(shell); grp.userData.shell=shell;
   for(let i=0;i<3;i++){ const r=new THREE.Mesh(new THREE.TorusGeometry(0.6+i*0.34,0.05,8,28),
-      new THREE.MeshBasicMaterial({color:0xffc233, transparent:true, opacity:0.6-i*0.16, depthWrite:false, blending:THREE.AdditiveBlending}));
+      new THREE.MeshBasicMaterial({color:red?0xff2a3c:0xffc233, transparent:true, opacity:0.6-i*0.16, depthWrite:false, blending:THREE.AdditiveBlending}));
     r.position.z=-0.25-i*0.45; grp.add(r); }
   grp.visible=false; scene.add(grp);
   return grp;
@@ -2639,11 +2647,11 @@ function updateWaveFx(){
       w.to=new THREE.Vector3(playerMesh?playerMesh.position.x:PHOME.x, 1.3, playerMesh?playerMesh.position.z:PHOME.z);
     }
     if(p>=1 || state!=='combat'){                                // impact (or fight over): burst and retire
-      if(w.to) burst(w.to,'#ffd23a',14);
+      if(w.to) burst(w.to, w.red?'#ff4a3c':'#ffd23a', 14);
       if(w.mesh){ scene.remove(w.mesh); w.mesh.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material)o.material.dispose(); }); }
       waveFx.splice(i,1); continue;
     }
-    if(!w.mesh) w.mesh=makeWaveMesh();
+    if(!w.mesh) w.mesh=makeWaveMesh(w.red);
     const tn=performance.now()/1000, pulse=1+0.16*Math.sin(tn*26);
     w.mesh.visible=true;
     w.mesh.position.lerpVectors(w.from,w.to,p);
@@ -2895,8 +2903,8 @@ function syncHud(){
   { const sh=el('dodgeShield'), fillEl=el('shieldFill'); let inc=null;
     if(atk && (enemyState==='telegraph'||enemyState==='active')){ let bd=1e9;
       for(const h of atk.hits){ if(h.resolved) continue; const d=(atk.startT+h.at)-T; if(d<bd){bd=d;inc={dt:d,sp:h.sp};} } }
-    if(inc && inc.dt < LD(inc.sp)*1.05 && inc.dt > -dwin()*1.6 && blitz<CFG.blitzMax){   // shield OFF when Blitz is available (Blitz owns the corner then)
-      const app=LD(inc.sp), f=clamp(1-inc.dt/app,0,1), aligned=inc.dt<=dwinE() && inc.dt>=-dwin();   // glows through the full asymmetric window (early side first)
+    if(inc && inc.dt < LD(inc.sp)*1.05 && inc.dt > -dwin(inc.sp)*1.6 && blitz<CFG.blitzMax){   // shield OFF when Blitz is available (Blitz owns the corner then)
+      const app=LD(inc.sp), f=clamp(1-inc.dt/app,0,1), aligned=inc.dt<=dwinE(inc.sp) && inc.dt>=-dwin(inc.sp);   // glows through the full asymmetric window (early side first)
       fillEl.setAttribute('transform',`translate(50 58) scale(${f.toFixed(3)}) translate(-50 -58)`);  // a shield grows to fill the shield
       const c = inc.sp==='fast'?['#fff4b0','#ffcf1e'] : inc.sp==='med'?['#ffe0b0','#ff9a2e'] : ['#ffc9c2','#ff4d4d'];
       el('shGrad0').setAttribute('stop-color',c[0]); el('shGrad1').setAttribute('stop-color',c[1]);
@@ -3035,7 +3043,7 @@ window.__game={
   fx:()=>enemyFx.map(f=>({type:f.type, sp:f.sp, toImpact:+(f.impactT-T).toFixed(2)})),
   enemyAnimDbg:()=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.action)return '(no rigged enemy)';
     const o={ clip:u.curClip, timeScale:+u.action.timeScale.toFixed(3), clipDur:+u.action.getClip().duration.toFixed(3), state:enemyState };
-    if(atk){ o.winLen=+(atk.hits[atk.hits.length-1].at+dwin()).toFixed(3); o.effDur=+(o.clipDur/o.timeScale).toFixed(3); } return o; },
+    if(atk){ const lh=atk.hits[atk.hits.length-1]; o.winLen=+(lh.at+dwin(lh.sp)).toFixed(3); o.effDur=+(o.clipDur/o.timeScale).toFixed(3); } return o; },
   sparkTest:(v=true)=>{ sparkForce=v?1:0; return 'sparkForce='+sparkForce+(enemyMesh&&enemyMesh.userData.sparkBone?'':' (WARN: no spark bone on current enemy)'); },
   sparkTune:(dx,dy,dz,scale)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.spark)return '(no spark)'; if(dx!=null)u.spark.off=[dx,dy,dz]; if(scale!=null)u.spark.scale=scale; return {node:u.spark.node, off:u.spark.off, scale:u.spark.scale, boneFound:!!u.sparkBone}; },
   boneFix:(node,rx=0,ry=0,rz=0)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.model)return '(no enemy)'; const bone=u.model.getObjectByName(node);
