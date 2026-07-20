@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.31.1</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.31.2</div>
   </div>
 </div>
 
@@ -1229,9 +1229,13 @@ function resolveBoneFix(model,i){
 }
 // FOREARM DUPLICATE (Andrew's idea) — instead of isolating just the fused weapon (a mess: shaft/hilt are
 // split across hand+forearm bones), duplicate EVERYTHING from the elbow to the weapon tip and flip it about
-// the elbow — for BOTH arms. No fragile weapon isolation: just take every vert majority-weighted to the
-// forearm+hand bones (= the whole forearm/hand/weapon), rebuild it as a rigid SkinnedMesh weighted 100% to
-// the forearm bone (so it tracks the arm), sharing the skeleton so it aligns under the runtime scale.
+// the elbow — for BOTH arms.
+// v0.31.2 LOCKED MIRROR: the dupe used to be rigid to the forearm bone only, so every WRIST bend
+// articulated the real scythe while the mirror stayed stiff — the two blades folded over each other.
+// Now the dupe has its OWN two-bone chain: dupFore = flip-conjugate child of the real forearm,
+// dupHand = child of dupFore that COPIES the real hand's local transform every frame (animateEnemy),
+// and the verts keep their original forearm/hand weight blend remapped onto that chain. The mirrored
+// scythe articulates in exact lockstep with the real one — they can never scissor.
 const ENEMY_ARMS=[
   null,                                                            // Cliffhorn
   [ { fore:'RightForeArm', hand:'RightHand', flip:[Math.PI,0,0] }, // Gale — mirror BOTH forearms about the elbow
@@ -1241,8 +1245,11 @@ const ENEMY_ARMS=[
 function buildLimbDuplicate(model, cfg){
   let sm=null; model.traverse(o=>{ if(o.isSkinnedMesh && !sm) sm=o; });
   if(!sm) return null;
-  const fi=sm.skeleton.bones.findIndex(b=>b.name===cfg.fore); if(fi<0) return null;
-  const hi=sm.skeleton.bones.findIndex(b=>b.name===cfg.hand);
+  model.updateMatrixWorld(true);                                   // must be at BIND pose (build before any mixer tick)
+  const bones=sm.skeleton.bones;
+  const fi=bones.findIndex(b=>b.name===cfg.fore); if(fi<0) return null;
+  const hi=bones.findIndex(b=>b.name===cfg.hand);
+  const fore=bones[fi], hand=hi>=0?bones[hi]:null;
   const elbow=new THREE.Vector3().setFromMatrixPosition(sm.skeleton.boneInverses[fi].clone().invert());   // elbow = forearm bind pos
   const g=sm.geometry, pos=g.attributes.position, nor=g.attributes.normal, uv=g.attributes.uv, si=g.attributes.skinIndex, sw=g.attributes.skinWeight, idx=g.index;
   const _v=new THREE.Vector3(), _n=new THREE.Vector3(), isW=new Uint8Array(pos.count);
@@ -1260,7 +1267,11 @@ function buildLimbDuplicate(model, cfg){
     _v.fromBufferAttribute(pos,oi).applyMatrix4(M); P.push(_v.x,_v.y,_v.z);
     _n.fromBufferAttribute(nor,oi).applyMatrix3(nmat).normalize(); N.push(_n.x,_n.y,_n.z);
     if(uv) U.push(uv.getX(oi),uv.getY(oi));
-    SI.push(fi,0,0,0); SW.push(1,0,0,0); return n; };   // rigid to the forearm (elbow) bone → the mirror tracks the arm
+    // keep the original forearm/hand blend, remapped onto the dupe's own 2-bone chain
+    let wh=0; const ix=[si.getX(oi),si.getY(oi),si.getZ(oi),si.getW(oi)], wx=[sw.getX(oi),sw.getY(oi),sw.getZ(oi),sw.getW(oi)];
+    for(let k=0;k<4;k++) if(ix[k]===hi) wh+=wx[k];
+    wh=clamp(wh,0,1);
+    SI.push(0,1,0,0); SW.push(1-wh,wh,0,0); return n; };           // bone0=dupFore, bone1=dupHand
   const arr=idx?idx.array:null, tc=idx?idx.count:pos.count;
   for(let t=0;t<tc;t+=3){ const a=idx?arr[t]:t,b=idx?arr[t+1]:t+1,c=idx?arr[t+2]:t+2; if(isW[a]&&isW[b]&&isW[c]) ni.push(remap(a),remap(b),remap(c)); }
   if(ni.length<3) return null;
@@ -1271,12 +1282,25 @@ function buildLimbDuplicate(model, cfg){
   wg.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(SI,4));
   wg.setAttribute('skinWeight',new THREE.Float32BufferAttribute(SW,4));
   wg.setIndex(ni);
+  // the dupe's OWN bone chain, locked to the real arm:
+  //   dupFore = child of the real forearm with local = Bf⁻¹·M·Bf (the bind-space flip conjugated
+  //             into the forearm's frame) — rides every forearm motion, mirrored
+  //   dupHand = child of dupFore; bind local = the real hand's bind local, and animateEnemy copies
+  //             the real hand's local transform into it every frame => mirrored wrist articulation
+  const Bf=sm.skeleton.boneInverses[fi].clone().invert();
+  const Fl=new THREE.Matrix4().copy(Bf).invert().multiply(M).multiply(Bf);
+  const dupFore=new THREE.Bone(); dupFore.name=cfg.fore+'_mirror'; fore.add(dupFore);
+  Fl.decompose(dupFore.position, dupFore.quaternion, dupFore.scale);
+  const dupHand=new THREE.Bone(); dupHand.name=(cfg.hand||'hand')+'_mirror'; dupFore.add(dupHand);
+  if(hand){ dupHand.position.copy(hand.position); dupHand.quaternion.copy(hand.quaternion); dupHand.scale.copy(hand.scale); }
+  model.updateMatrixWorld(true);
   const dup=new THREE.SkinnedMesh(wg, (Array.isArray(sm.material)?sm.material[0]:sm.material).clone());
   dup.frustumCulled=false; dup.castShadow=true;
   sm.parent.add(dup);                                             // sibling of the body mesh → same matrixWorld + bind => aligns exactly
   dup.position.copy(sm.position); dup.quaternion.copy(sm.quaternion); dup.scale.copy(sm.scale);
-  dup.bind(sm.skeleton, sm.bindMatrix);
-  return dup;
+  dup.updateMatrixWorld(true);
+  dup.bind(new THREE.Skeleton([dupFore,dupHand]), dup.matrixWorld.clone());   // inverses calculated at bind
+  return {mesh:dup, hand, dupHand, dupFore};
 }
 function makeSparkTexture(){
   const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d'), C=64;
@@ -2326,6 +2350,8 @@ function animateEnemy(rdt){
       _nodQ.setFromEuler(_nodE.set(Math.max(0,Math.sin(p*Math.PI*4))*0.5,0,0));
       u.nodBone.quaternion.multiply(_nodQ);                                    // local pitch, applied after the mixer like boneFix
     }
+    if(u.armDups) for(const d of u.armDups){                                   // locked mirror: dupe wrist copies the real wrist EVERY frame
+      if(d && d.hand && d.dupHand){ d.dupHand.position.copy(d.hand.position); d.dupHand.quaternion.copy(d.hand.quaternion); d.dupHand.scale.copy(d.hand.scale); } }
     const map=u.animMap; let want=map.idle, loop=true, spd=map.idleSpd||1;   // per-boss idle pace (Cliffhorn 0.5)
     if(enemyHurtT>0 || enemyState==='stagger'){ want=map.hit; loop=false; spd=1; }
     else if(enemyState==='approach' && approachMove && u.clips['Walking']){ want='Walking'; loop=true; spd=1.15; }   // walk in (jump home keeps the idle pose — the arc sells it; Stand_Dodge read silly)
@@ -2965,8 +2991,11 @@ window.__game={
   sparkTune:(dx,dy,dz,scale)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.spark)return '(no spark)'; if(dx!=null)u.spark.off=[dx,dy,dz]; if(scale!=null)u.spark.scale=scale; return {node:u.spark.node, off:u.spark.off, scale:u.spark.scale, boneFound:!!u.sparkBone}; },
   boneFix:(node,rx=0,ry=0,rz=0)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.model)return '(no enemy)'; const bone=u.model.getObjectByName(node);
     u.boneFix=[{bone, q:new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz)), node}]; return {node, found:!!bone, e:[rx,ry,rz]}; },
+  arms:()=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.armDups) return null;
+    return u.armDups.map(d=>d?{mesh:!!d.mesh, mirroredWrist:!!(d.hand&&d.dupHand)}:null); },
   armTune:(which=0,rx=Math.PI,ry=0,rz=0)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.model)return '(no enemy)'; const arms=ENEMY_ARMS[u.armIdx]; if(!arms||!arms[which])return '(no such arm)';
-    if(u.armDups&&u.armDups[which]){ const d=u.armDups[which]; d.parent&&d.parent.remove(d); d.geometry.dispose(); }
+    if(u.armDups&&u.armDups[which]){ const d=u.armDups[which], m=d.mesh||d; m.parent&&m.parent.remove(m); m.geometry.dispose();
+      if(d.dupFore&&d.dupFore.parent) d.dupFore.parent.remove(d.dupFore); }
     const cfg={...arms[which], flip:[rx,ry,rz]};
     const nd=buildLimbDuplicate(u.model,cfg); if(u.armDups)u.armDups[which]=nd; return {which, flip:[rx,ry,rz], built:!!nd}; },
   pause:(v=true)=>{ paused=v; },
