@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.32.1</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.33.0</div>
   </div>
 </div>
 
@@ -556,8 +556,11 @@ const ENEMY_SCALE=[0.66,0.848,0.86];     // per-enemy on-screen size vs v0.13.2 
 camera.position.copy(CAM.pos); camera.lookAt(CAM.look);
 
 // lights — warm AFTERNOON key, tuned so the (dark) characters read against the field
-scene.add(new THREE.HemisphereLight(0xdff0ff, 0x6a7550, 1.1));                                    // sky + warmer ground bounce (lifts shadowed undersides)
-const sun=new THREE.DirectionalLight(0xffe3b4, 1.55); sun.position.set(-15,9.5,6); scene.add(sun); // key: lower + warmer = afternoon; the low angle stretches the ground shadows
+// Light balance v0.33.0: shadows only attenuate the SUN's share — at the old mix (sun 1.55 vs
+// 3.05 of unshadowed hemi+fill+rim) a shadowed patch kept ~66% brightness and read as nothing on
+// the busy grass. Same total energy, sun-heavier => shadows land at ~51% and actually read.
+scene.add(new THREE.HemisphereLight(0xdff0ff, 0x6a7550, 0.75));                                   // sky + warmer ground bounce (lifts shadowed undersides)
+const sun=new THREE.DirectionalLight(0xffe3b4, 2.2); sun.position.set(-15,9.5,6); scene.add(sun); // key: lower + warmer = afternoon; the low angle stretches the ground shadows
 // ground shadows: the sun is the only caster — one 2048 map over just the combat lane
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
@@ -566,8 +569,8 @@ sun.shadow.camera.near=1; sun.shadow.camera.far=80;
 sun.shadow.camera.updateProjectionMatrix();                                                       // frustum edits after construction need this or the map stays the default ±5 box
 sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.5;                                               // normalBias: skinned meshes acne badly without it
 sun.target.position.set(0,0,-5); scene.add(sun.target);                                          // aim between hero (z 2.2) and titan (z -11)
-const fill=new THREE.DirectionalLight(0xcfe0ff, 0.5);  fill.position.set(9,6,10);  scene.add(fill); // camera-side fill (lights the faces we actually see)
-const rim=new THREE.DirectionalLight(0xeaf4ff, 1.45);  rim.position.set(-5,12,-16); scene.add(rim); // back/rim — bright edge that separates the dark heroes/titans from the background
+const fill=new THREE.DirectionalLight(0xcfe0ff, 0.4);  fill.position.set(9,6,10);  scene.add(fill); // camera-side fill (lights the faces we actually see)
+const rim=new THREE.DirectionalLight(0xeaf4ff, 1.15);  rim.position.set(-5,12,-16); scene.add(rim); // back/rim — bright edge that separates the dark heroes/titans from the background
 // subtle filmic response so the extra light enriches instead of blowing out
 renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.15;
 
@@ -833,14 +836,9 @@ function buildPlayer(){
   const tipL=new THREE.PointLight(0xffd23a,0,6); tipL.position.y=TIP_Y; pike.add(tipL); g.userData.tipLight=tipL;
   // muzzle anchor — shot-origin for the bazooka flash (world-space, rides the shoot flip)
   const muzA=new THREE.Object3D(); muzA.position.y=MUZ_Y; pike.add(muzA); g.userData.muzzleAnchor=muzA;
-  // rune ring for cast (hidden until casting)
+  // rune ring for cast (kept as an object for legacy handles, never shown — Andrew v0.33.0: no rings
+  // around the staff while casting; the lance itself glows purple instead)
   const rune=new THREE.Mesh(new THREE.TorusGeometry(0.32,0.03,6,20),unlit(0xc07bff)); rune.position.y=1.0; rune.rotation.x=Math.PI/2; rune.visible=false; pike.add(rune); g.userData.rune=rune;
-  // cast radiance: purple rings that swell outward off the shaft while casting (phase-staggered loop)
-  const castRings=[];
-  for(let i=0;i<3;i++){ const r=new THREE.Mesh(new THREE.TorusGeometry(0.3,0.028,6,24),
-      unlit(0xc07bff,{transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));
-    r.rotation.x=Math.PI/2; r.position.y=1.0; r.visible=false; pike.add(r); castRings.push(r); }
-  g.userData.castRings=castRings;
 
   // grip pike into right hand
   pike.position.set(0.05,-0.8,0.1);
@@ -1229,13 +1227,10 @@ function resolveBoneFix(model,i){
 }
 // FOREARM DUPLICATE (Andrew's idea) — instead of isolating just the fused weapon (a mess: shaft/hilt are
 // split across hand+forearm bones), duplicate EVERYTHING from the elbow to the weapon tip and flip it about
-// the elbow — for BOTH arms.
-// v0.31.2 LOCKED MIRROR: the dupe used to be rigid to the forearm bone only, so every WRIST bend
-// articulated the real scythe while the mirror stayed stiff — the two blades folded over each other.
-// Now the dupe has its OWN two-bone chain: dupFore = flip-conjugate child of the real forearm,
-// dupHand = child of dupFore that COPIES the real hand's local transform every frame (animateEnemy),
-// and the verts keep their original forearm/hand weight blend remapped onto that chain. The mirrored
-// scythe articulates in exact lockstep with the real one — they can never scissor.
+// the elbow — for BOTH arms. RIGID to the forearm bone (v0.33.0: the v0.31.2 "locked mirror" experiment
+// conjugated the wrist into the flipped frame — mathematically locked, but Gale's idle wrist pose swung the
+// mirrored blade into a hidden vertical orientation behind the body: the second scythe VANISHED on screen.
+// Reverted to the rigid dup, which is the approved visible look).
 // Per-boss ATTACK clip speed. Gale 0.5: full-rate casts read frantic and the taps came too fast
 // (Andrew). Authored tap times are clip-seconds — startAttack divides by this so the dodge game
 // stretches with the clip (windows spread out; the swing still lands ON the tap frame).
@@ -1271,11 +1266,7 @@ function buildLimbDuplicate(model, cfg){
     _v.fromBufferAttribute(pos,oi).applyMatrix4(M); P.push(_v.x,_v.y,_v.z);
     _n.fromBufferAttribute(nor,oi).applyMatrix3(nmat).normalize(); N.push(_n.x,_n.y,_n.z);
     if(uv) U.push(uv.getX(oi),uv.getY(oi));
-    // keep the original forearm/hand blend, remapped onto the dupe's own 2-bone chain
-    let wh=0; const ix=[si.getX(oi),si.getY(oi),si.getZ(oi),si.getW(oi)], wx=[sw.getX(oi),sw.getY(oi),sw.getZ(oi),sw.getW(oi)];
-    for(let k=0;k<4;k++) if(ix[k]===hi) wh+=wx[k];
-    wh=clamp(wh,0,1);
-    SI.push(0,1,0,0); SW.push(1-wh,wh,0,0); return n; };           // bone0=dupFore, bone1=dupHand
+    SI.push(fi,0,0,0); SW.push(1,0,0,0); return n; };   // rigid to the forearm (elbow) bone → the mirror tracks the arm
   const arr=idx?idx.array:null, tc=idx?idx.count:pos.count;
   for(let t=0;t<tc;t+=3){ const a=idx?arr[t]:t,b=idx?arr[t+1]:t+1,c=idx?arr[t+2]:t+2; if(isW[a]&&isW[b]&&isW[c]) ni.push(remap(a),remap(b),remap(c)); }
   if(ni.length<3) return null;
@@ -1286,25 +1277,12 @@ function buildLimbDuplicate(model, cfg){
   wg.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(SI,4));
   wg.setAttribute('skinWeight',new THREE.Float32BufferAttribute(SW,4));
   wg.setIndex(ni);
-  // the dupe's OWN bone chain, locked to the real arm:
-  //   dupFore = child of the real forearm with local = Bf⁻¹·M·Bf (the bind-space flip conjugated
-  //             into the forearm's frame) — rides every forearm motion, mirrored
-  //   dupHand = child of dupFore; bind local = the real hand's bind local, and animateEnemy copies
-  //             the real hand's local transform into it every frame => mirrored wrist articulation
-  const Bf=sm.skeleton.boneInverses[fi].clone().invert();
-  const Fl=new THREE.Matrix4().copy(Bf).invert().multiply(M).multiply(Bf);
-  const dupFore=new THREE.Bone(); dupFore.name=cfg.fore+'_mirror'; fore.add(dupFore);
-  Fl.decompose(dupFore.position, dupFore.quaternion, dupFore.scale);
-  const dupHand=new THREE.Bone(); dupHand.name=(cfg.hand||'hand')+'_mirror'; dupFore.add(dupHand);
-  if(hand){ dupHand.position.copy(hand.position); dupHand.quaternion.copy(hand.quaternion); dupHand.scale.copy(hand.scale); }
-  model.updateMatrixWorld(true);
   const dup=new THREE.SkinnedMesh(wg, (Array.isArray(sm.material)?sm.material[0]:sm.material).clone());
   dup.frustumCulled=false; dup.castShadow=true;
   sm.parent.add(dup);                                             // sibling of the body mesh → same matrixWorld + bind => aligns exactly
   dup.position.copy(sm.position); dup.quaternion.copy(sm.quaternion); dup.scale.copy(sm.scale);
-  dup.updateMatrixWorld(true);
-  dup.bind(new THREE.Skeleton([dupFore,dupHand]), dup.matrixWorld.clone());   // inverses calculated at bind
-  return {mesh:dup, hand, dupHand, dupFore};
+  dup.bind(sm.skeleton, sm.bindMatrix);
+  return {mesh:dup};                                              // (hand/dupHand absent => the per-frame mirror copy no-ops)
 }
 function makeSparkTexture(){
   const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d'), C=64;
@@ -1755,7 +1733,7 @@ function setPikeForm(kind,action){
   // shoot = the weapon swings around (grip is the pivot) so the bazooka butt aims at the
   // titan's midsection (aim itself lives in animatePlayer); the tip light rides the live end
   u.tipLight.position.y=(action==='shoot')?u.muzY:u.tipY;
-  u.rune.visible=(action==='cast'); if(u.rune.visible)u.rune.material.color.setHex(col);
+  u.rune.visible=false;   // no ring during cast (v0.33.0) — the purple lance glow carries it
 }
 
 /* grade an offensive tap */
@@ -2227,7 +2205,7 @@ function animatePlayer(rdt){
   if(playerPose==='idle'){ armRX=-0.4; armRZ=0.2; tipInt.intensity=lerp(tipInt.intensity,0.2,0.1); }
   else if(playerPose==='strike'){ const p=clamp(poseT/0.18,0,1); armRX=lerp(-1.6,-2.6,smooth(p)); bodyLean=0.25*smooth(p); playerMesh.position.z=bz-0.4*smooth(p); tipInt.intensity=1.2; }
   else if(playerPose==='shoot'){ armRX=-1.3; armRZ=-0.9; bodyLean=-0.1; const rec=Math.sin(poseT*30)*Math.max(0,0.3-poseT)*2; playerMesh.position.z=PHOME.z+rec*0.3; tipInt.intensity=1.4; }
-  else if(playerPose==='cast'){ armRX=-2.2; armRZ=0; bodyLean=-0.05; u.rune.rotation.z+=rdt*3; tipInt.intensity=1.6+Math.sin(t*10)*0.3; }
+  else if(playerPose==='cast'){ armRX=-2.2; armRZ=0; bodyLean=-0.05; tipInt.intensity=1.6+Math.sin(t*10)*0.3; }
   else if(playerPose==='blitz'){ armRX=-2.0+Math.sin(t*18)*0.4; bodyLean=0.15; tipInt.intensity=2.0; }
   else if(playerPose==='dodge'){ const p=clamp(poseT/0.24,0,1); const s=Math.sin(p*Math.PI); playerMesh.position.x=PHOME.x+s*0.9; bodyLean=s*0.4; playerMesh.rotation.y=PHOME.ry-s*0.5; if(poseT>0.24)playerPose='idle'; }
   // jump back home after a strike: fast ballistic arc (overrides the walk-home lerp)
@@ -2273,14 +2251,8 @@ function animatePlayer(rdt){
     muzzleCore.material.opacity=Math.min(1,mf*1.6);
     muzzleCore.visible=mf>0;
   } else { muzzleSpark.visible=false; muzzleCore.visible=false; }
-  // ---- cast radiance: purple rings swell off the shaft; the lance's emissive surges violet ----
+  // ---- cast radiance: the lance itself glows purple (rings cut — they read too big) ----
   const castGlow = playerPose==='cast' ? 0.7+0.3*Math.sin(t*9) : 0;
-  if(u.castRings) for(let i=0;i<u.castRings.length;i++){ const r=u.castRings[i];
-    if(!castGlow){ r.visible=false; continue; }
-    const p=((t*0.85)+i/u.castRings.length)%1;
-    r.visible=true; r.scale.setScalar(0.5+p*3.4); r.position.y=0.7+p*0.9;
-    r.material.opacity=(1-p)*0.85;
-  }
   // ---- Blitz charge: cross-fade to the charged lance skin as the bar fills, with a glow that
   //      BUILDS through the transition (base lance ramps gold, charged skin brightens + over-glows).
   //      Fallback = gold emissive tint on the procedural stand-in. Ribbons live in updateBlitzRibbons ----
@@ -2293,7 +2265,7 @@ function animatePlayer(rdt){
   }
   if(u.realLance){ // base lance: violet surge while casting, else gold glow ramping with the charge
     for(const m of u.pikeMats){ if(!m.emissive) continue;
-      if(castGlow){ m.emissive.setRGB(0.75,0.4,1.5); m.emissiveIntensity=1+castGlow*1.6; }
+      if(castGlow){ m.emissive.setRGB(0.75,0.4,1.5); m.emissiveIntensity=1+castGlow*2.4; }   // stronger — it carries the cast read alone now
       else { m.emissive.setRGB(1+bf*1.1, 1+bf*0.6, 1); m.emissiveIntensity=1+bf*0.9; } }
   }
   else if(u.pikeMats){ const ge=Math.max(bf*0.85, castGlow*0.6); for(const m of u.pikeMats){ if(m.emissive) m.emissive.setRGB(ge*(castGlow?0.75:1), ge*(castGlow?0.4:0.72), ge*(castGlow?1.5:0.12)); } }
@@ -2415,7 +2387,7 @@ const CAMS={
   // low-angle hero shot (hard cut); per-foe pull-back keeps Gale's wings + the Sky Titan fully framed (screenshot-verified all 3)
   blitz:{dx:2.2, dy:0.74, dz:4.9, lookMix:0.32, lookDx:-0.3, lookH:2.0, lookHe:0.17, fov:52,
          perFoe:[null, {dx:2.4, dz:6.1, lookDx:0}, {dx:2.4, dz:6.1, lookDx:0}]},
-  intro:{d:8.0, az:0.5, y0:1.0, y1:2.0, look0:0.10, look1:0.86, rise:0.45},      // titan reveal -> glide to HOME
+  intro:{d:8.0, az:0.5, y0:2.6, y1:3.4, look0:0.10, look1:0.55, rise:0.45},      // titan reveal -> glide to HOME (v0.33.0: raised + capped up-tilt — the low shot aimed past the backdrop's top edge into blue)
   kill:{d0:1.45, d1:0.98, az:0.42, yF:0.42, lookF:0.52},                         // push-in on the dissolve (x titan height)
   victory:{dx:3.2, dy:1.15, dz:4.6, lookDx:-0.3, lookY:1.2, fov:44},
   crash:{rise:4.2, back:7.0, dur:4.0, lookY:0.5},
@@ -3000,6 +2972,7 @@ setInterval(()=>{ if(el('dbg').classList.contains('on')){ el('dbgLog').textConte
    HARNESS
    ========================================================================= */
 window.__game={
+  three:()=>({scene, renderer, camera, sun}),   // live handles for console diagnostics
   spearDbg:()=>{ const u=playerMesh&&playerMesh.userData; if(!u) return '(no player)';
     const info=m=>{ if(!m) return null; const b=new THREE.Box3().setFromObject(m);
       return {vis:m.visible, scl:+m.scale.x.toFixed(4), pos:m.position.toArray().map(v=>+v.toFixed(2)), bb:[b.min.y,b.max.y].map(v=>+v.toFixed(2))}; };
