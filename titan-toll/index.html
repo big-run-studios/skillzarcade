@@ -311,7 +311,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.48.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.48.1</div>
   </div>
 </div>
 
@@ -347,7 +347,7 @@ const CFG={
   playerHP:1000,          // x10 (v0.37.0, with 10x enemy damage — bigger numbers, same ratio)
   enemyDmgScale:[5.5,6.8,9.6],    // per-enemy incoming-damage multiplier x10 (E1 forgiving -> E3 lethal)
   cds:{shoot:4, cast:8, strike:13},  // v0.46: no action bar — each attack on its own flat cooldown (fast/weak -> slow/strong)
-  introDur:6.1,            // hero intro stance plays FULLY before battle starts (Axe_Stance clip length)
+  introDur:7.3,            // intro gate: reveal -> pull-back -> VISIBLE sky-fall -> stance (v0.48.1; was 6.1 = raw clip length — grew so the fall happens on camera and the stance still plays ~1.3x)
   // dodge — asymmetric: anticipatory dodging (before the hit) is natural, so the early side is wider
   dodgeWinEarly:0.32,      // s BEFORE impact that still saves (anticipatory)
   dodgeWin:0.20,           // s AFTER impact that still saves (reaction)
@@ -2380,8 +2380,9 @@ function animatePlayer(rdt){
   // intro sky-fall (cosmetic): drop straight in from off-screen on the idle pose, land EXACTLY as the
   // stance begins (stanceAt), smoke ring on touchdown. Accelerating fall = 1-p^2.
   if(state==='combat' && introT>0){
-    const e=CFG.introDur-introT, at=CAMS.intro.stanceAt;
-    if(e<at){ const p=clamp(e/at,0,1); playerMesh.position.y=CAMS.intro.fallH*(1-p*p); _introLanded=false; }
+    const C=CAMS.intro, e=CFG.introDur-introT, at=C.stanceAt, fs=at-C.fallDur;   // fall only AFTER the camera pulls back (Andrew: it was unseen behind the reveal)
+    if(e<fs){ playerMesh.position.y=C.fallH; _introLanded=false; }               // hanging off-screen above the frame until the drop
+    else if(e<at){ const p=clamp((e-fs)/C.fallDur,0,1); playerMesh.position.y=C.fallH*(1-p*p); _introLanded=false; }
     else { playerMesh.position.y=0;
       if(!_introLanded){ _introLanded=true; if(e-at<0.6) spawnLandPuff(playerMesh.position.x, playerMesh.position.z); } }   // no late puff when the harness step()s past the intro
   }
@@ -2596,7 +2597,9 @@ const CAMS={
   // titan reveal -> pull back -> HOME hold while the stance plays (v0.45: reveal shortened — Andrew never saw the
   // stance; hero idles until stanceAt, then Axe_Stance runs at stanceSpeed to end exactly with the 6.1s gate).
   // y0/y1/look1 raised per v0.33.0 — the low shot aimed past the backdrop's top edge into blue.
-  intro:{d:8.0, az:0.5, y0:2.6, y1:3.4, look0:0.10, look1:0.55, rise:0.20, settle:0.38, stanceAt:1.22, stanceSpeed:1.25, fallH:16},
+  // v0.48.1 timeline (D=7.3): reveal 0-1.22s -> pull-back home by ~2.15s -> sky-fall 1.85-2.6s (ON camera,
+  // lands ~0.45s after the camera settles) -> stance 2.6-7.3s at 1.3x. Hero hangs off-screen (fallH) until the fall.
+  intro:{d:8.0, az:0.5, y0:2.6, y1:3.4, look0:0.10, look1:0.55, rise:0.167, settle:0.295, stanceAt:2.6, stanceSpeed:1.3, fallH:18, fallDur:0.75},
   kill:{d0:1.45, d1:0.98, az:0.42, yF:0.42, lookF:0.52},                         // push-in on the dissolve (x titan height)
   victory:{dx:2.2, dy:1.3, dz:5.8, lookDx:0, lookY:1.5, fov:44},   // v0.46: axis-aligned tighter angle — the old 37°-off view caught the backdrop's edge; hero now turns to face it
   crash:{rise:2.6, back:6.0, dur:4.0, lookY:2.0},     // v0.47: flatter pitch — the steep look-down filled the frame with lawn and caught the terrain seam at the top

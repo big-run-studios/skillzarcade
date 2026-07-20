@@ -350,8 +350,9 @@ reads sim state, never writes it. Four laws:
 4. **Additive layers only** — dolly-punch spring (hits), breathing sway, legacy shake; all small,
    all decaying.
 
-Shots: **intro** titan reveal (v0.45: reveal shortened, hero idles through it, the stance starts
-WITH the pull-back at 1.25x and ends exactly on the 6.1s gate) · **home** + tighten drifts (telegraph / vuln window / rage phase / at-risk
+Shots: **intro** titan reveal -> pull-back -> VISIBLE sky-fall -> stance (v0.48.1: gate grew to 7.3s;
+the hero drops in from off-screen AFTER the camera settles, lands into Axe_Stance at 1.3x, smoke
+ring on touchdown; pike rotates upright across 50-75% of the gate) · **home** + tighten drifts (telegraph / vuln window / rage phase / at-risk
 bank, slew-capped, total ≤ 0.12) · **blitz** hard-cut low-angle hero shot, static through the
 combo (per-foe pull-back in `CAMS.blitz.perFoe` keeps Gale's wings + the Sky Titan framed) ·
 **kill** cut-in push on the death dissolve · **victory / crash / cashout** end shots ·
