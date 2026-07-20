@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.39.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.40.0</div>
   </div>
 </div>
 
@@ -1022,6 +1022,16 @@ function attachSpear(){
   hold.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; if(o.material&&o.material.emissive&&!mats.includes(o.material)) mats.push(o.material); } });
   if(mats.length){ u.pikeMats=mats; u.realLance=true; }   // realLance: mats have an AUTHORED emissive map (default white/1) — drive intensity, don't stomp
   pike.add(hold); spearModel=hold;
+  // cast HALO: two inflated additive back-face copies of the lance — a violet glow AROUND the
+  // weapon while casting (texture-emissive washed the lance itself pale; Andrew wants an aura)
+  u.castShells=[];
+  for(const [inf,op0] of [[1.10,0.55],[1.24,0.28]]){
+    const shell=hold.clone(true);
+    const mat=new THREE.MeshBasicMaterial({color:0xa050ff, transparent:true, opacity:0, side:THREE.BackSide, blending:THREE.AdditiveBlending, depthWrite:false});
+    shell.traverse(o2=>{ if(o2.isMesh){ o2.material=mat; o2.castShadow=false; } });
+    shell.scale.multiplyScalar(inf); shell.visible=false;
+    pike.add(shell); u.castShells.push({mesh:shell, mat, op0});
+  }
   attachSpearBlitz();
 }
 // blitz skin — the same lance with Andrew's charged texture, stacked exactly on the base model
@@ -1213,9 +1223,9 @@ const ENEMY_FX=[
 // EYE GLOWS — two red embers on each boss's face (menace; brighten with rage).
 // {fx: half eye spacing, fy: height, fz: forward} as fractions of the boss height h.
 const ENEMY_EYE=[
-  {fx:0.030, fy:0.845, fz:0.055, s:0.055},   // Cliffhorn
-  {fx:0.026, fy:0.870, fz:0.045, s:0.045},   // Gale
-  {fx:0.024, fy:0.875, fz:0.045, s:0.045},   // Sky Titan
+  {fx:0.024, fy:0.853, fz:0.090, s:0.065},   // Cliffhorn — embedded in the visor (tuned live via __game.eyeTune 2026-07-20)
+  null,                                       // Gale — no eye glows (Andrew)
+  null,                                       // Sky Titan — no eye glows (Andrew)
 ];
 // TAP-WINDOW SPARKLE — a character-anchored twinkle on each boss's signature body part,
 // lit only while the dodge tap window is open (brightest at the perfect-tap instant).
@@ -1470,9 +1480,9 @@ function buildEnemyGLB(i){
   // two glowing EYES (menace read; replaces the old rage core-light that hot-spotted the
   // elbows/pelvis): red additive sprites parented to the HEAD BONE so they ride every
   // animation. Position estimated in enemy-group space and converted to bone-local at bind.
-  { const E=ENEMY_EYE[i]||{fx:0.03,fy:0.85,fz:0.05,s:0.05};
+  { const E=ENEMY_EYE[i];
     const nb=g.userData.nodBone;
-    if(nb){
+    if(E && nb){
       const eyeGlows=[]; g.updateMatrixWorld(true);
       const ws=new THREE.Vector3(); nb.getWorldScale(ws);
       for(const sgn of [-1,1]){
@@ -1973,13 +1983,17 @@ function startAttack(idx){
   // WINDOW RULE (v0.36.0): each tap gets the LARGEST of the 3 window classes that fits the gap
   // since the previous tap (first tap always 'slow' = max). Class scales window AND telegraph lead.
   const spFromGap=(gap)=> gap>=1.0 ? 'slow' : gap>=0.55 ? 'med' : 'fast';
+  // PROJECTILE attacks (clip mapped in ENEMY_FX): the authored tap marks the FIRE frame, not the
+  // dodge moment — the timing game shifts by the flight time so the window sits on ARRIVAL
+  // (v0.40.0, Andrew). The projectile launches exactly at the authored fire frame.
+  const flight = (ENEMY_FX[enemyIdx] && clip && ENEMY_FX[enemyIdx][clip]) ? 0.55 : 0;
   if(td && td.taps && td.taps.length){
     animTimed=true;
-    const imps=td.taps.map(t=>t/aspd);
+    const imps=td.taps.map(t=>t/aspd + flight);
     hits = imps.map((imp,j)=>{ const src=s.hits[j%s.hits.length]; const sp=spFromGap(j===0?9:imp-imps[j-1]);
       return {sp, dmg:src.dmg, at:Math.max(0.05, imp-dwin(sp)), resolved:false, dodged:false, tele:false}; });
   } else {
-    hits = s.hits.map(h=>({...h, at:h.at*CFG.timeScale/aspd, dmg:h.dmg, resolved:false, dodged:false, tele:false}));
+    hits = s.hits.map(h=>({...h, at:h.at*CFG.timeScale/aspd + flight, dmg:h.dmg, resolved:false, dodged:false, tele:false}));
     for(let j=0;j<hits.length;j++) hits[j].sp=spFromGap(j===0?9:hits[j].at-hits[j-1].at);
   }
   atk={setIdx:idx, set:s, startT:T, animTimed, hits, approached:enemyState==='approach'&&approachMove};   // approached: walked in — jump home after (Gale's nod doesn't move)
@@ -2305,11 +2319,11 @@ function animatePlayer(rdt){
     u.muzzleFlashT-=rdt; mf=clamp(u.muzzleFlashT/MUZ_FLASH,0,1);
     u.muzzleAnchor.getWorldPosition(_muzV);
     muzzleSpark.position.copy(_muzV);
-    muzzleSpark.scale.setScalar((u.muzzleFlashBig||1)*(3.4+1.8*(1-mf)));
+    muzzleSpark.scale.setScalar((u.muzzleFlashBig||1)*(1.7+0.9*(1-mf)));
     muzzleSpark.material.opacity=mf;
     muzzleSpark.visible=mf>0;
     muzzleCore.position.copy(_muzV);
-    muzzleCore.scale.setScalar((u.muzzleFlashBig||1)*(1.5+0.5*(1-mf)));
+    muzzleCore.scale.setScalar((u.muzzleFlashBig||1)*(0.75+0.25*(1-mf)));
     muzzleCore.material.opacity=Math.min(1,mf*1.6);
     muzzleCore.visible=mf>0;
   } else { muzzleSpark.visible=false; muzzleCore.visible=false; }
@@ -2325,15 +2339,11 @@ function animatePlayer(rdt){
     const br = 1 + bf*0.45;                                       // and the charged skin's albedo brightens as it builds
     for(const m of u.spearBlitzMats){ m.opacity=bf; m.emissiveIntensity=ei; m.color.setScalar(br); }
   }
-  if(u.realLance){ // base lance: violet surge while casting, else gold glow ramping with the charge
+  if(u.realLance){ // base lance: gold glow ramps with the charge (the cast reads via the outer HALO shells below)
     for(const m of u.pikeMats){ if(!m.emissive) continue;
-      if(castGlow){                              // WHOLE-LANCE violet: the authored emissive map is ~black
-        if(!m._castMode){ m._castMode=true; m._em=m.emissiveMap; m.emissiveMap=null; m.needsUpdate=true; }   // outside its accents — bypass it while casting
-        m.emissive.setRGB(0.62,0.30,1.25); m.emissiveIntensity=0.9+castGlow*1.6; }
-      else {
-        if(m._castMode){ m._castMode=false; m.emissiveMap=m._em; m.needsUpdate=true; }
-        m.emissive.setRGB(1+bf*1.1, 1+bf*0.6, 1); m.emissiveIntensity=1+bf*0.9; } }
+      m.emissive.setRGB(1+bf*1.1, 1+bf*0.6, 1); m.emissiveIntensity=1+bf*0.9; }
   }
+  if(u.castShells) for(const cs of u.castShells){ cs.mesh.visible=castGlow>0.01; cs.mat.opacity=castGlow*cs.op0; }   // violet aura AROUND the lance while casting
   else if(u.pikeMats){ const ge=Math.max(bf*0.85, castGlow*0.6); for(const m of u.pikeMats){ if(m.emissive) m.emissive.setRGB(ge*(castGlow?0.75:1), ge*(castGlow?0.4:0.72), ge*(castGlow?1.5:0.12)); } }
   u.tipLight.intensity = Math.max(tipInt.intensity, bf*2.2 + (bf>=1?0.9+Math.sin(t*11)*0.5:0), mf*8);
 
@@ -3105,6 +3115,14 @@ window.__game={
   sparkTune:(dx,dy,dz,scale)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.spark)return '(no spark)'; if(dx!=null)u.spark.off=[dx,dy,dz]; if(scale!=null)u.spark.scale=scale; return {node:u.spark.node, off:u.spark.off, scale:u.spark.scale, boneFound:!!u.sparkBone}; },
   boneFix:(node,rx=0,ry=0,rz=0)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.model)return '(no enemy)'; const bone=u.model.getObjectByName(node);
     u.boneFix=[{bone, q:new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz)), node}]; return {node, found:!!bone, e:[rx,ry,rz]}; },
+  eyeTune:(fx,fy,fz,sc)=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.eyeGlows||!u.nodBone) return '(no eyes)';
+    const h=u.height, nb=u.nodBone; enemyMesh.updateMatrixWorld(true);
+    const ws=new THREE.Vector3(); nb.getWorldScale(ws);
+    u.eyeGlows.forEach((sp,k)=>{ const sgn=k===0?-1:1;
+      const pg=new THREE.Vector3(sgn*fx*h, fy*h, fz*h);
+      enemyMesh.localToWorld(pg); nb.worldToLocal(pg); sp.position.copy(pg);
+      if(sc!=null) sp.scale.setScalar(sc*h/(ws.x||1)); });
+    return JSON.stringify({fx,fy,fz,sc}); },
   arms:()=>{ const u=enemyMesh&&enemyMesh.userData; if(!u||!u.armDups) return null;
     return u.armDups.map(d=>{ if(!d||!d.mesh) return null;
       d.mesh.computeBoundingBox(); const bb=d.mesh.boundingBox.clone().applyMatrix4(d.mesh.matrixWorld);
