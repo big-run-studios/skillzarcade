@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.40.2</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.41.0</div>
   </div>
 </div>
 
@@ -1238,7 +1238,7 @@ const ENEMY_SPARK=[
 // Gale's scythe is fused to the skinned mesh on RightHand (a leaf bone) and hangs pointing down; rotate it up.
 const ENEMY_BONEFIX=[
   null,                                    // Cliffhorn
-  null,                                    // Gale — arm mirroring lives in ENEMY_ARMS / buildLimbDuplicate now
+  [ { node:'RightForeArm', e:[Math.PI,0,0] } ],   // Gale — scythe forearm rotated 180° about the elbow (replaces the mirrored-forearm dup)
   null,                                    // Sky Titan
 ];
 function resolveBoneFix(model,i){
@@ -1257,8 +1257,7 @@ function resolveBoneFix(model,i){
 const ENEMY_ATK_SPEED=[1, 0.75, 1];   // Gale 0.5 -> 0.75 (v0.40.2): the projectile-timing fix made room to speed his casts back up 50%
 const ENEMY_ARMS=[
   null,                                                            // Cliffhorn
-  [ { fore:'RightForeArm', hand:'RightHand', flip:[Math.PI,0,0] }, // Gale — mirror BOTH forearms about the elbow
-    { fore:'LeftForeArm',  hand:'LeftHand',  flip:[Math.PI,0,0] } ],
+  null,                                                            // Gale — dups removed (v0.41.0): the doubled scythe read as clutter; the real forearm is boneFix-rotated 180° instead
   null,                                                            // Sky Titan
 ];
 function buildLimbDuplicate(model, cfg){
