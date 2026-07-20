@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.37.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.38.0</div>
   </div>
 </div>
 
@@ -390,6 +390,7 @@ const CFG={
   approachT:0.9,           // Juggernaut walk-in time before a MELEE attack (the dodge game starts on arrival)
   galePreT:2.0,            // Gale's pre-attack tell: two slow head nods (the dodge game starts after)
   heroDashT:0.63,          // hero run-in time before a strike = the Running clip's loop length (travel spans it exactly)
+  offLeadIn:0.75,          // get-ready beat: the timing UI animates in for this long before target 1 goes live
 };
 
 /* action base damage units + per-action character */
@@ -970,7 +971,7 @@ function updateHero(rdt){
   let want;
   if(heroDead) want=HERO_CLIP.dead;                              // death
   else if(state==='result') want=HERO_CLIP.victory;             // cash-out / full clear
-  else if(off){ want= off._cued ? (HERO_CLIP[off.action]||HERO_CLIP.idle) : 'Running'; heroRollT=0; }  // dash in, then attack (blitz interrupt cancels a roll)
+  else if(off){ want= off._cued ? (HERO_CLIP[off.action]||HERO_CLIP.idle) : (off.action==='strike'?'Running':HERO_CLIP.idle); heroRollT=0; }  // dash/ready-beat, then attack (blitz interrupt cancels a roll)
   else if(heroRollT>0) want=HERO_CLIP.dodge;                    // mid roll — let the full clip run
   else if(introT>0) want=HERO_CLIP.intro;                       // pre-battle stance (sim-gated, plays fully)
   else if(heroOneShotT>0) want=heroOneShot;                     // hit flinch
@@ -1727,12 +1728,12 @@ function beginOffense(action){
   }
   if(action==='cast') castStreak++; else castStreak=0;
   if(action!=='blitz'){ const cd=abilityCd(level); cooldown[action]=cd; cooldownMax[action]=cd||1; }  // start the cooldown (L2+)
-  // strike = melee: run halfway to the enemy first; the timing game starts ONLY on arrival
+  // pre-roll: strike runs in first (heroDashT), then EVERY action gets an offLeadIn beat where
+  // the timing UI animates in before target 1 goes live — no surprise starts (Andrew v0.38.0).
   const dash = action==='strike' ? CFG.heroDashT : 0;
-  off.startT=T+dash; off._cued=!dash;
+  off.startT=T+dash+CFG.offLeadIn; off._cued=false;   // the swing cue fires on arrival (updateHero)
   playerPose = dash?'dash':action; poseT=0;
   setPikeForm(off.targets[0]?off.targets[0].k:action, action);
-  if(!dash) heroAttackCue(action, off.targets[0]?off.targets[0].t:dur);   // impact frame lands on target 1 (blitz: loops via updateHero)
   sfx('tele');
 }
 
@@ -2850,7 +2851,9 @@ function overlayDraw(){
   // dodge is now the fill-up shield button in the lower-right (updated in syncHud), not an on-hero cue
 
   // offensive timing targets (thin ring -> thick success band; only the NEXT one is "live")
-  if(off && T>=off.startT-0.05){   // rings appear only once the strike run-in has arrived
+  if(off && T>=off.startT-CFG.offLeadIn-0.02){   // visible through the get-ready beat (after the strike run-in)
+    const introF=smooth(clamp(1-(off.startT-T)/CFG.offLeadIn,0,1));
+    if(introF<1) octx.filter='opacity('+Math.round(25+introF*75)+'%)';   // whole timing UI fades in (filter stacks with the internal alphas)
     let firstUnres=-1; for(let i=0;i<off.targets.length;i++){ if(!off.targets[i].resolved){firstUnres=i;break;} }
     // hi-vis canvas variants of the action palette (hotter/more saturated than the :root DOM colors — these fight the field art)
     const col= off.action==='strike'?'#ff2e55': off.action==='shoot'?'#17e9ff': off.action==='cast'?'#c26bff':'#ffce1e';
@@ -2870,7 +2873,12 @@ function overlayDraw(){
       const shape = off.action==='blitz' ? shapeForKind(tg.k) : actionShape(off.action);
       drawTiming(shape,s.x,s.y,R0,(off.startT+tg.t)-T,lvGood(off.level),CFG.perfectWin,0.85*CFG.timeScale/closureSpeed(off.level),col,120,sym,i===firstUnres);
       if(off.action==='cast'||off.action==='blitz'){ octx.save(); octx.font='700 11px Orbitron,sans-serif'; octx.textAlign='center'; octx.globalAlpha=i===firstUnres?0.9:0.4; octx.fillStyle='#fff'; octx.fillText((i+1),s.x,s.y+R0+14); octx.restore(); }
+      if(i===firstUnres && T<off.startT){   // get-ready callout above the first target while the UI animates in
+        octx.save(); octx.font='800 15px Orbitron,sans-serif'; octx.textAlign='center'; octx.globalAlpha=0.55+0.35*Math.sin(performance.now()/120);
+        octx.lineWidth=3; octx.strokeStyle='rgba(0,0,0,.6)'; octx.strokeText('READY',s.x,s.y-R0-24);
+        octx.fillStyle='#fff'; octx.fillText('READY',s.x,s.y-R0-24); octx.restore(); }
     }
+    octx.filter='none';
   }
 
   // floaters
