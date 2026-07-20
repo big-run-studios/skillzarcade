@@ -309,7 +309,7 @@
       <div id="dbgLog"></div>
     </div>
 
-    <div id="brand">CRASHARCADE · TITAN GUARD v0.41.0</div>
+    <div id="brand">CRASHARCADE · TITAN GUARD v0.41.1</div>
   </div>
 </div>
 
@@ -1238,7 +1238,7 @@ const ENEMY_SPARK=[
 // Gale's scythe is fused to the skinned mesh on RightHand (a leaf bone) and hangs pointing down; rotate it up.
 const ENEMY_BONEFIX=[
   null,                                    // Cliffhorn
-  [ { node:'RightForeArm', e:[Math.PI,0,0] } ],   // Gale — scythe forearm rotated 180° about the elbow (replaces the mirrored-forearm dup)
+  [ { node:'RightForeArm', e:[0,Math.PI,0] } ],   // Gale — scythe forearm ROLLED 180° (Y = along the bone; X folded the arm on itself, Z slings it across the back)
   null,                                    // Sky Titan
 ];
 function resolveBoneFix(model,i){
