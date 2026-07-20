@@ -334,7 +334,7 @@ set multiplier, heal, god-mode, and a live **timing log** (per-input error in ms
 `cashout()`, `hitLog()`, `slow(f)`, plus framing helpers (`setCam/setFov/setPlayerHome/…`).
 Same seed + same input sequence ⇒ identical enemy order, upgrade order, and crit rolls.
 
-## 11. Battle camera (v0.31.0)
+## 11. Battle camera (v0.31.0, expanded v0.45.0)
 
 State-driven **camera director** (`CAMS` literal + `directCamera()` in `frame()`), cosmetic only —
 reads sim state, never writes it. Four laws:
@@ -348,11 +348,21 @@ reads sim state, never writes it. Four laws:
 4. **Additive layers only** — dolly-punch spring (hits), breathing sway, legacy shake; all small,
    all decaying.
 
-Shots: **intro** titan reveal (look climbs the body, then one pull-back settles on HOME as
-`Axe_Stance` ends) · **home** + tighten drifts (telegraph / vuln window / rage phase / at-risk
+Shots: **intro** titan reveal (v0.45: reveal shortened, hero idles through it, the stance starts
+WITH the pull-back at 1.25x and ends exactly on the 6.1s gate) · **home** + tighten drifts (telegraph / vuln window / rage phase / at-risk
 bank, slew-capped, total ≤ 0.12) · **blitz** hard-cut low-angle hero shot, static through the
 combo (per-foe pull-back in `CAMS.blitz.perFoe` keeps Gale's wings + the Sky Titan framed) ·
-**kill** cut-in push on the death dissolve · **victory / crash / cashout** end shots.
+**kill** cut-in push on the death dissolve · **victory / crash / cashout** end shots ·
+**attack** (v0.45) glide low/screen-left of PHOME on commit, static through the timing game,
+glide back out on resolve (per-foe fixups for Gale's span + Sky's halo) · **imposing** (v0.45,
+melee wind-ups = Juggernaut only) dolly toward the titan on the walk-in, settle low-right of the
+hero before the tap window — verified with him at MID_PT. Projectile wind-ups stay in standard
+framing with a stronger push. **Cinema budget:** attack/imposing fire at most 2x per rolling 15s
+(sticky per beat); blitz/intro/kill/endgame exempt.
+
+Ring closure is FLAT 1.25x at every level as of v0.45 (`CFG.closureBase`; `closurePerLv` removed —
+level-ups grant damage and grade windows, not speed), giving predictable first-target leads the
+attack-shot glide can rely on. This supersedes the "+25% ring-closure speed per level" line in §7.
 
 Harness: `camOn(v)`, `camShot(name[,t])`, `camTight(v)`, `camDbg()`, `camCheck(margin)`
 (projects both real bounding boxes against the live camera; raw boxes overhang the visible
