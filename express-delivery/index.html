@@ -181,7 +181,7 @@
     <div class="tag">Steer 🛞 &nbsp;Throw 📦 &nbsp;Smash the block 💥 &nbsp;Cash out 💰</div>
     <button id="startBtn">START ROUTE</button>
     <div id="menuBest"></div>
-    <div class="brand" id="brand">EXPRESS DELIVERY v0.1.2 · BIG RUN STUDIOS</div>
+    <div class="brand" id="brand">EXPRESS DELIVERY v0.1.3 · BIG RUN STUDIOS</div>
   </div>
 
   <div id="over">
@@ -199,7 +199,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.2',
+  ver:'0.1.3',
   // --- vehicle
   baseSpeed:8.5,          // forward m/s at run start
   speedGrowth:0.075,      // m/s gained per second
@@ -257,6 +257,7 @@ const CFG = {
   CH:26,                  // chunk length (one house lot per chunk per side)
   roadHalf:3.6, walkIn:3.8, walkOut:6.0, houseX:12.8,
   // --- feel
+  camYawDeg:22.5,         // run camera orbits this far around the hero toward the delivery (right) side
   slowMoScale:0.35, slowMoTime:0.5,
   shakeDecay:5.5,
 };
@@ -1339,7 +1340,9 @@ function updateCamera(dt){
     tx=veh.x+Math.sin(a)*7.5; ty=3.6; tz=veh.z+Math.cos(a)*7.5;
     lx=veh.x; ly=1.2; lz=veh.z;
   } else {
-    tx=veh.x; ty=7.2+veh.y*0.6; tz=veh.z+9.0;
+    // orbit the camera around the hero toward the right side (where the targets are), hero stays centered
+    const yaw=CFG.camYawDeg*Math.PI/180, camD=9.0;
+    tx=veh.x-Math.sin(yaw)*camD; ty=7.2+veh.y*0.6; tz=veh.z+Math.cos(yaw)*camD;
     lx=veh.x+veh.vx*0.35; ly=0.9+veh.y*0.4; lz=veh.z-1;   // hero sits mid-screen; world behind him stays visible so throws can be watched
   }
   if(S.state==='menu'){
