@@ -181,7 +181,7 @@
     <div class="tag">Steer 🛞 &nbsp;Throw 📦 &nbsp;Smash the block 💥 &nbsp;Cash out 💰</div>
     <button id="startBtn">START ROUTE</button>
     <div id="menuBest"></div>
-    <div class="brand" id="brand">EXPRESS DELIVERY v0.1.0 · BIG RUN STUDIOS</div>
+    <div class="brand" id="brand">EXPRESS DELIVERY v0.1.1 · BIG RUN STUDIOS</div>
   </div>
 
   <div id="over">
@@ -199,7 +199,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.0',
+  ver:'0.1.1',
   // --- vehicle
   baseSpeed:8.5,          // forward m/s at run start
   speedGrowth:0.075,      // m/s gained per second
@@ -1326,13 +1326,20 @@ function updateCamera(dt){
     tx=veh.x+Math.sin(a)*7.5; ty=3.6; tz=veh.z+Math.cos(a)*7.5;
     lx=veh.x; ly=1.2; lz=veh.z;
   } else {
-    tx=veh.x*0.5+1.1; ty=6.4+veh.y*0.6; tz=veh.z+8.6;
-    lx=veh.x*0.55+1.3; ly=1.1+veh.y*0.4; lz=veh.z-8;
+    tx=veh.x; ty=6.4+veh.y*0.6; tz=veh.z+8.6;
+    lx=veh.x+veh.vx*0.35; ly=1.1+veh.y*0.4; lz=veh.z-9;   // lead the look into the turn
   }
-  const k=Math.min(1,6*dt);
-  camera.position.x=lerp(camera.position.x,tx,k);
-  camera.position.y=lerp(camera.position.y,ty,k);
-  camera.position.z=lerp(camera.position.z,tz,k);
+  if(S.state==='menu'){
+    const k=Math.min(1,6*dt);
+    camera.position.x=lerp(camera.position.x,tx,k);
+    camera.position.y=lerp(camera.position.y,ty,k);
+    camera.position.z=lerp(camera.position.z,tz,k);
+  } else {
+    // hard-lock to the hero (no forward lag), light smoothing on x only
+    camera.position.x=lerp(camera.position.x,tx,Math.min(1,10*dt));
+    camera.position.y=lerp(camera.position.y,ty,Math.min(1,10*dt));
+    camera.position.z=tz;
+  }
   if(S.shake>0.01){
     camera.position.x+=rnd(-1,1)*S.shake*0.18;
     camera.position.y+=rnd(-1,1)*S.shake*0.14;
@@ -1362,6 +1369,7 @@ function updateHUD(){
   const cd=1-clamp(veh.cd/CFG.cooldown,0,1);
   $('cdRing').style.setProperty('--cd',cd);
   $('throwBtn').classList.toggle('cooling',veh.cd>0);
+  $('wheelSvg').style.transform='rotate('+(veh.wheel*135)+'deg)';   // wheel visibly turns with the drag
 }
 
 /* ==================================================== states */
@@ -1450,7 +1458,7 @@ function frame(now){
 
 /* ==================================================== resize / boot */
 function resize(){
-  renderer.setSize(innerWidth,innerHeight,false);
+  renderer.setSize(innerWidth,innerHeight);   // let three set the canvas CSS size too — inset:0 alone doesn't stretch a canvas
   camera.aspect=innerWidth/innerHeight;
   camera.fov=innerWidth>innerHeight?52:62;                  // keep the street readable in landscape too
   camera.updateProjectionMatrix();
