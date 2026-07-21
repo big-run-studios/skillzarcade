@@ -91,7 +91,7 @@
   #throwBtn .ic{font-size:clamp(30px,9vw,42px);line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));}
   #throwBtn .tl{font-size:clamp(11px,3vw,14px);text-shadow:0 1px 3px rgba(0,0,0,.5);}
   #throwBtn.cooling{filter:saturate(.45) brightness(.8);}
-  /* next-up preview: what the next throw will hurl */
+  /* next-up preview: the actual 3D object spins like a statue in this window */
   #nextUp{position:absolute;right:clamp(12px,3.6vw,28px);
     bottom:calc(clamp(14px,3.5vw,30px) + clamp(96px,26vw,132px) + 10px + env(safe-area-inset-bottom));
     max-width:44vw;pointer-events:none;display:flex;align-items:center;gap:6px;
@@ -100,6 +100,11 @@
     text-shadow:0 1px 3px rgba(0,0,0,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #nextUp .nu{font-size:15px;line-height:1;}
   #nextUp.empty{border-color:rgba(255,110,90,.7);color:#ffb0a0;}
+  #prev3d{position:absolute;right:clamp(18px,4.5vw,36px);
+    bottom:calc(clamp(14px,3.5vw,30px) + clamp(96px,26vw,132px) + 48px + env(safe-area-inset-bottom));
+    width:clamp(72px,20vw,100px);height:clamp(72px,20vw,100px);pointer-events:none;
+    border:2px solid rgba(255,194,51,.65);border-radius:16px;
+    box-shadow:0 4px 14px rgba(0,0,0,.35),inset 0 0 18px rgba(0,0,0,.25);}
   #cdRing{position:absolute;inset:-5px;border-radius:50%;pointer-events:none;
     background:conic-gradient(rgba(255,255,255,.95) calc(var(--cd,1)*360deg), rgba(0,0,0,.38) 0);
     -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 6px),#000 calc(100% - 5px));
@@ -183,6 +188,7 @@
         <circle cx="50" cy="14" r="5.5" fill="#ffc233"/>
       </svg>
     </div>
+    <div id="prev3d"></div>
     <div id="nextUp"><span class="nu">📦</span><span id="nextUpTxt">ENVELOPE · 5 LEFT</span></div>
     <button id="throwBtn"><span class="ic">📦</span><span class="tl">THROW</span><div id="cdRing"></div></button>
   </div>
@@ -197,7 +203,7 @@
     <div class="tag">Drag anywhere to steer 🛞 &nbsp;Double-tap to throw 📦 &nbsp;Cash out 💰</div>
     <button id="startBtn">START ROUTE</button>
     <div id="menuBest"></div>
-    <div class="brand" id="brand">EXPRESS DELIVERY v0.3.4 · BIG RUN STUDIOS</div>
+    <div class="brand" id="brand">EXPRESS DELIVERY v0.3.5 · BIG RUN STUDIOS</div>
   </div>
 
   <div id="over">
@@ -215,7 +221,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.3.4',
+  ver:'0.3.5',
   // --- vehicle
   baseSpeed:8.5,          // forward m/s at run start
   speedGrowth:0.09,       // m/s gained per second
@@ -237,6 +243,7 @@ const CFG = {
   throwFwd:1.0,           // small fixed forward push
   throwYawDeg:22.5,       // throw is angled this far forward of pure-right — landings resolve in view
   pkgGravity:12,
+  airPts:100,             // points per second of airtime
   // --- ramps
   rampBoost:1.45,         // vy = speed * slope * boost
   rampEveryChunks:5,      // one ramp roughly every N chunks (after rampStartChunk)
@@ -1637,13 +1644,12 @@ function toss(){
   S.shake=Math.min(S.shake+0.06+veh.tier*0.015,0.5);
   return true;
 }
-function scoreDelivery(pkg,zone){
-  const t=pkg.target;
-  if(!t||t.scored||t.missed) return;
+function scoreDelivery(pkg,h,zone){
+  if(!h||h.scored) return;
   const base=CFG.zonePts[zone];
   const pts=award(base*(pkg.tier+1),'delivery');
   comboAction();
-  t.scored=true; t.grp.userData.mat.material=M.mat;
+  h.scored=true; h.grp.userData.mat.material=M.mat;
   S.deliveries++; S.biggestTier=Math.max(S.biggestTier,pkg.tier);
   const names={property:'ON THE LOT',walkway:'WALKWAY',porch:'PORCH',door:'DOOR!'};
   popupPts(pts,names[zone], zone==='door'?'#3affa4':zone==='porch'?'#8affc4':'#ffe14d');
@@ -1659,17 +1665,19 @@ function scoreDelivery(pkg,zone){
   }
 }
 function resolveDelivery(pkg){
-  const t=pkg.target;
-  if(!t||t.scored||t.missed) return;
-  const x=pkg.x,z=pkg.z,zz=t.zones;
-  const inR=r=>x>=r.x0&&x<=r.x1&&z>=r.z0&&z<=r.z1;
-  let zone=null;
-  if(inR(zz.doormat)||inR(zz.doorstep)) zone='door';       // settling at the door counts as a door hit
-  else if(inR(zz.porch)) zone='porch';
-  else if(inR(zz.walkway)) zone='walkway';
-  else if(inR(zz.property)) zone='property';
-  if(!zone){ popup(x,pkg.y+1,z,'✗','','#c8c8c8'); return; }
-  scoreDelivery(pkg,zone);
+  // EVERY house's door/porch pays; walkway/lawn consolation only on the marked target
+  const x=pkg.x,z=pkg.z;
+  for(const h of world.houses){
+    if(h.scored||Math.abs(z-h.hz)>8) continue;
+    const zz=h.zones, inR=r=>x>=r.x0&&x<=r.x1&&z>=r.z0&&z<=r.z1;
+    if(inR(zz.doormat)||inR(zz.doorstep)) return scoreDelivery(pkg,h,'door');
+    if(inR(zz.porch)) return scoreDelivery(pkg,h,'porch');
+    if(h===world.curTarget||h===pkg.target){
+      if(inR(zz.walkway)) return scoreDelivery(pkg,h,'walkway');
+      if(inR(zz.property)) return scoreDelivery(pkg,h,'property');
+    }
+  }
+  popup(x,pkg.y+1,z,'✗','','#c8c8c8');
 }
 function updatePackages(dt){
   for(let i=world.packages.length-1;i>=0;i--){
@@ -1683,12 +1691,13 @@ function updatePackages(dt){
     const sp=Math.hypot(p.vx,p.vz);
     // door prism: a volume in FRONT of the target's door — any part of a package inside it scores.
     // Bank shots count too: touching down anywhere on the doorstep/doormat floor zone = door.
-    if(p.kind==='package' && p.target && !p.target.scored && !p.target.missed){
-      const w=p.target.zones.wall, el=p.target.elev, ds=p.target.zones.doorstep;
-      if(p.x+t.r>w.x-1.2 && p.x-t.r<w.x+0.3 && Math.abs(p.z-p.target.hz)<1.0+t.r && p.y-t.r<el+2.6 && p.y+t.r>el){
-        scoreDelivery(p,'door');
+    if(p.kind==='package') for(const h of world.houses){
+      if(h.scored||Math.abs(p.z-h.hz)>8) continue;
+      const w=h.zones.wall, el=h.elev, ds=h.zones.doorstep;
+      if(p.x+t.r>w.x-1.2 && p.x-t.r<w.x+0.3 && Math.abs(p.z-h.hz)<1.35+t.r && p.y-t.r<el+2.6 && p.y+t.r>el){
+        scoreDelivery(p,h,'door'); break;
       } else if(p.x+t.r>ds.x0 && p.x-t.r<ds.x1 && p.z+t.r>ds.z0 && p.z-t.r<ds.z1 && p.y-t.r<el+1.05){
-        scoreDelivery(p,'door');
+        scoreDelivery(p,h,'door'); break;
       }
     }
     // picket fences: low throws rattle off — get the package up and over
@@ -1710,6 +1719,8 @@ function updatePackages(dt){
           S.pot=Math.max(0,S.pot-CFG.windowPenalty);
           popupPts(-CFG.windowPenalty,'WINDOW!','#ff6a5a');
           SFX.glass(); S.shake=Math.min(S.shake+0.25,0.7);
+        } else if(p.kind==='package' && !h.scored && Math.abs(p.z-h.hz)<1.35+t.r && p.y<h.elev+2.7){
+          scoreDelivery(p,h,'door');                       // wall contact at the door frame = door, never BONK
         } else {
           SFX.card();
           popup(p.x,p.y+0.5,p.z,'BONK','','#ffd0a8');
@@ -1895,10 +1906,13 @@ function updateVehicle(dt){
   const g=rampGroundY(veh.x,veh.z);
   if(veh.air){
     veh.vy-=CFG.gravity*dt; veh.y+=veh.vy*dt; veh.airT+=dt;
+    S.pot+=CFG.airPts*dt; S.destroyScore+=CFG.airPts*dt;    // style points: airtime pays by the second
     if(veh.y<=g.y){
       veh.y=g.y; veh.air=false; veh.pump=false;
       if(veh.vy<-4){ SFX.land(); S.shake=Math.min(S.shake+0.35,0.8); }
       // (long-air landing slow-mo removed — it broke the flow; revisit later)
+      const airPts=Math.round(veh.airT*CFG.airPts);
+      if(airPts>=25) popupPts(airPts,'AIR TIME','#8ae8ff');  // already accrued mid-air; this is the receipt
       veh.vy=0;
     }
   } else {
@@ -2084,6 +2098,33 @@ function updateCamera(dt){
   }
 }
 
+/* ==================================================== next-up 3D preview (spinning statue) */
+const prevScene=new THREE.Scene();
+const prevCam=new THREE.PerspectiveCamera(38,1,0.1,20);
+prevCam.position.set(0,0.7,3.4); prevCam.lookAt(0,0.38,0);
+prevScene.add(new THREE.HemisphereLight(0xffffff,0x8a7a5a,1.25));
+{ const dl=new THREE.DirectionalLight(0xfff2d8,1.1); dl.position.set(2,3,2); prevScene.add(dl); }
+const prevGrp=new THREE.Group(); prevScene.add(prevGrp);
+function setPreview(){
+  while(prevGrp.children.length) prevGrp.remove(prevGrp.children[0]);
+  let mesh=null,hh=0.5;
+  if(pickups.length){
+    const it=pickups[0];
+    mesh=it.mesh.clone();
+    mesh.position.set(0,0,0); mesh.rotation.set(0,0,0);
+    hh=Math.max(it.h*it.scl,0.2);
+  } else if(S.boxes>0){
+    const tt=CFG.tiers[veh.tier];
+    mesh=buildPackageMesh(veh.tier);
+    mesh.position.y=tt.h/2;                                // package meshes are center-origin
+    hh=Math.max(tt.h,0.3);
+  }
+  if(!mesh){ prevGrp.visible=false; return; }
+  prevGrp.visible=true;
+  prevGrp.add(mesh);
+  prevGrp.scale.setScalar(clamp(0.68/hh,0.25,2.6));
+}
+
 /* ==================================================== HUD */
 const KIND_ICON={package:'📦',can:'🗑️',bin:'♻️',news:'📰',toy:'🧸',cone:'🚧',gnome:'🧝',flamingo:'🦩',
   birdbath:'⛲',bike:'🚲',mailbox:'📮',hedge:'🌳',fence:'🪵',sign:'🪧',sprinkler:'💦',barrier:'🚧',
@@ -2106,6 +2147,8 @@ function updateNextUp(){
     $('nextUp').querySelector('.nu').textContent=icon;
     $('nextUpTxt').textContent=txt;
     $('nextUp').classList.toggle('empty',empty);
+    setPreview();
+    $('prev3d').style.visibility=prevGrp.visible?'visible':'hidden';
   }
 }
 function updateHUD(){
@@ -2137,7 +2180,7 @@ function startRun(){
     stuckT:0,airT:0,dead:false,prevGy:0,prevSlope:0,crashT:0});
   veh.grp.rotation.set(0,Math.PI,0);
   input.forceWheel=null; input.wheelVal=0;
-  clearPopups(); clearStack(); camS.init=false;
+  clearPopups(); clearStack(); camS.init=false; _nextUpCache='';
   setRackPackage(0);
   ensureChunks(); updateTargets();
   camera.position.set(1.1,6.4,8.6);
@@ -2222,6 +2265,22 @@ function frame(now){
   else S.timeScale=lerp(S.timeScale,1,Math.min(1,8*raw));
   if(!paused) update(raw*S.timeScale);
   renderer.render(scene,camera);
+  // spinning-statue preview of the next throwable, drawn in its own corner viewport
+  if(S.state==='run'&&prevGrp.visible){
+    prevGrp.rotation.y+=raw*2.2;
+    const r=$('prev3d').getBoundingClientRect();
+    if(r.width>4){
+      renderer.autoClear=false;
+      renderer.clearDepth();
+      renderer.setScissorTest(true);
+      renderer.setViewport(r.left,innerHeight-r.bottom,r.width,r.height);
+      renderer.setScissor(r.left,innerHeight-r.bottom,r.width,r.height);
+      renderer.render(prevScene,prevCam);
+      renderer.setScissorTest(false);
+      renderer.setViewport(0,0,innerWidth,innerHeight);
+      renderer.autoClear=true;
+    }
+  }
 }
 
 /* ==================================================== resize / boot */
