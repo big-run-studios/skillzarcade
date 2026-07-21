@@ -203,7 +203,7 @@
     <div class="tag">Drag anywhere to steer 🛞 &nbsp;Double-tap to throw 📦 &nbsp;Cash out 💰</div>
     <button id="startBtn">START ROUTE</button>
     <div id="menuBest"></div>
-    <div class="brand" id="brand">EXPRESS DELIVERY v0.3.7 · BIG RUN STUDIOS</div>
+    <div class="brand" id="brand">EXPRESS DELIVERY v0.3.8 · BIG RUN STUDIOS</div>
   </div>
 
   <div id="over">
@@ -221,7 +221,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.3.7',
+  ver:'0.3.8',
   // --- vehicle
   baseSpeed:8.5,          // forward m/s at run start
   speedGrowth:0.09,       // m/s gained per second
@@ -319,6 +319,8 @@ const CFG = {
   // --- feel
   camYawDeg:22.5,         // run camera orbits this far around the hero toward the delivery (right) side
   camSpring:30, camDamp:11,  // critically-damped lateral follow — ramps up, no snap
+  // narrower than iPad portrait (3:4): pull back, rise, cheat left so the target house stays in frame
+  camNarrowBack:3.5, camNarrowUp:2.2, camNarrowLeft:2.2, camNarrowLook:2.0,
   slowMoScale:0.35, slowMoTime:0.5,
   shakeDecay:5.5,
   // --- pickup stack (inverted triangle on the rack)
@@ -2082,9 +2084,13 @@ function updateCamera(dt){
     lx=veh.x; ly=1.2; lz=veh.z;
   } else {
     // orbit the camera around the hero toward the right side (where the targets are), hero stays centered
-    const yaw=CFG.camYawDeg*Math.PI/180, camD=9.0;
-    tx=veh.x-Math.sin(yaw)*camD; ty=7.2+veh.y*0.6; tz=veh.z+Math.cos(yaw)*camD;
-    lx=veh.x+veh.vx*0.35; ly=0.9+veh.y*0.4; lz=veh.z-1;   // hero sits mid-screen; world behind him stays visible so throws can be watched
+    // n: 0 at iPad portrait (3:4) and wider, 1 on narrow phones — pull back, rise, cheat left so the houses stay visible
+    const n=clamp((0.75-camera.aspect)/0.25,0,1);
+    const yaw=CFG.camYawDeg*Math.PI/180, camD=9.0+CFG.camNarrowBack*n;
+    tx=veh.x-Math.sin(yaw)*camD-CFG.camNarrowLeft*n;
+    ty=7.2+CFG.camNarrowUp*n+veh.y*0.6; tz=veh.z+Math.cos(yaw)*camD;
+    lx=veh.x+veh.vx*0.35+CFG.camNarrowLook*n;             // frame centers between hero and the delivery side
+    ly=0.9+veh.y*0.4; lz=veh.z-1;
   }
   if(S.state==='menu'){
     const k=Math.min(1,6*dt);
