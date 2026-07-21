@@ -209,7 +209,7 @@
       <button class="gbtn" id="btnPlay">PLAY</button>
       <div id="best">BEST <b id="bestV">0</b></div>
       <button class="sbtn" id="btnArcade">← ARCADE</button>
-      <div id="brand">CRASHARCADE · MATE IN FIVE v0.1.4</div>
+      <div id="brand">CRASHARCADE · MATE IN FIVE v0.1.5</div>
     </div>
   </div>
 
@@ -230,6 +230,7 @@
       <div id="resBest">NEW BEST!</div>
       <div id="resBtns">
         <button class="sbtn" id="btnMenu">MENU</button>
+        <button class="sbtn" id="btnResUndo">↩ UNDO</button>
         <button class="gbtn" id="btnNext" style="padding:12px 30px;font-size:16px;">NEXT PUZZLE</button>
       </div>
     </div>
@@ -259,7 +260,7 @@ window.THREE=THREE; // console diagnostics
 /* =========================================================================
    CFG — all balance values
    ========================================================================= */
-const VERSION='0.1.4';
+const VERSION='0.1.5';
 const CFG={
   roundTime:120,          // seconds
   maxMoves:5,
@@ -863,7 +864,7 @@ const ui={hud:$('hud'),botBar:$('botBar'),menu:$('menu'),result:$('result'),prom
   resTitle:$('resTitle'),resSub:$('resSub'),resBrk:$('resBrk'),brkBase:$('brkBase'),brkTime:$('brkTime'),
   brkHintRow:$('brkHintRow'),brkHint:$('brkHint'),resTotal:$('resTotal'),resBest:$('resBest'),
   resLine:$('resLine'),resLineMoves:$('resLineMoves'),
-  btnMenu:$('btnMenu'),btnNext:$('btnNext'),btnPlay:$('btnPlay'),btnArcade:$('btnArcade'),bestV:$('bestV'),muteIco:$('muteIco')};
+  btnMenu:$('btnMenu'),btnNext:$('btnNext'),btnResUndo:$('btnResUndo'),btnPlay:$('btnPlay'),btnArcade:$('btnArcade'),bestV:$('bestV'),muteIco:$('muteIco')};
 const fmt=n=>Math.round(n).toLocaleString('en-US');
 
 const g=new CH.Game();
@@ -930,7 +931,7 @@ function clearSelection(){
   hoverSq.material.opacity=0;
   updateUndoBtn();
 }
-function updateUndoBtn(){ui.btnUndo.disabled=!(state==='play'&&(selected>=0||movesMade>0));}
+function updateUndoBtn(){ui.btnUndo.disabled=!((state==='play'&&(selected>=0||movesMade>0))||(state==='aiThink'&&movesMade>0));}
 function select(s){
   clearSelection();
   selected=s;
@@ -1043,6 +1044,7 @@ function showResult(win,reason){
     if(best<finalScore){best=finalScore;store.set('m5_best',''+best);ui.resBest.textContent='NEW BEST!';}
     else ui.resBest.textContent='';
     ui.resLine.style.display='none';
+    ui.btnResUndo.style.display='none';
   }else{
     ui.resTitle.textContent=reason;ui.resTitle.className='lose';
     ui.resSub.textContent='NO POINTS BANKED';
@@ -1057,6 +1059,7 @@ function showResult(win,reason){
       ui.resLineMoves.innerHTML=html.trim();
       ui.resLine.style.display='block';
     }else ui.resLine.style.display='none';
+    ui.btnResUndo.style.display=(movesMade>0&&timeLeft>1&&g.hist.length>0)?'inline-block':'none';
   }
   // count-up
   const target=win?finalScore:0;
@@ -1282,9 +1285,36 @@ function doHint(){
 ui.btnPlay.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');startRound();});
 ui.btnArcade.addEventListener('pointerdown',e=>{e.preventDefault();location.href='../index.html';});
 ui.btnMenu.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');toMenu();});
+ui.btnResUndo.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  if(lastWin||movesMade<1||timeLeft<=1||g.hist.length<1)return;
+  ui.result.style.display='none';
+  g.unmake();
+  if((g.hist.length%2)===1)g.unmake();   // odd remainder = an AI reply is still on top; take it too
+  movesMade--;
+  finalScore=0;
+  spawnPieces(g);
+  clearSelection();updateDangerRing();
+  hintRingA.visible=hintRingB.visible=false;hintT=0;
+  state='play';roundActive=true;lastTickSec=-1;
+  updatePips();updateHUD();statusForPlay();
+  camGo(planPose(),0.5);
+  sfx('capture');
+});
 ui.btnNext.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');startRound();});
 ui.btnBack.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');toMenu();});
 function undoMove(){
+  if(state==='aiThink'&&movesMade>0&&(g.hist.length%2)===1){
+    g.unmake();                                             // retract before Black replies
+    movesMade--;
+    state='play';                                           // pending aiTurn callback sees state!=='aiThink' and aborts
+    spawnPieces(g);
+    clearSelection();updateDangerRing();
+    updatePips();updateHUD();statusForPlay();
+    camGo(planPose(),0.4);
+    sfx('capture');
+    return true;
+  }
   if(state!=='play')return false;
   if(selected>=0){clearSelection();sfx('ui');return true;}  // first press cancels an active selection
   if(movesMade<1||g.hist.length<2)return false;
