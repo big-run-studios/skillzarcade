@@ -173,7 +173,7 @@
     <div class="secret">Old bar wisdom: throw it end-on — the cap's edge off the counter bounces highest and truest. Flat corks skid long; a 45° catch is anyone's guess.</div>
     <button id="startBtn">🍷 POP OFF</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CORKS v0.5.0 · BIG RUN STUDIOS</div>
+    <div class="brand">CORKS v0.6.0 · BIG RUN STUDIOS</div>
   </div>
 
   <div id="over">
@@ -191,7 +191,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.5.0',
+  ver:'0.6.0',
   corks:10,
   // --- world scale: 1 unit = 1 cm
   corkR:1.15, corkL:4.6,
@@ -572,8 +572,7 @@ const S={
   phase:'idle',            // place | aim | swing | strike | flight | float | result
   score:0, corkIdx:0,
   combo:0, bestCombo:0, landed:0, perfects:0, closest:Infinity,
-  tilt:0,                  // screen-plane roll, degrees: 0 = flat/horizontal, ±90 = end-cap down
-  yaw:0,                   // fore/aft swing of the ends, degrees: + = low end toward the player
+  grip:null,               // the cork's held orientation (quaternion trackball) — set after THREE boots
   hold:{x:0,y:13},         // hand position on the front-facing plane
   m:0, meterT:0, meterTime:1, sweetLo:0.87, sweetHi:1.02, perfHalf:0.016,
   quality:'', phaseT:0,
@@ -589,8 +588,9 @@ const glassPos={x:0,z:-34};
 let paused=false;
 
 /* ==================================================== shot setup */
-const _qz=new THREE.Quaternion(), _qy=new THREE.Quaternion(), _ax=new THREE.Vector3();
-const _Z=new THREE.Vector3(0,0,1), _Y=new THREE.Vector3(0,1,0);
+const _qz=new THREE.Quaternion(), _qy=new THREE.Quaternion(), _qt=new THREE.Quaternion(), _ax=new THREE.Vector3();
+const _X=new THREE.Vector3(1,0,0), _Y=new THREE.Vector3(0,1,0), _Z=new THREE.Vector3(0,0,1);
+S.grip=new THREE.Quaternion().setFromAxisAngle(_Z,Math.PI/2);   // start flat, ends left-right
 function attitude(){  // first-bounce out-factors from the cork's actual 3D orientation
   _ax.set(0,1,0).applyQuaternion(cork.quaternion);
   const V=Math.abs(_ax.y);                        // verticality: 0 = flat side slap, 1 = end-cap edge
@@ -609,12 +609,10 @@ function solveVd(){   // counter-impact speed whose bounce arc tops the rim at t
   const den=2*beff*beff*((a/beff)*D-dy);
   return den>0?Math.sqrt(CFG.gravity*D*D/den):260;
 }
-function holdCork(){  // pinch the cork under the palm at the current tilt + yaw
+function holdCork(){  // pinch the cork under the palm at its gripped orientation
   hand.position.z=CFG.hold.z-1.6;                 // palm sits behind the cork plane so the cork stays readable
   cork.position.set(hand.position.x-0.3,hand.position.y-3.7,CFG.hold.z);
-  _qz.setFromAxisAngle(_Z,(S.tilt+90)*Math.PI/180);
-  _qy.setFromAxisAngle(_Y,S.yaw*Math.PI/180);
-  cork.quaternion.copy(_qy).multiply(_qz);        // screen tilt first, then swing the ends fore/aft
+  cork.quaternion.copy(S.grip);
 }
 function placeGlasses(randomize){
   // glasses only move after a LANDING — misses leave the table alone so the player can zero in
@@ -732,7 +730,7 @@ function launchCork(){
   const h=Math.max(1,cork.position.y-CFG.corkR*S.corkScale);
   const vThrow=Math.sqrt(Math.max(100,Vd*Vd-2*CFG.gravity*h));
   S.vel.set(0,-vThrow,-CFG.throwFwd);
-  S.spinAxis.set(1,0,0); S.spin=rnd(2,5)*(S.tilt>=0?1:-1);
+  S.spinAxis.set(1,0,0); S.spin=rnd(2,5)*(Math.random()<0.5?1:-1);
   S.prevY=cork.position.y;
   S.phase='flight'; S.flightT=0; S.settleT=0;
   aimGrp.visible=false;
@@ -1026,13 +1024,13 @@ function update(dt){
 }
 
 /* ==================================================== aim + input */
-function wrapA(t){ return ((t+180)%360+360)%360-180; }   // corks are symmetric — angles wrap freely
-function setTilt(t){
-  S.tilt=wrapA(t);
+/* world-axis trackball: spins compose onto the grip from wherever the cork is */
+function spinGrip(deg){   // turntable — about the vertical axis
+  S.grip.premultiply(_qt.setFromAxisAngle(_Y,deg*Math.PI/180));
   if(S.phase==='aim') holdCork();
 }
-function setYaw(t){
-  S.yaw=wrapA(t);
+function flipGrip(deg){   // fore/aft flip — about the screen-horizontal axis
+  S.grip.premultiply(_qt.setFromAxisAngle(_X,deg*Math.PI/180));
   if(S.phase==='aim') holdCork();
 }
 function setHoldX(x){
@@ -1053,8 +1051,8 @@ app.addEventListener('pointermove',e=>{
   const dx=e.clientX-input.lx, dy=e.clientY-input.ly;
   input.lx=e.clientX; input.ly=e.clientY;
   if(S.state!=='run'||S.phase!=='aim') return;
-  if(dx) setTilt(S.tilt-dx*ROT_SENS);   // drag right → cork rolls clockwise
-  if(dy) setYaw(S.yaw+dy*ROT_SENS);     // drag down → pulls the low end toward you (adds forward drive)
+  if(dx) spinGrip(dx*ROT_SENS);   // drag right → turntable spin, surface follows the finger
+  if(dy) flipGrip(dy*ROT_SENS);   // drag down → flips the top toward you; up flips it away
   if(dx||dy) showHint(false);
 });
 function endPt(e){ if(e.pointerId===input.id) input.id=null; }
@@ -1074,7 +1072,7 @@ addEventListener('pointerup',endPt); addEventListener('pointercancel',endPt);
 addEventListener('wheel',e=>{
   if(S.state!=='run'||S.phase!=='aim') return;
   const d=(e.deltaY||e.deltaX)*0.12;
-  if(e.shiftKey) setYaw(S.yaw+d); else setTilt(S.tilt+d);
+  if(e.shiftKey) flipGrip(d); else spinGrip(d);
 },{passive:true});
 $('slamBtn').addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); slamTap(); });
 addEventListener('keydown',e=>{
@@ -1082,12 +1080,12 @@ addEventListener('keydown',e=>{
   if(S.state==='run'&&S.phase==='aim'){
     if(e.code==='ArrowLeft')  setHoldX(S.hold.x-0.8);
     if(e.code==='ArrowRight') setHoldX(S.hold.x+0.8);
-    if(e.code==='ArrowUp')    setYaw(S.yaw-5);
-    if(e.code==='ArrowDown')  setYaw(S.yaw+5);
-    if(e.code==='KeyQ') setTilt(S.tilt-5);
-    if(e.code==='KeyE') setTilt(S.tilt+5);
-    if(e.code==='KeyW') setYaw(S.yaw-5);
-    if(e.code==='KeyS') setYaw(S.yaw+5);
+    if(e.code==='ArrowUp')    flipGrip(-5);
+    if(e.code==='ArrowDown')  flipGrip(5);
+    if(e.code==='KeyQ') spinGrip(-5);
+    if(e.code==='KeyE') spinGrip(5);
+    if(e.code==='KeyW') flipGrip(-5);
+    if(e.code==='KeyS') flipGrip(5);
   }
 });
 $('startBtn').addEventListener('click',()=>{ auInit(); startRun(); });
@@ -1155,7 +1153,8 @@ console.log('CORKS v'+CFG.ver);
 window.__game={
   get s(){ return { state:S.state,phase:S.phase,score:S.score,cork:S.corkIdx+1,combo:S.combo,
     landed:S.landed,perfects:S.perfects,bestCombo:S.bestCombo,closest:S.closest,
-    m:S.m,quality:S.quality,tilt:S.tilt,yaw:S.yaw,hold:{...S.hold},timeScale:S.timeScale,
+    m:S.m,quality:S.quality,hold:{...S.hold},timeScale:S.timeScale,
+    grip:S.grip.toArray().map(v=>+v.toFixed(3)),verticality:+attitude().V.toFixed(3),
     corkPos:{x:+cork.position.x.toFixed(2),y:+cork.position.y.toFixed(2),z:+cork.position.z.toFixed(2)},
     vel:{x:+S.vel.x.toFixed(1),y:+S.vel.y.toFixed(1),z:+S.vel.z.toFixed(1)},
     glass:{x:glassPos.x,z:glassPos.z,rimY:GLA.rimY,rimR:GLA.rimR,wineY:GLA.wineY},
@@ -1169,12 +1168,15 @@ window.__game={
   pose(x,y,tilt,yaw){  // place the held cork on the front plane (snaps the hand — no lerp wait)
     const H=CFG.hold;
     setHoldX(x); S.hold.y=clamp(y,H.yMin,H.yMax);
-    if(tilt!==undefined) setTilt(tilt);
-    if(yaw!==undefined) setYaw(yaw);
+    if(tilt!==undefined){   // legacy angle pose: screen roll then fore/aft swing
+      _qz.setFromAxisAngle(_Z,(tilt+90)*Math.PI/180);
+      _qy.setFromAxisAngle(_Y,(yaw||0)*Math.PI/180);
+      S.grip.copy(_qy).multiply(_qz);
+    }
     hand.position.set(S.hold.x,S.hold.y+3.7,H.z); holdCork();
   },
-  tilt(t){ setTilt(t); },
-  yaw(t){ setYaw(t); },
+  spin(deg){ spinGrip(deg); },
+  flip(deg){ flipGrip(deg); },
   aimAtGlass(){ this.pose(clamp(glassPos.x+0.3,-CFG.hold.xMax,CFG.hold.xMax),13,90,0); },  // end-on edge throw, drift-free
   swing(){ if(S.phase==='aim') slamTap(); },
   strike(m=CFG.sweetC,exact=true){ if(S.phase==='aim') slamTap(); if(S.phase==='swing') doStrike(m,exact); },
