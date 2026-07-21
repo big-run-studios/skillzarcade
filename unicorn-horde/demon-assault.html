@@ -157,7 +157,7 @@
 
   </div>
 
-  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.28.0</div>
+  <div class="brand">CRASHARCADE · DEMON ASSAULT v0.28.1</div>
 </div>
 
 <audio id="music" src="demon-music.mp3" loop preload="auto"></audio>
@@ -343,7 +343,9 @@ function syncMusic(){
 }
 const muteBtn=document.getElementById('muteBtn');
 function applyMute(){ muteBtn.textContent=muted?'🔇':'🔊'; music.muted=muted; }
-muteBtn.addEventListener('click',e=>{e.stopPropagation(); muted=!muted; store.set('uni_mute',muted?'1':'0'); applyMute(); syncMusic();});
+/* pointerdown, not click: iOS Safari often never synthesizes a click for a tap made
+   while another finger holds the stick — which is exactly when players reach for mute */
+muteBtn.addEventListener('pointerdown',e=>{e.preventDefault(); e.stopPropagation(); muted=!muted; store.set('uni_mute',muted?'1':'0'); applyMute(); syncMusic();});
 applyMute();
 
 /* ================================================================= scaling helpers */
