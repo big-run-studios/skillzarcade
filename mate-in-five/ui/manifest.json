@@ -1,0 +1,224 @@
+{
+  "source": "image(15).png",
+  "notes": "Lossless WebP assets with transparent outer silhouettes. Text and values are baked into the approved visual target.",
+  "assets": [
+    {
+      "name": "01_score_panel",
+      "file": "01_score_panel.webp",
+      "size": [
+        235,
+        195
+      ],
+      "source_box": [
+        38,
+        44,
+        273,
+        239
+      ]
+    },
+    {
+      "name": "02_timer_panel",
+      "file": "02_timer_panel.webp",
+      "size": [
+        311,
+        218
+      ],
+      "source_box": [
+        301,
+        22,
+        612,
+        240
+      ]
+    },
+    {
+      "name": "03_multiplier_panel",
+      "file": "03_multiplier_panel.webp",
+      "size": [
+        235,
+        194
+      ],
+      "source_box": [
+        639,
+        45,
+        874,
+        239
+      ]
+    },
+    {
+      "name": "04_objective_banner",
+      "file": "04_objective_banner.webp",
+      "size": [
+        523,
+        70
+      ],
+      "source_box": [
+        200,
+        259,
+        723,
+        329
+      ]
+    },
+    {
+      "name": "05_move_progress_panel",
+      "file": "05_move_progress_panel.webp",
+      "size": [
+        395,
+        90
+      ],
+      "source_box": [
+        266,
+        344,
+        661,
+        434
+      ]
+    },
+    {
+      "name": "06_bottom_control_tray",
+      "file": "06_bottom_control_tray.webp",
+      "size": [
+        738,
+        203
+      ],
+      "source_box": [
+        73,
+        1439,
+        811,
+        1642
+      ]
+    },
+    {
+      "name": "07_back_button",
+      "file": "07_back_button.webp",
+      "size": [
+        162,
+        173
+      ],
+      "source_box": [
+        86,
+        1463,
+        238,
+        1626
+      ]
+    },
+    {
+      "name": "08_undo_button",
+      "file": "08_undo_button.webp",
+      "size": [
+        166,
+        173
+      ],
+      "source_box": [
+        254,
+        1463,
+        410,
+        1626
+      ]
+    },
+    {
+      "name": "10_mute_button",
+      "file": "10_mute_button.webp",
+      "size": [
+        166,
+        173
+      ],
+      "source_box": [
+        640,
+        1463,
+        796,
+        1626
+      ]
+    },
+    {
+      "name": "09_hint_button",
+      "file": "09_hint_button.webp",
+      "size": [
+        181,
+        181
+      ],
+      "source_box": [
+        [
+          459,
+          1475,
+          610,
+          1631
+        ],
+        [
+          567,
+          1464,
+          622,
+          1520
+        ]
+      ]
+    },
+    {
+      "name": "11_move_pips_strip",
+      "file": "11_move_pips_strip.webp",
+      "size": [
+        259,
+        49
+      ],
+      "source_box": [
+        338,
+        382,
+        589,
+        423
+      ]
+    },
+    {
+      "name": "12_hint_count_badge",
+      "file": "12_hint_count_badge.webp",
+      "size": [
+        63,
+        64
+      ],
+      "source_box": [
+        567,
+        1464,
+        622,
+        1520
+      ]
+    },
+    {
+      "name": "13_completed_move_pip",
+      "file": "13_completed_move_pip.webp",
+      "size": [
+        53,
+        52
+      ],
+      "source_box": [
+        340,
+        382,
+        385,
+        426
+      ]
+    },
+    {
+      "name": "14_current_move_pip",
+      "file": "14_current_move_pip.webp",
+      "size": [
+        55,
+        55
+      ],
+      "source_box": [
+        445,
+        380,
+        492,
+        427
+      ]
+    },
+    {
+      "name": "15_empty_move_pip",
+      "file": "15_empty_move_pip.webp",
+      "size": [
+        53,
+        53
+      ],
+      "source_box": [
+        498,
+        381,
+        543,
+        426
+      ]
+    }
+  ]
+}

@@ -42,50 +42,47 @@
   #hud{position:absolute;top:0;left:0;right:0;padding:max(10px,env(safe-area-inset-top)) 10px 0;
     display:none;flex-direction:column;gap:7px;align-items:center;}
   #topRow{display:flex;gap:8px;width:100%;max-width:520px;align-items:stretch;}
-  .tp{flex:1;padding:7px 6px 8px;text-align:center;}
-  .tp .lbl{font-family:var(--display);font-weight:700;font-size:clamp(9px,2.5vw,12px);letter-spacing:1.6px;color:var(--gold);}
-  .tp .val{font-weight:900;font-size:clamp(19px,5.8vw,30px);line-height:1.05;color:var(--ink);font-variant-numeric:tabular-nums;}
-  #timerP{flex:1.25;}
-  #timerP .val{font-size:clamp(28px,8.4vw,44px);color:var(--red);letter-spacing:1px;}
+  .tp{flex:1;position:relative;text-align:center;}
+  .tp .val{position:absolute;display:flex;align-items:center;justify-content:center;
+    font-weight:900;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1;}
+  #scoreP{background:url(ui/score_panel.webp) center/100% 100% no-repeat;aspect-ratio:235/195;}
+  #scoreP .val{left:9%;right:9%;top:56%;bottom:11%;font-size:clamp(17px,5.4vw,28px);}
+  #timerP{flex:1.3;background:url(ui/timer_panel.webp) center/100% 100% no-repeat;aspect-ratio:311/218;}
+  #timerP .val{left:7%;right:7%;top:40%;bottom:9%;font-size:clamp(30px,9.4vw,50px);color:var(--red);letter-spacing:1px;}
   #timerP.low .val{animation:tpulse .5s ease infinite alternate;}
   @keyframes tpulse{from{transform:scale(1);}to{transform:scale(1.07);}}
-  #multP .val{color:var(--red);}
-  #clockIco{display:inline-block;vertical-align:-1px;margin-right:3px;}
+  #multP{background:url(ui/mult_panel.webp) center/100% 100% no-repeat;aspect-ratio:235/194;}
+  #multP .val{left:9%;right:9%;top:42%;bottom:12%;color:var(--red);font-size:clamp(26px,8.2vw,44px);}
 
-  #statusRow{padding:6px 22px;font-family:var(--display);font-weight:700;color:var(--ink);
-    font-size:clamp(11px,3.2vw,15px);letter-spacing:1.2px;white-space:nowrap;}
-  #statusRow .dia{color:var(--gold);margin:0 8px;font-size:.85em;}
+  #statusRow{background:url(ui/status_banner.webp) center/100% 100% no-repeat;aspect-ratio:523/70;
+    width:min(94vw,500px);display:flex;align-items:center;justify-content:center;padding:0 11% .6% 11%;
+    font-family:var(--num);font-weight:800;color:var(--ink);
+    font-size:clamp(11px,3.3vw,16px);letter-spacing:.8px;white-space:nowrap;}
 
-  #moveRow{padding:5px 18px 8px;display:flex;flex-direction:column;align-items:center;gap:5px;}
-  #moveLbl{font-family:var(--display);font-weight:700;font-size:clamp(10px,3vw,14px);letter-spacing:1.6px;color:var(--ink);}
+  #moveRow{background:url(ui/move_panel.webp) center/100% 100% no-repeat;aspect-ratio:395/90;
+    width:min(76vw,360px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:0 6% 1.5%;}
+  #moveLbl{font-family:var(--num);font-weight:800;font-size:clamp(11px,3.2vw,15px);letter-spacing:1.4px;color:var(--ink);}
   #moveLbl b{color:var(--red);}
-  #pips{display:flex;gap:9px;}
-  .pip{width:17px;height:17px;border-radius:50%;background:linear-gradient(160deg,#fbf4e6,#e6d7ba);
-    box-shadow:inset 0 0 0 1.5px var(--gold), inset 0 1px 2px rgba(255,255,255,.9), 0 1px 3px rgba(60,40,10,.3);}
-  .pip.done{background:radial-gradient(circle at 34% 30%, #f7e3ae, #d9ab4e 58%, #a87b26);
-    box-shadow:inset 0 0 0 1px rgba(120,84,20,.55), 0 1px 3px rgba(60,40,10,.4);}
-  .pip.cur{background:linear-gradient(160deg,#fff,#f2e8d2);
-    box-shadow:inset 0 0 0 3px var(--red), 0 0 8px rgba(200,53,43,.55), 0 1px 3px rgba(60,40,10,.3);
-    animation:pippulse .8s ease infinite alternate;}
+  #pips{display:flex;gap:10px;}
+  .pip{width:clamp(15px,4.6vw,21px);height:clamp(15px,4.6vw,21px);
+    background:url(ui/15_empty_move_pip.webp) center/contain no-repeat;}
+  .pip.done{background-image:url(ui/13_completed_move_pip.webp);}
+  .pip.cur{background-image:url(ui/14_current_move_pip.webp);animation:pippulse .8s ease infinite alternate;}
   @keyframes pippulse{from{transform:scale(1);}to{transform:scale(1.18);}}
 
   /* ---------- bottom controls ---------- */
   #botBar{position:absolute;left:0;right:0;bottom:max(12px,env(safe-area-inset-bottom));
     display:none;justify-content:center;gap:14px;padding:0 12px;}
-  .cbtn{pointer-events:auto;width:clamp(58px,16vw,72px);height:clamp(58px,16vw,72px);border-radius:50%;border:none;cursor:pointer;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative;
-    background:
-      radial-gradient(120% 130% at 30% 18%, rgba(255,255,255,.95), rgba(255,255,255,0) 60%),
-      repeating-linear-gradient(104deg, rgba(186,164,120,.12) 0 2px, rgba(186,164,120,0) 2px 11px),
-      linear-gradient(180deg,#faf3e6,#e9dbbe);
-    box-shadow:0 0 0 2px var(--gold), inset 0 0 0 1px rgba(255,255,255,.8), 0 5px 14px rgba(40,30,10,.4);
-    color:#7d5f22;transition:transform .1s;}
+  .cbtn{pointer-events:auto;width:clamp(62px,17vw,78px);border:none;cursor:pointer;position:relative;
+    background:none;padding:0;transition:transform .1s;}
   .cbtn:active{transform:scale(.93);}
-  .cbtn svg{width:clamp(18px,5.4vw,24px);height:clamp(18px,5.4vw,24px);fill:none;stroke:#8a6a28;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
-  .cbtn .cl{font-family:var(--display);font-weight:700;font-size:clamp(7px,2vw,9px);letter-spacing:1px;color:var(--ink2);}
-  .cbtn:disabled{opacity:.45;}
-  #hintBadge{position:absolute;top:-4px;right:-8px;background:radial-gradient(circle at 35% 30%,#e8584d,#b02318);
-    color:#fff;font-weight:800;font-size:9px;padding:3px 6px;border-radius:9px;letter-spacing:.3px;
+  .cbtn svg,.cbtn .cl{display:none;}  /* icons + labels are baked into the art */
+  .cbtn img{display:block;width:100%;height:auto;pointer-events:none;}
+  .cbtn:disabled{opacity:.7;filter:grayscale(.75) brightness(.82);}
+  #btnMute.muted::after{content:'';position:absolute;top:7%;right:11%;width:20%;aspect-ratio:1;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#e8584d,#b02318);box-shadow:0 0 0 1.5px #fff,0 2px 4px rgba(0,0,0,.35);}
+  #hintBadge{position:absolute;top:-7%;right:-9%;min-width:46%;background:radial-gradient(circle at 35% 30%,#e8584d,#b02318);
+    color:#fff;font-weight:800;font-size:clamp(8px,2.3vw,11px);padding:4px 6px;border-radius:20px;letter-spacing:.2px;
     box-shadow:0 0 0 1.5px #fff, 0 2px 5px rgba(0,0,0,.4);font-variant-numeric:tabular-nums;}
 
   /* ---------- banners ---------- */
@@ -168,21 +165,12 @@
   <div class="ui">
     <div id="hud">
       <div id="topRow">
-        <div class="tp marble cut" id="scoreP">
-          <div class="lbl">🏆 SCORE</div>
-          <div class="val" id="scoreV">0</div>
-        </div>
-        <div class="tp marble cut" id="timerP">
-          <div class="lbl"><svg id="clockIco" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b98f3e" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>TIME</div>
-          <div class="val" id="timerV">2:00</div>
-        </div>
-        <div class="tp marble cut" id="multP">
-          <div class="lbl">MULTIPLIER</div>
-          <div class="val" id="multV">×5</div>
-        </div>
+        <div class="tp" id="scoreP"><div class="val" id="scoreV">0</div></div>
+        <div class="tp" id="timerP"><div class="val" id="timerV">2:00</div></div>
+        <div class="tp" id="multP"><div class="val" id="multV">×5</div></div>
       </div>
-      <div id="statusRow" class="marble cut"><span class="dia">✦</span><span id="statusT">WHITE TO MOVE — MATE WITHIN 5</span><span class="dia">✦</span></div>
-      <div id="moveRow" class="marble cut">
+      <div id="statusRow"><span id="statusT">WHITE TO MOVE — MATE WITHIN 5</span></div>
+      <div id="moveRow">
         <div id="moveLbl">MOVE <b id="moveN">1</b> OF 5</div>
         <div id="pips"><div class="pip cur"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div>
       </div>
@@ -191,10 +179,10 @@
     <div id="banner"><span id="bannerT"></span></div>
 
     <div id="botBar">
-      <button class="cbtn" id="btnBack"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span class="cl">BACK</span></button>
-      <button class="cbtn" id="btnUndo"><svg viewBox="0 0 24 24"><path d="M8 5l-5 5 5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-2"/></svg><span class="cl">UNDO</span></button>
-      <button class="cbtn" id="btnHint"><span id="hintBadge">−1,000</span><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.6 1.2-.6 2.2h-6c0-1-.0-1.7-.6-2.2A6 6 0 0 1 12 3z"/></svg><span class="cl">HINT</span></button>
-      <button class="cbtn" id="btnMute"><svg viewBox="0 0 24 24" id="muteIco"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6" id="muteWave"/></svg><span class="cl">MUTE</span></button>
+      <button class="cbtn" id="btnBack"><img src="ui/07_back_button.webp" alt="Back"></button>
+      <button class="cbtn" id="btnUndo"><img src="ui/08_undo_button.webp" alt="Undo"></button>
+      <button class="cbtn" id="btnHint" style="width:clamp(66px,18vw,84px);"><img src="ui/hint_button.webp" alt="Hint"><span id="hintBadge">−1,000</span></button>
+      <button class="cbtn" id="btnMute"><img src="ui/10_mute_button.webp" alt="Mute"></button>
     </div>
   </div>
 
@@ -209,7 +197,7 @@
       <button class="gbtn" id="btnPlay">PLAY</button>
       <div id="best">BEST <b id="bestV">0</b></div>
       <button class="sbtn" id="btnArcade">← ARCADE</button>
-      <div id="brand">CRASHARCADE · MATE IN FIVE v0.1.5</div>
+      <div id="brand">CRASHARCADE · MATE IN FIVE v0.2.0</div>
     </div>
   </div>
 
@@ -260,7 +248,7 @@ window.THREE=THREE; // console diagnostics
 /* =========================================================================
    CFG — all balance values
    ========================================================================= */
-const VERSION='0.1.5';
+const VERSION='0.2.0';
 const CFG={
   roundTime:120,          // seconds
   maxMoves:5,
@@ -864,7 +852,7 @@ const ui={hud:$('hud'),botBar:$('botBar'),menu:$('menu'),result:$('result'),prom
   resTitle:$('resTitle'),resSub:$('resSub'),resBrk:$('resBrk'),brkBase:$('brkBase'),brkTime:$('brkTime'),
   brkHintRow:$('brkHintRow'),brkHint:$('brkHint'),resTotal:$('resTotal'),resBest:$('resBest'),
   resLine:$('resLine'),resLineMoves:$('resLineMoves'),
-  btnMenu:$('btnMenu'),btnNext:$('btnNext'),btnResUndo:$('btnResUndo'),btnPlay:$('btnPlay'),btnArcade:$('btnArcade'),bestV:$('bestV'),muteIco:$('muteIco')};
+  btnMenu:$('btnMenu'),btnNext:$('btnNext'),btnResUndo:$('btnResUndo'),btnPlay:$('btnPlay'),btnArcade:$('btnArcade'),bestV:$('bestV')};
 const fmt=n=>Math.round(n).toLocaleString('en-US');
 
 const g=new CH.Game();
@@ -1330,11 +1318,7 @@ function undoMove(){
 }
 ui.btnUndo.addEventListener('pointerdown',e=>{e.preventDefault();undoMove();});
 ui.btnHint.addEventListener('pointerdown',e=>{e.preventDefault();doHint();});
-function muteIcon(){
-  ui.muteIco.innerHTML=muted
-    ?'<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6" style="stroke:#b02318"/>'
-    :'<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6"/>';
-}
+function muteIcon(){ui.btnMute.classList.toggle('muted',muted);}
 ui.btnMute.addEventListener('pointerdown',e=>{
   e.preventDefault();
   muted=!muted;store.set('m5_mute',muted?'1':'0');muteIcon();
