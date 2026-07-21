@@ -204,7 +204,7 @@
       <button class="gbtn" id="btnPlay">PLAY</button>
       <div id="best">BEST <b id="bestV">0</b></div>
       <button class="sbtn" id="btnArcade">← ARCADE</button>
-      <div id="brand">CRASHARCADE · MATE IN FIVE v0.1.1</div>
+      <div id="brand">CRASHARCADE · MATE IN FIVE v0.1.2</div>
     </div>
   </div>
 
@@ -250,7 +250,7 @@ window.THREE=THREE; // console diagnostics
 /* =========================================================================
    CFG — all balance values
    ========================================================================= */
-const VERSION='0.1.1';
+const VERSION='0.1.2';
 const CFG={
   roundTime:120,          // seconds
   maxMoves:5,
@@ -396,6 +396,23 @@ const TEX={
   tileDark:marbleTex('#6a4a2c','#4a3018','#8a6a3c'),
   stone:marbleTex('#ded4bd','#c0b294','#c9ad74'),
 };
+function leafTex(base,shades){
+  const cv=document.createElement('canvas');cv.width=cv.height=256;
+  const g=cv.getContext('2d');
+  g.fillStyle=base;g.fillRect(0,0,256,256);
+  for(let i=0;i<900;i++){
+    g.fillStyle=shades[(mrnd()*shades.length)|0];
+    g.globalAlpha=0.25+mrnd()*0.35;
+    const x=mrnd()*256,y=mrnd()*256,r=1.5+mrnd()*4.5;
+    g.beginPath();g.ellipse(x,y,r,r*0.6,mrnd()*Math.PI,0,Math.PI*2);g.fill();
+  }
+  g.globalAlpha=1;
+  const t=new THREE.CanvasTexture(cv);
+  t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  return t;
+}
+TEX.leafA=leafTex('#4c7a38',['#5d8f44','#3d6a2c','#6a9c50','#33591f','#578540']);
+TEX.leafB=leafTex('#55843d',['#68a04c','#446f30','#79ac5c','#3a6126','#5d8f44']);
 const MAT={
   ivory:new THREE.MeshStandardMaterial({map:TEX.ivory,roughness:0.5,metalness:0.04}),
   charcoal:new THREE.MeshStandardMaterial({map:TEX.charcoal,roughness:0.52,metalness:0.05}),
@@ -404,10 +421,10 @@ const MAT={
   tileD:new THREE.MeshStandardMaterial({map:TEX.tileDark,roughness:0.46,metalness:0.03}),
   stone:new THREE.MeshStandardMaterial({map:TEX.stone,roughness:0.72,metalness:0}),
   grass:new THREE.MeshStandardMaterial({color:0x7da35e,roughness:1}),
-  hedge:new THREE.MeshStandardMaterial({color:0x4c7a38,roughness:0.95}),
-  hedge2:new THREE.MeshStandardMaterial({color:0x5b8a42,roughness:0.95}),
+  hedge:new THREE.MeshStandardMaterial({map:TEX.leafA,roughness:0.95}),
+  hedge2:new THREE.MeshStandardMaterial({map:TEX.leafB,roughness:0.95}),
   trunk:new THREE.MeshStandardMaterial({color:0x6e563c,roughness:0.9}),
-  canopy:new THREE.MeshStandardMaterial({color:0x527f3c,roughness:0.95}),
+  canopy:new THREE.MeshStandardMaterial({map:TEX.leafA,roughness:0.95}),
   water:new THREE.MeshStandardMaterial({color:0x8fc3dc,roughness:0.15,metalness:0.1}),
   woodBench:new THREE.MeshStandardMaterial({color:0x8a6a48,roughness:0.8}),
 };
@@ -449,37 +466,26 @@ const boardG=new THREE.Group();scene.add(boardG);
   plaza.position.y=-0.62+0.15-0.14;plaza.receiveShadow=true;park.add(plaza);
   const plazaTrim=new THREE.Mesh(new THREE.TorusGeometry(9.5,0.05,8,64),MAT.gold);
   plazaTrim.rotation.x=Math.PI/2;plazaTrim.position.y=-0.45;park.add(plazaTrim);
-  // hedge ring (broken arcs so the fountain/benches read through)
-  const hedgeGeo=new THREE.BoxGeometry(3.2,1.5,1.1);
-  for(let i=0;i<14;i++){
-    const a=i/14*Math.PI*2;
-    if(Math.abs(Math.sin(a))<0.28&&Math.cos(a)>0)continue;   // gap behind camera
+  // formal-garden hedge walls — big sculpted masses ringing the plaza
+  const hedgeGeo=new THREE.BoxGeometry(9,4.2,2.6);
+  for(let i=0;i<10;i++){
+    const a=i/10*Math.PI*2;
+    if(Math.abs(Math.sin(a))<0.34&&Math.cos(a)>0)continue;   // gap behind camera
+    const rr=17+((i*7)%3)*1.4;
     const h=new THREE.Mesh(hedgeGeo,(i&1)?MAT.hedge:MAT.hedge2);
-    const rr=15+((i*7)%3);
-    h.position.set(Math.sin(a)*rr,0.13,Math.cos(a)*rr);
-    h.rotation.y=a+Math.PI/2;h.scale.y=0.9+((i*13)%5)*0.08;
+    h.position.set(Math.sin(a)*rr,1.5,Math.cos(a)*rr);
+    h.rotation.y=a+Math.PI/2;h.scale.y=0.85+((i*13)%4)*0.14;
     h.castShadow=true;park.add(h);
   }
-  // classical columns behind the far side
-  const colGeo=new THREE.CylinderGeometry(0.42,0.48,6.4,14);
-  const capGeo=new THREE.BoxGeometry(1.25,0.3,1.25);
-  const colMat=new THREE.MeshStandardMaterial({map:TEX.stone,roughness:0.6,color:0xf2ecdd});
-  for(const px of [-9.5,-5,0,5,9.5]){
-    const c=new THREE.Mesh(colGeo,colMat);
-    c.position.set(px*1.35,2.5,-21);c.castShadow=true;park.add(c);
-    const cap=new THREE.Mesh(capGeo,colMat);cap.position.set(px*1.35,5.85,-21);park.add(cap);
-    const base=new THREE.Mesh(capGeo,colMat);base.position.set(px*1.35,-0.55,-21);park.add(base);
+  // second, taller ring behind for layered depth
+  for(let i=0;i<8;i++){
+    const a=(i+0.5)/8*Math.PI*2;
+    if(Math.abs(Math.sin(a))<0.3&&Math.cos(a)>0)continue;
+    const h=new THREE.Mesh(hedgeGeo,(i&1)?MAT.hedge2:MAT.hedge);
+    h.position.set(Math.sin(a)*29,2.1,Math.cos(a)*29);
+    h.rotation.y=a+Math.PI/2;h.scale.set(2.2,1.35,1.3);
+    park.add(h);
   }
-  const beam=new THREE.Mesh(new THREE.BoxGeometry(28,0.5,1.6),colMat);
-  beam.position.set(0,6.2,-21);park.add(beam);
-  // fountain (left)
-  const fount=new THREE.Group();fount.position.set(-14.5,-0.6,-9);park.add(fount);
-  const b1=new THREE.Mesh(new THREE.CylinderGeometry(2.6,2.9,0.9,22),MAT.stone);b1.position.y=0.45;b1.castShadow=true;fount.add(b1);
-  const w1=new THREE.Mesh(new THREE.CylinderGeometry(2.35,2.35,0.1,22),MAT.water);w1.position.y=0.9;fount.add(w1);
-  const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.4,1.5,12),MAT.stone);stem.position.y=1.6;fount.add(stem);
-  const b2=new THREE.Mesh(new THREE.CylinderGeometry(1.15,1.3,0.4,18),MAT.stone);b2.position.y=2.4;fount.add(b2);
-  const w2=new THREE.Mesh(new THREE.CylinderGeometry(1.0,1.0,0.08,18),MAT.water);w2.position.y=2.6;fount.add(w2);
-  const jet=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.9,10),MAT.water);jet.position.y=3.1;fount.add(jet);
   // benches (right)
   for(const [bx,bz,ry] of [[14,-8,-0.5],[12.5,3,-1.2]]){
     const bench=new THREE.Group();bench.position.set(bx,-0.6,bz);bench.rotation.y=ry;park.add(bench);
@@ -487,23 +493,12 @@ const boardG=new THREE.Group();scene.add(boardG);
     for(let i=0;i<2;i++){const slat=new THREE.Mesh(new THREE.BoxGeometry(2.6,0.08,0.26),MAT.woodBench);slat.position.set(0,1.15+i*0.2,0.32);slat.rotation.x=-0.35;bench.add(slat);}
     for(const lx of [-1.1,1.1]){const leg=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.85,0.5),MAT.trunk);leg.position.set(lx,0.42,0.05);bench.add(leg);}
   }
-  // flower beds along hedges
-  const petal=new THREE.SphereGeometry(0.13,6,5);
-  const flMats=[0xd9647a,0xe0c052,0xdd7a44,0xc45a9a].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:0.8}));
-  for(let i=0;i<44;i++){
-    const a=(i/44)*Math.PI*2+0.1;
-    if(Math.abs(Math.sin(a))<0.3&&Math.cos(a)>0)continue;
-    const rr=12.6+(i%3)*0.5;
-    const fl=new THREE.Mesh(petal,flMats[i%4]);
-    fl.position.set(Math.sin(a)*rr,-0.42,Math.cos(a)*rr);
-    fl.scale.setScalar(0.8+(i%4)*0.18);park.add(fl);
-  }
-  // distant trees
-  for(const [tx,tz,s2] of [[-22,-18,1.3],[22,-16,1.5],[-26,4,1.2],[26,2,1.1],[0,-34,1.8],[-12,-30,1.4],[13,-30,1.2]]){
-    const tr=new THREE.Group();tr.position.set(tx,-0.6,tz);tr.scale.setScalar(s2);park.add(tr);
-    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.44,2.6,8),MAT.trunk);trunk.position.y=1.3;tr.add(trunk);
-    const c1=new THREE.Mesh(new THREE.SphereGeometry(2.2,10,8),MAT.canopy);c1.position.y=3.6;tr.add(c1);
-    const c2=new THREE.Mesh(new THREE.SphereGeometry(1.6,10,8),MAT.hedge2);c2.position.set(1.1,4.4,0.4);tr.add(c2);
+  // far horizon hedge masses (fog softens them into a garden wall)
+  for(const [tx,tz,w,hh] of [[-30,-26,26,7],[30,-24,24,8],[-38,6,20,6],[38,4,20,7],[0,-44,50,9],[-16,-38,22,7],[18,-38,20,6]]){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(w,hh,4),(tx<0)?MAT.canopy:MAT.hedge);
+    m.position.set(tx,-0.6+hh/2,tz);
+    m.rotation.y=Math.atan2(tx,tz)+Math.PI/2;
+    park.add(m);
   }
 }
 
@@ -982,7 +977,7 @@ function toMenu(){
   ui.menu.style.display='flex';
   ui.bestV.textContent=fmt(best);
   if(!curPuzzle){curIdx=pickPuzzle();curPuzzle=PUZZLES[curIdx];g.loadFEN(curPuzzle.fen);spawnPieces(g);}
-  camGo({az:-0.35,el:0.62,dist:planDist*1.35,look:new THREE.Vector3(0,0.4,0)},1.2);
+  camGo({az:-0.35,el:0.52,dist:planDist*1.15,look:new THREE.Vector3(0,0.5,-2)},1.2);
 }
 
 /* ---------------- outcomes ---------------- */
@@ -1254,7 +1249,7 @@ function resize(){
   camera.aspect=w/h;camera.updateProjectionMatrix();
   computePlanDist();
   if(state==='play'||state==='anim'||state==='aiThink'||state==='aiAnim')camGo(planPose(),0.4);
-  if(state==='menu')camGo({az:-0.35,el:0.62,dist:planDist*1.35,look:new THREE.Vector3(0,0.4,0)},0.4);
+  if(state==='menu')camGo({az:-0.35,el:0.52,dist:planDist*1.15,look:new THREE.Vector3(0,0.5,-2)},0.4);
 }
 window.addEventListener('resize',resize);
 
