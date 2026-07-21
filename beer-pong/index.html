@@ -270,7 +270,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>; a lone cup glows purple — an <b style="color:#c98aff">island</b>, worth 3×. Run out of balls and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.13</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.14</div>
   </div>
 
   <div id="over">
@@ -324,7 +324,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.13',
+  ver:'0.1.14',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
@@ -441,9 +441,15 @@ const SFX={
   crash:()=>{auTone(300,38,0.7,'sawtooth',0.2); auTone(220,32,0.8,'square',0.16);},
   lastBall:()=>{auTone(440,440,0.16,'square',0.14); auTone(440,440,0.16,'square',0.14,0.22); auTone(660,880,0.3,'sine',0.14,0.44);},
 };
+/* run music: "The Long Way Home" — an <audio> element so iOS Silent Mode doesn't gag it */
+const BGM=new Audio('the-long-way-home.mp3');
+BGM.loop=true; BGM.volume=0.45; BGM.preload='auto';
+function bgmPlay(){ BGM.muted=AU.muted; BGM.currentTime=0; BGM.play().catch(()=>{}); }
+function bgmStop(){ BGM.pause(); }
 function setMute(m){
   AU.muted=m; localStorage.bp_mute=m?'1':'0';
   if(AU.master) AU.master.gain.value=m?0:0.8;
+  BGM.muted=m;
   $('muteBtn').textContent=m?'🔇':'🔊';
 }
 
@@ -928,9 +934,10 @@ function startRun(){
   $('legend').classList.add('hide'); $('potMultChip').classList.remove('on');
   $('cashStack').classList.add('on'); $('rerackBtn').classList.add('on'); hudReracks();
   comboShow(); setupRound(0); showHint(true);
+  bgmPlay();
 }
 function toMenu(){
-  S.state='menu'; S.phase='idle'; paused=false;           // quitting banks nothing
+  S.state='menu'; S.phase='idle'; paused=false; bgmStop();  // quitting banks nothing
   $('menu').style.display=''; $('over').classList.remove('show'); $('hud').style.display='none';
   $('pauseOv').classList.remove('show'); $('helpOv').classList.remove('show'); $('lastOv').classList.remove('show');
   $('cashStack').classList.remove('on'); $('rerackBtn').classList.remove('on');
@@ -939,7 +946,7 @@ function toMenu(){
   S.round=0; buildRack(0);                                // fresh rack as the menu backdrop
 }
 function showOver(kind,title,sub,banked){
-  S.state='over'; S.phase='idle';
+  S.state='over'; S.phase='idle'; bgmStop();
   $('hud').style.display='none'; $('cashStack').classList.remove('on'); $('rerackBtn').classList.remove('on');
   const ov=$('over');
   ov.classList.remove('cash','crash'); ov.classList.add(kind);
