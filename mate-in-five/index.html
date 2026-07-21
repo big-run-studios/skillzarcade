@@ -142,6 +142,12 @@
   #resLineLbl{font-family:var(--display);font-weight:700;font-size:10px;letter-spacing:2px;color:#9a7420;margin-bottom:5px;}
   #resLineMoves{font-weight:800;font-size:clamp(13px,3.9vw,16px);line-height:1.55;color:var(--ink);letter-spacing:.3px;}
   #resLineMoves b{color:#9a7420;font-weight:900;margin-right:1px;}
+  #resPot{display:none;font-family:var(--display);font-weight:700;letter-spacing:1.6px;font-size:clamp(10px,2.8vw,12px);color:#9a7420;margin-top:8px;}
+  #resPot.lost{color:var(--red);}
+  #cashIco{position:absolute;left:0;right:0;top:22%;text-align:center;font-size:clamp(24px,7vw,32px);font-weight:900;
+    color:#a97f2c;text-shadow:0 1px 0 rgba(255,255,255,.85),0 2px 4px rgba(90,60,10,.3);pointer-events:none;line-height:1;}
+  #cashTxt{position:absolute;left:0;right:0;top:64%;white-space:nowrap;text-align:center;font-weight:800;font-size:clamp(7.5px,2.1vw,10px);
+    letter-spacing:.4px;color:#3f3428;pointer-events:none;}
   #resTotal{font-weight:900;font-size:clamp(30px,10vw,46px);color:var(--ink);margin:12px 0 4px;font-variant-numeric:tabular-nums;}
   #resBest{font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:2px;color:#9a7420;height:16px;margin-bottom:10px;}
   #resBtns{display:flex;gap:12px;justify-content:center;margin-top:6px;}
@@ -179,7 +185,7 @@
     <div id="banner"><span id="bannerT"></span></div>
 
     <div id="botBar">
-      <button class="cbtn" id="btnBack"><img src="ui/07_back_button.webp" alt="Back"></button>
+      <button class="cbtn" id="btnCash"><img src="ui/cash_button.webp" alt="Cash out"><span id="cashIco">$</span><span id="cashTxt">CASH OUT</span></button>
       <button class="cbtn" id="btnUndo"><img src="ui/08_undo_button.webp" alt="Undo"></button>
       <button class="cbtn" id="btnHint" style="width:clamp(66px,18vw,84px);"><img src="ui/hint_button.webp" alt="Hint"><span id="hintBadge">−1,000</span></button>
       <button class="cbtn" id="btnMute"><img src="ui/10_mute_button.webp" alt="Mute"></button>
@@ -197,7 +203,7 @@
       <button class="gbtn" id="btnPlay">PLAY</button>
       <div id="best">BEST <b id="bestV">0</b></div>
       <button class="sbtn" id="btnArcade">← ARCADE</button>
-      <div id="brand">CRASHARCADE · MATE IN FIVE v0.2.0</div>
+      <div id="brand">CRASHARCADE · MATE IN FIVE v0.3.0</div>
     </div>
   </div>
 
@@ -206,7 +212,7 @@
       <div id="resTitle" class="win">CHECKMATE!</div>
       <div id="resSub">MATE ON MOVE 2</div>
       <div id="resLine">
-        <div id="resLineLbl">✦ ONE WINNING LINE ✦</div>
+        <div id="resLineLbl">✦ POSSIBLE WINNING LINE ✦</div>
         <div id="resLineMoves"></div>
       </div>
       <div id="resBrk">
@@ -214,12 +220,14 @@
         <div class="brk"><span>TIME BONUS</span><b id="brkTime">+7,300</b></div>
         <div class="brk neg" id="brkHintRow"><span>HINT</span><b id="brkHint">−1,000</b></div>
       </div>
+      <div id="resPot"></div>
       <div id="resTotal">0</div>
       <div id="resBest">NEW BEST!</div>
       <div id="resBtns">
         <button class="sbtn" id="btnMenu">MENU</button>
         <button class="sbtn" id="btnResUndo">↩ UNDO</button>
-        <button class="gbtn" id="btnNext" style="padding:12px 30px;font-size:16px;">NEXT PUZZLE</button>
+        <button class="gbtn" id="btnCashRes" style="padding:12px 24px;font-size:15px;">CASH OUT</button>
+        <button class="gbtn" id="btnNext" style="padding:12px 24px;font-size:15px;">NEXT PUZZLE</button>
       </div>
     </div>
   </div>
@@ -248,7 +256,7 @@ window.THREE=THREE; // console diagnostics
 /* =========================================================================
    CFG — all balance values
    ========================================================================= */
-const VERSION='0.2.0';
+const VERSION='0.3.0';
 const CFG={
   roundTime:120,          // seconds
   maxMoves:5,
@@ -337,7 +345,7 @@ scene.fog=new THREE.Fog(0xd4e4c8,26,95);
   const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;
   scene.background=t;
 }
-const camera=new THREE.PerspectiveCamera(CFG.cam.fov,1,0.1,300);
+const camera=new THREE.PerspectiveCamera(CFG.cam.fov,1,0.5,300);
 
 const hemi=new THREE.HemisphereLight(0xeaf3ff,0x9a8f74,0.95);scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff0d8,1.75);
@@ -435,16 +443,17 @@ const fx=f=>(f-3.5)*S, fz=r=>(3.5-r)*S;      // player (White) at bottom, rank 0
 const boardG=new THREE.Group();scene.add(boardG);
 {
   // base slab + gold trim + outer rim
+  // stacked slabs get clear vertical separation — near-coplanar tops z-fight while the camera moves
   const rim=new THREE.Mesh(new THREE.BoxGeometry(10.6,0.55,10.6),MAT.stone);
-  rim.position.y=-0.35;rim.receiveShadow=true;boardG.add(rim);
+  rim.position.y=-0.40;rim.receiveShadow=true;boardG.add(rim);
   const inner=new THREE.Mesh(new THREE.BoxGeometry(8.9,0.6,8.9),MAT.ivory);
-  inner.position.y=-0.31;inner.receiveShadow=true;boardG.add(inner);
+  inner.position.y=-0.34;inner.receiveShadow=true;boardG.add(inner);
   const trim=new THREE.Mesh(new THREE.BoxGeometry(8.45,0.045,8.45),MAT.gold);
-  trim.position.y=-0.032;boardG.add(trim); // top stays below tile tops — only the outer margin shows as a gold border
+  trim.position.y=-0.034;boardG.add(trim); // top stays below tile tops — only the outer margin shows as a gold border
   const trimOut=new THREE.Mesh(new THREE.BoxGeometry(9.3,0.05,9.3),MAT.gold);
-  trimOut.position.y=-0.05;boardG.add(trimOut);
+  trimOut.position.y=-0.09;boardG.add(trimOut);
   const midRim=new THREE.Mesh(new THREE.BoxGeometry(9.28,0.1,9.28),MAT.stone);
-  midRim.position.y=-0.085;boardG.add(midRim);
+  midRim.position.y=-0.16;boardG.add(midRim);
   for(let r=0;r<8;r++)for(let f=0;f<8;f++){
     const dark=((f+r)&1)===0;                 // a1 (f0,r0) is dark
     const m=(dark?MAT.tileD:MAT.tileL).clone();
@@ -602,40 +611,51 @@ function discMesh(r,color,op=1){
 }
 const fxG=new THREE.Group();scene.add(fxG);
 
-// legal-move markers (gold halo + dot, like the target art)
+// legal-move markers — neon PLAYER BLUE, layered glow
 const legalMarkers=[];
 for(let i=0;i<32;i++){
   const g=new THREE.Group();
-  g.add(ringMesh(0.19,0.27,0xffca66,0.85));
-  const glow=discMesh(0.33,0xcf9a3a,0.28);glow.position.y=-0.002;g.add(glow);
-  const dot=discMesh(0.075,0xffe2a0,0.95);dot.position.y=0.002;g.add(dot);
+  const solid=new THREE.Mesh(new THREE.RingGeometry(0.2,0.29,40),
+    new THREE.MeshBasicMaterial({color:0x1fb6ff,transparent:true,opacity:0.95,depthWrite:false,side:THREE.DoubleSide}));
+  solid.rotation.x=-Math.PI/2;solid.renderOrder=5;g.add(solid);
+  g.add(ringMesh(0.3,0.4,0x34e1ff,0.55));
+  const glow=discMesh(0.42,0x34e1ff,0.3);glow.position.y=-0.002;g.add(glow);
+  const dot=discMesh(0.085,0xd8f6ff,1);dot.position.y=0.002;g.add(dot);
   g.position.y=0.03;g.visible=false;fxG.add(g);legalMarkers.push(g);
 }
 // selected-piece ring (blue)
 const selRing=new THREE.Group();
 {
-  const solid=new THREE.Mesh(new THREE.RingGeometry(0.34,0.44,40),
-    new THREE.MeshBasicMaterial({color:0x1e6fd0,transparent:true,opacity:0.95,depthWrite:false,side:THREE.DoubleSide}));
+  const solid=new THREE.Mesh(new THREE.RingGeometry(0.33,0.45,40),
+    new THREE.MeshBasicMaterial({color:0x0e9be8,transparent:true,opacity:1,depthWrite:false,side:THREE.DoubleSide}));
   solid.rotation.x=-Math.PI/2;solid.renderOrder=5;selRing.add(solid);
-  selRing.add(ringMesh(0.47,0.53,0x53b2ff,0.55));
+  selRing.add(ringMesh(0.47,0.58,0x34e1ff,0.75));
+  selRing.add(ringMesh(0.6,0.68,0x8feaff,0.35));
 }
-const selGlow=discMesh(0.5,0x2f8fe8,0.22);selGlow.position.y=-0.002;selRing.add(selGlow);
+const selGlow=discMesh(0.72,0x34e1ff,0.3);selGlow.position.y=-0.002;selRing.add(selGlow);
 selRing.position.y=0.03;selRing.visible=false;fxG.add(selRing);
 // danger ring (red, checked king)
 const dangerRing=new THREE.Group();
 {
-  const solid=new THREE.Mesh(new THREE.RingGeometry(0.36,0.47,40),
-    new THREE.MeshBasicMaterial({color:0xd0281c,transparent:true,opacity:0.95,depthWrite:false,side:THREE.DoubleSide}));
+  const solid=new THREE.Mesh(new THREE.RingGeometry(0.35,0.47,40),
+    new THREE.MeshBasicMaterial({color:0xe81f2e,transparent:true,opacity:1,depthWrite:false,side:THREE.DoubleSide}));
   solid.rotation.x=-Math.PI/2;solid.renderOrder=5;dangerRing.add(solid);
-  dangerRing.add(ringMesh(0.5,0.56,0xff7a66,0.55));
+  dangerRing.add(ringMesh(0.49,0.6,0xff5a6e,0.8));
+  dangerRing.add(ringMesh(0.62,0.7,0xffb0a0,0.35));
 }
-const dGlow=discMesh(0.55,0xd8352b,0.25);dGlow.position.y=-0.002;dangerRing.add(dGlow);
+const dGlow=discMesh(0.75,0xff3b4e,0.32);dGlow.position.y=-0.002;dangerRing.add(dGlow);
 dangerRing.position.y=0.03;dangerRing.visible=false;fxG.add(dangerRing);
 // hint rings (gold pulse on piece + destination)
-const hintRingA=ringMesh(0.36,0.46,0xffd97a,0.95);hintRingA.position.y=0.035;hintRingA.visible=false;fxG.add(hintRingA);
-const hintRingB=ringMesh(0.22,0.3,0xffd97a,0.95);hintRingB.position.y=0.035;hintRingB.visible=false;fxG.add(hintRingB);
+function goldPulse(rIn,rOut){
+  const g=new THREE.Group();
+  g.add(ringMesh(rIn,rOut,0xffd97a,1));
+  const gl=discMesh(rOut+0.16,0xffc233,0.35);gl.position.y=-0.002;g.add(gl);
+  return g;
+}
+const hintRingA=goldPulse(0.36,0.47);hintRingA.position.y=0.035;hintRingA.visible=false;fxG.add(hintRingA);
+const hintRingB=goldPulse(0.22,0.32);hintRingB.position.y=0.035;hintRingB.visible=false;fxG.add(hintRingB);
 // hover highlight while dragging
-const hoverSq=discMesh(0.44,0xffe2a0,0.0);hoverSq.position.y=0.028;fxG.add(hoverSq);
+const hoverSq=discMesh(0.46,0x34e1ff,0.0);hoverSq.position.y=0.028;fxG.add(hoverSq);
 
 // attack lines toward a cornered king
 const atkLines=[];
@@ -646,9 +666,13 @@ function showAttackLines(g,kingSq,color){
     const ap=new THREE.Vector3(fx(CH.fileOf(s)),0.5,fz(CH.rankOf(s)));
     const mid=ap.clone().lerp(kp,0.5);mid.y=0.85+ap.distanceTo(kp)*0.06;
     const curve=new THREE.QuadraticBezierCurve3(ap,mid,kp);
-    const geo=new THREE.TubeGeometry(curve,20,0.022,6,false);
-    const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.85,blending:THREE.AdditiveBlending,depthWrite:false}));
-    mesh.renderOrder=6;fxG.add(mesh);atkLines.push(mesh);
+    const coreCol=(color===0x34e1ff)?0xdff6ff:0xffd8d0;
+    const core=new THREE.Mesh(new THREE.TubeGeometry(curve,20,0.03,6,false),
+      new THREE.MeshBasicMaterial({color:coreCol,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false}));
+    core.renderOrder=7;core.userData.baseOp=0.95;fxG.add(core);atkLines.push(core);
+    const halo=new THREE.Mesh(new THREE.TubeGeometry(curve,20,0.07,6,false),
+      new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.4,blending:THREE.AdditiveBlending,depthWrite:false}));
+    halo.renderOrder=6;halo.userData.baseOp=0.4;fxG.add(halo);atkLines.push(halo);
   }
 }
 function clearAttackLines(){for(const l of atkLines){fxG.remove(l);l.geometry.dispose();l.material.dispose();}atkLines.length=0;}
@@ -848,10 +872,10 @@ const $=id=>document.getElementById(id);
 const ui={hud:$('hud'),botBar:$('botBar'),menu:$('menu'),result:$('result'),promo:$('promo'),
   scoreV:$('scoreV'),timerV:$('timerV'),timerP:$('timerP'),multV:$('multV'),statusT:$('statusT'),
   moveN:$('moveN'),pips:[...document.querySelectorAll('.pip')],banner:$('banner'),bannerT:$('bannerT'),
-  btnBack:$('btnBack'),btnUndo:$('btnUndo'),btnHint:$('btnHint'),btnMute:$('btnMute'),hintBadge:$('hintBadge'),
+  btnCash:$('btnCash'),btnUndo:$('btnUndo'),btnHint:$('btnHint'),btnMute:$('btnMute'),hintBadge:$('hintBadge'),
   resTitle:$('resTitle'),resSub:$('resSub'),resBrk:$('resBrk'),brkBase:$('brkBase'),brkTime:$('brkTime'),
   brkHintRow:$('brkHintRow'),brkHint:$('brkHint'),resTotal:$('resTotal'),resBest:$('resBest'),
-  resLine:$('resLine'),resLineMoves:$('resLineMoves'),
+  resLine:$('resLine'),resLineMoves:$('resLineMoves'),resPot:$('resPot'),btnCashRes:$('btnCashRes'),
   btnMenu:$('btnMenu'),btnNext:$('btnNext'),btnResUndo:$('btnResUndo'),btnPlay:$('btnPlay'),btnArcade:$('btnArcade'),bestV:$('bestV')};
 const fmt=n=>Math.round(n).toLocaleString('en-US');
 
@@ -890,7 +914,7 @@ function updatePips(mateOn){
   });
 }
 function updateHUD(){
-  ui.scoreV.textContent=roundActive?fmt(potential()):(lastWin?fmt(finalScore):'0');
+  ui.scoreV.textContent=roundActive?fmt(pot+potential()):fmt(scoreFrozen);
   const t=Math.max(0,timeLeft);
   ui.timerV.textContent=`${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
   ui.timerP.classList.toggle('low',roundActive&&t<=CFG.lowTime);
@@ -905,7 +929,7 @@ function updateDangerRing(){
   if(ks>=0){
     dangerRing.position.set(fx(CH.fileOf(ks)),0.03,fz(CH.rankOf(ks)));
     dangerRing.visible=true;
-    showAttackLines(g,ks,0xff5040);
+    showAttackLines(g,ks,ks===g.kings[1]?0x34e1ff:0xff3b4e); // blue = player's attack, red = threat on the player
   }else dangerRing.visible=false;
 }
 function clearSelection(){
@@ -952,7 +976,7 @@ function startRound(forceIdx){
   curIdx=pickPuzzle(forceIdx);lastIdx=curIdx;curPuzzle=PUZZLES[curIdx];
   g.loadFEN(curPuzzle.fen);
   spawnPieces(g);
-  movesMade=0;hintUsed=false;timeLeft=CFG.roundTime;roundActive=false;lastTickSec=-1;lastWin=false;mateMove=0;finalScore=0;
+  movesMade=0;hintUsed=false;timeLeft=CFG.roundTime;roundActive=false;lastTickSec=-1;lastWin=false;mateMove=0;finalScore=0;potLost=0;scoreFrozen=pot;
   clearSelection();updateDangerRing();
   hintRingA.visible=hintRingB.visible=false;
   ui.btnHint.disabled=false;ui.hintBadge.style.opacity='1';
@@ -1019,50 +1043,99 @@ function sanLine(fen,ucis){
 
 /* ---------------- outcomes ---------------- */
 let finalScore=0,mateMove=0,lastWin=false;
-function showResult(win,reason){
-  state='end';
-  ui.result.style.display='flex';
-  if(win){
-    ui.resTitle.textContent='CHECKMATE!';ui.resTitle.className='win';
-    ui.resSub.textContent=`MATE ON MOVE ${mateMove} · ×${CFG.multByMove[mateMove-1]}`;
-    ui.resBrk.style.display='block';
-    ui.brkBase.textContent=`${fmt(CFG.basePoints)} × ${CFG.multByMove[mateMove-1]}`;
-    ui.brkTime.textContent='+'+fmt(Math.floor(Math.max(0,timeLeft)*10)*(CFG.perSecond/10));
-    ui.brkHintRow.style.display=hintUsed?'flex':'none';
-    if(best<finalScore){best=finalScore;store.set('m5_best',''+best);ui.resBest.textContent='NEW BEST!';}
-    else ui.resBest.textContent='';
-    ui.resLine.style.display='none';
-    ui.btnResUndo.style.display='none';
-  }else{
-    ui.resTitle.textContent=reason;ui.resTitle.className='lose';
-    ui.resSub.textContent='NO POINTS BANKED';
-    ui.resBrk.style.display='none';
-    ui.resBest.textContent='';
-    if(curPuzzle&&curPuzzle.line&&curPuzzle.line.length){
-      const san=sanLine(curPuzzle.fen,curPuzzle.line);
-      let html='';
-      for(let i=0;i<san.length;i+=2){
-        html+='<b>'+(i/2+1)+'.</b>'+san[i]+(san[i+1]?' '+san[i+1]:'')+'  ';
-      }
-      ui.resLineMoves.innerHTML=html.trim();
-      ui.resLine.style.display='block';
-    }else ui.resLine.style.display='none';
-    ui.btnResUndo.style.display=(movesMade>0&&timeLeft>1&&g.hist.length>0)?'inline-block':'none';
-  }
-  // count-up
-  const target=win?finalScore:0;
-  const t0=performance.now(),dur=win?900:1;
+let pot=0,potLost=0,scoreFrozen=0,banked=0;
+const FIGS=[['K','\u2654','\u265A'],['Q','\u2655','\u265B'],['R','\u2656','\u265C'],['B','\u2657','\u265D'],['N','\u2658','\u265E']];
+function figurine(san,isWhite){
+  const f=FIGS.find(x=>san[0]===x[0]);
+  if(f)return (isWhite?f[1]:f[2])+san.slice(1);
+  if(san[0]==='O')return san;              // castling
+  return (isWhite?'\u2659':'\u265F')+san; // pawn move
+}
+function countTo(target,dur){
+  const t0=performance.now();
   const tick=()=>{
-    const k=Math.min(1,(performance.now()-t0)/dur);
+    const k=Math.min(1,(performance.now()-t0)/Math.max(1,dur));
     ui.resTotal.textContent=fmt(target*(k*(2-k)));
     if(k<1)requestAnimationFrame(tick);
   };
   tick();
 }
+function showResult(win,reason){
+  state='end';
+  ui.result.style.display='flex';
+  ui.resBest.textContent='';
+  if(win){
+    ui.resTitle.textContent='CHECKMATE!';ui.resTitle.className='win';
+    ui.resSub.textContent=`MATE ON MOVE ${mateMove} \u00b7 \u00d7${CFG.multByMove[mateMove-1]}`;
+    ui.resBrk.style.display='block';
+    ui.brkBase.textContent=`${fmt(CFG.basePoints)} \u00d7 ${CFG.multByMove[mateMove-1]}`;
+    ui.brkTime.textContent='+'+fmt(Math.floor(Math.max(0,timeLeft)*10)*(CFG.perSecond/10));
+    ui.brkHintRow.style.display=hintUsed?'flex':'none';
+    ui.resLine.style.display='none';
+    ui.btnResUndo.style.display='none';
+    ui.resPot.textContent='POT \u2014 CASH OUT OR RISK IT';
+    ui.resPot.className='';ui.resPot.style.display='block';
+    ui.btnMenu.style.display='none';
+    ui.btnCashRes.style.display='inline-block';
+    ui.btnNext.textContent='NEXT PUZZLE';
+    countTo(pot,900);
+  }else{
+    ui.resTitle.textContent=reason;ui.resTitle.className='lose';
+    ui.resSub.textContent='NO POINTS BANKED';
+    ui.resBrk.style.display='none';
+    if(potLost>0){ui.resPot.textContent='POT LOST \u2212'+fmt(potLost);ui.resPot.className='lost';ui.resPot.style.display='block';}
+    else ui.resPot.style.display='none';
+    if(curPuzzle&&curPuzzle.line&&curPuzzle.line.length){
+      const san=sanLine(curPuzzle.fen,curPuzzle.line);
+      let html='';
+      for(let i=0;i<san.length;i+=2){
+        html+='<b>'+(i/2+1)+'.</b>'+figurine(san[i],true)+(san[i+1]?' '+figurine(san[i+1],false):'')+'  ';
+      }
+      ui.resLineMoves.innerHTML=html.trim();
+      ui.resLine.style.display='block';
+    }else ui.resLine.style.display='none';
+    ui.btnResUndo.style.display=(movesMade>0&&timeLeft>1&&g.hist.length>0)?'inline-block':'none';
+    ui.btnMenu.style.display='inline-block';
+    ui.btnCashRes.style.display='none';
+    ui.btnNext.textContent='NEW RUN';
+    countTo(0,1);
+  }
+}
+function showCashed(){
+  state='end';roundActive=false;lastWin=false;
+  ui.result.style.display='flex';
+  ui.resTitle.textContent='CASHED OUT';ui.resTitle.className='win';
+  ui.resSub.textContent='RUN BANKED';
+  ui.resBrk.style.display='none';
+  ui.resLine.style.display='none';
+  ui.btnResUndo.style.display='none';
+  ui.resPot.style.display='none';
+  if(banked>best){best=banked;store.set('m5_best',''+best);ui.resBest.textContent='NEW BEST!';}
+  else ui.resBest.textContent='';
+  ui.btnMenu.style.display='inline-block';
+  ui.btnCashRes.style.display='none';
+  ui.btnNext.textContent='NEW RUN';
+  countTo(banked,900);
+}
+function cashOut(){
+  if(state==='menu'||state==='mateCine')return false;
+  if(state==='end'&&pot<=0)return false;
+  if(pot<=0){toMenu();return true;}          // nothing staked yet — just leave the table
+  banked=pot;pot=0;scoreFrozen=banked;
+  roundActive=false;
+  clearSelection();clearAttackLines();dangerRing.visible=false;
+  hintRingA.visible=hintRingB.visible=false;hintT=0;
+  ui.promo.style.display='none';pendingPromo=null;
+  sfx('cash');
+  banner('CASHED OUT');
+  showCashed();
+  return true;
+}
 function winRound(){
   roundActive=false;lastWin=true;
   mateMove=movesMade+1;
   finalScore=Math.max(0,CFG.basePoints*CFG.multByMove[mateMove-1]+Math.floor(Math.max(0,timeLeft)*10)*(CFG.perSecond/10)-(hintUsed?CFG.hintPenalty:0));
+  pot+=finalScore;scoreFrozen=pot;
   movesMade=mateMove;
   state='mateCine';
   updatePips(mateMove);updateHUD();
@@ -1077,6 +1150,7 @@ function winRound(){
 }
 function failRound(reason,mated){
   roundActive=false;lastWin=false;finalScore=0;
+  potLost=pot;pot=0;scoreFrozen=0;
   clearSelection();
   state='mateCine';
   sfx('fail');
@@ -1102,6 +1176,7 @@ function commitPlayerMove(m){
   const st=g.status();
   updateHUD();
   animateMove(g,m,()=>{
+    if(state==='end'||state==='menu')return;   // cashed out / left mid-animation
     updateDangerRing();
     if(st==='mate'){winRound();return;}
     movesMade++;
@@ -1132,6 +1207,7 @@ function aiTurn(){
     const st=g.status();
     state='aiAnim';
     animateMove(g,r.move,()=>{
+      if(state==='end'||state==='menu')return; // cashed out / left mid-animation
       updateDangerRing();
       if(st==='mate'){failRound('CHECKMATED',true);return;}
       if(st==='stalemate'){failRound('STALEMATE');return;}
@@ -1223,7 +1299,7 @@ tap.addEventListener('pointermove',e=>{
   const legalHere=sq>=0&&selMoves.some(m=>m.to===sq);
   if(legalHere){
     hoverSq.position.set(fx(CH.fileOf(sq)),0.028,fz(CH.rankOf(sq)));
-    hoverSq.material.opacity=0.5;
+    hoverSq.material.opacity=0.65;
   }else hoverSq.material.opacity=0;
 });
 tap.addEventListener('pointerup',e=>{
@@ -1270,12 +1346,13 @@ function doHint(){
 /* =========================================================================
    BUTTONS (pointerdown — iOS drops click for second-finger taps)
    ========================================================================= */
-ui.btnPlay.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');startRound();});
+ui.btnPlay.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');pot=0;scoreFrozen=0;startRound();});
 ui.btnArcade.addEventListener('pointerdown',e=>{e.preventDefault();location.href='../index.html';});
 ui.btnMenu.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');toMenu();});
 ui.btnResUndo.addEventListener('pointerdown',e=>{
   e.preventDefault();
   if(lastWin||movesMade<1||timeLeft<=1||g.hist.length<1)return;
+  pot=potLost;potLost=0;                     // the pot comes back with the position
   ui.result.style.display='none';
   g.unmake();
   if((g.hist.length%2)===1)g.unmake();   // odd remainder = an AI reply is still on top; take it too
@@ -1290,7 +1367,8 @@ ui.btnResUndo.addEventListener('pointerdown',e=>{
   sfx('capture');
 });
 ui.btnNext.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');startRound();});
-ui.btnBack.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');toMenu();});
+ui.btnCash.addEventListener('pointerdown',e=>{e.preventDefault();sfx('ui');cashOut();});
+ui.btnCashRes.addEventListener('pointerdown',e=>{e.preventDefault();cashOut();});
 function undoMove(){
   if(state==='aiThink'&&movesMade>0&&(g.hist.length%2)===1){
     g.unmake();                                             // retract before Black replies
@@ -1353,6 +1431,7 @@ function stepSim(dt){
   legalMarkers.forEach(mk=>{if(mk.visible)mk.scale.setScalar(pu);});
   selRing.scale.setScalar(1+Math.sin(simT*4.4)*0.05);
   dangerRing.scale.setScalar(1+Math.sin(simT*7)*0.08);
+  for(const l of atkLines)l.material.opacity=l.userData.baseOp*(0.75+0.25*Math.sin(simT*9));
   if(hintT>0){
     hintT-=dt;
     const hp=1+Math.sin(simT*8)*0.12;
@@ -1380,7 +1459,7 @@ renderer.setAnimationLoop(()=>{
    ========================================================================= */
 window.__game={
   get s(){return {state,idx:curIdx,id:curPuzzle?curPuzzle.id:null,mateIn:curPuzzle?curPuzzle.mateIn:0,
-    fen:g.fen(),movesMade,mult:curMult(),timeLeft:+timeLeft.toFixed(1),hintUsed,pot:potential(),
+    fen:g.fen(),movesMade,mult:curMult(),timeLeft:+timeLeft.toFixed(1),hintUsed,potential:potential(),pot,banked,
     final:finalScore,best,check:{w:g.inCheck(CH.W),b:g.inCheck(CH.B)},status:g.status(),
     pieces:pieces.size,draws:renderer.info.render.calls};},
   load:i=>{startRound(i);return curPuzzle.id;},
@@ -1397,6 +1476,7 @@ window.__game={
   setT:t=>{timeLeft=t;updateHUD();return timeLeft;},
   hintNow:()=>doHint(),
   undo:()=>undoMove(),
+  cashNow:()=>cashOut(),
   fast:v=>{fastMode=v!==false;return fastMode;},
   step:d=>{stepSim(d||0.016);renderer.render(scene,camera);},
   refLine:()=>curPuzzle?curPuzzle.line.slice():[],
