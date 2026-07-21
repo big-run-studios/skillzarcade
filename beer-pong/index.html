@@ -270,7 +270,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>; a lone cup glows purple — an <b style="color:#c98aff">island</b>, worth 3×. Run out of balls and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.14</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.15</div>
   </div>
 
   <div id="over">
@@ -324,7 +324,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.14',
+  ver:'0.1.15',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
@@ -378,7 +378,11 @@ const CFG = {
   resultDelay:0.55, resultDelayIn:1.05,
   flightMax:6, shakeDecay:6,
   // --- camera (portrait, above & behind the ball)
-  camOff:{x:0,y:54,z:68}, lookAt:{x:0,y:4,z:-106}, fov:57,
+  // lookAt pulled toward the player so the TEE + chevrons stay inside the vertical FOV
+  // even at f=1 (short viewports — phone browser chrome eats height): the old -106 aim
+  // put the ball below the frustum whenever the aspect didn't trigger the pull-back.
+  // Verified by NDC projection: ball y <= -0.60 at aspect 0.67, rack/scoreboard framed.
+  camOff:{x:0,y:56,z:84}, lookAt:{x:0,y:4,z:-70}, fov:57,
   fitAspect:0.56, camFollowZ:26, camFollowY:7,
 };
 window.CFG = CFG;
