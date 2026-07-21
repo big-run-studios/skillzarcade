@@ -229,7 +229,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>. Run out of balls with cups standing and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it. Each rack you clear boosts all points ahead.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.1</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.2</div>
   </div>
 
   <div id="over">
@@ -272,23 +272,23 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.1',
+  ver:'0.1.2',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
-  cup:{ rimR:6.0, innerR:5.4, baseR:4.3, h:14.5, spacing:13.2 },
+  cup:{ rimR:6.0, innerR:5.4, baseR:4.3, h:14.5, spacing:12.2 },   // rims touch — a racked pocket is solid rim, like real beer pong
   tee:{ x:0, y:13, z:30 },
   gravity:620,
   // --- lane bounce (ping-pong balls are lively — dead rest made bounce-ins impossible to clear the rim)
   rest:0.78, fricX:0.82, fricZ:0.80,
-  kickSide:52, kickFwd:58, popBack:36,       // spin cash-in at the bounce
+  kickSide:66, kickFwd:58, popBack:36,       // spin cash-in at the bounce
   railRest:0.55,
   // --- spin in flight (magnus, scaled by speed/400)
-  magnusSide:62, magnusTop:88,
+  magnusSide:85, magnusTop:88,
   // --- swipe → throw mapping. The solved make-speed (~300cm/s) must sit at a MID swipe:
   // v0.1.0 normalized so a normal flick pegged max power and every throw sailed long.
   vMin:190, vMax:420,
-  swipeNorm:{spd:3.5,len:0.5},               // release px/s ÷ (H·spd) → full power needs a genuine rip
+  swipeNorm:{spd:4.6,len:0.62},              // a natural thumb flick (~1600px/s) = make-band center; full power needs a genuine rip
   elevBase:50, elevAccel:-11, elevSoft:7,    // deg: base + accel·acc + soft·(1−pow)
   aimK:0.55, aimMaxDeg:38,
   assist:0.35, assistR:8,                    // proximity-scaled nudge toward a near-missed mouth — never a snap
@@ -750,14 +750,15 @@ function computeSwipe(pts){
   const spdN=clamp((0.6*relSpeed+0.4*avgSpeed)/(H*CFG.swipeNorm.spd),0,1);
   const lenN=clamp(len/(H*CFG.swipeNorm.len),0,1);
   const pow=clamp(0.7*spdN+0.3*lenN,0.06,1);
-  // signed curvature: max perpendicular deviation from the chord
+  // signed curvature: bow depth relative to the chord (swipe-size independent).
+  // Positive = swipe bows right = ball curves right. 30% bow = full spin.
   const chordL=Math.hypot(dx,dy)||1;
   let devMax=0;
   for(const p of pts){
     const d=((p.x-p0.x)*dy-(p.y-p0.y)*dx)/chordL;
     if(Math.abs(d)>Math.abs(devMax)) devMax=d;
   }
-  const curve=clamp(devMax/(H*0.09),-1,1);
+  const curve=clamp(-devMax/(chordL*0.30),-1,1);
   const aimDeg=clamp(Math.atan2(dx,-dy)*180/Math.PI*CFG.aimK,-CFG.aimMaxDeg,CFG.aimMaxDeg);
   return {pow,aimDeg,curve,acc};
 }
@@ -1012,11 +1013,18 @@ function subStep(dt){
     const dm=Math.sqrt((p.x-c.x)**2+(p.z-c.z)**2+(p.y-rimY)**2);
     if(dm<S.shotClosest) S.shotClosest=dm;
     if(hd<innerR&&p.y>rimY&&p.y<rimY+8) S.overCup=true;
-    // clean entry through the mouth
-    if(v.y<0&&S.prevY>=rimY&&p.y<rimY&&hd<innerR-R*0.35){ trySink(c,hd); return true; }
-    // rim contact
-    if(Math.abs(hd-rimR)<R*0.95&&Math.abs(p.y-rimY)<R*0.95&&S.rimCD<=0){
-      S.rimHit=true; S.rimCD=0.09; c.wob=Math.min(1.2,c.wob+0.7);
+    // clean entry through the mouth — the in-air lob is THE shot, keep it forgiving:
+    // ~67% of the rim area is a make; an inner-lip graze funnels in instead of robbing it
+    if(v.y<0&&S.prevY>=rimY&&p.y<rimY&&hd<innerR-R*0.22){ trySink(c,hd); return true; }
+    // rim contact — band widened OUTWARD past the rim lip so the pocket between racked
+    // cups is solid rim (balls rattle off, never thread through); per-cup cooldown so one
+    // clip can't grant free passage past the neighbours' rims. A ball dropping cleanly
+    // into the mouth from above skips rim contact entirely (no more robbed entries).
+    if(c.rimCD>0) c.rimCD-=dt;
+    const dr=hd-rimR;
+    const dropping=v.y<0&&dr<-R*0.45&&p.y>rimY-R*0.3;
+    if(!dropping&&dr>-R*0.95&&dr<R*1.35&&Math.abs(p.y-rimY)<R*1.1&&!(c.rimCD>0)){
+      S.rimHit=true; c.rimCD=0.09; c.wob=Math.min(1.2,c.wob+0.7);
       const nx=(p.x-c.x)/(hd||1), nz=(p.z-c.z)/(hd||1);
       tmpV.set(p.x-(c.x+nx*rimR),p.y-rimY,p.z-(c.z+nz*rimR));
       const nl=tmpV.length()||1; tmpV.divideScalar(nl);
@@ -1049,8 +1057,6 @@ function subStep(dt){
       SFX.cupHit();
     }
   }
-  if(S.rimCD>0) S.rimCD-=dt;
-
   // --- island pad (raised disc — a legit bounce surface)
   if(islePad.visible){
     const dpx=p.x-islePad.position.x, dpz=p.z-islePad.position.z;
