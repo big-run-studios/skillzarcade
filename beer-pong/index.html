@@ -267,7 +267,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>; a lone cup glows purple — an <b style="color:#c98aff">island</b>, worth 3×. Run out of balls and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.6</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.7</div>
   </div>
 
   <div id="over">
@@ -292,7 +292,7 @@
       <div class="hrow"><span>OFF A CUP, INTO ANOTHER</span><b>+100</b></div>
       <div class="hrow"><span>CLEAR THE RACK</span><b>1000</b></div>
       <div class="hrow"><span>NO-MISS RACK</span><b>+2500</b></div>
-      <div class="hrow"><span>LEFTOVER BALLS</span><b>100 EACH</b></div>
+      <div class="hrow"><span>BALLS LEFT — FULL CLEAR ONLY</span><b>250 EACH</b></div>
       <div class="htxt">Makes build your <em>streak</em>: ×1 → ×2 → ×3 → ×5 → ×8. A miss resets it — a rimmed-out shot only halves it.</div>
       <div class="htxt">A cup left <em>touching no others</em> glows purple — an <em>island</em>, worth 3× or more. Tap <em>RE-RACK</em> (2 per run) to pull the remaining cups into a tight pyramid — but it erases islands.</div>
       <div class="htxt">Everything you score is a <em>pot at risk</em>. Run out of balls with cups standing = <em>CRASH — pot gone</em>. Tap <em>CASH OUT</em> between throws to bank it. Clear a rack and all points ahead get ×1.5. Quitting banks nothing.</div>
@@ -321,7 +321,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.6',
+  ver:'0.1.7',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
@@ -351,15 +351,15 @@ const CFG = {
   // glows purple and pays islandVal instead of 100. Regroups consolidate the rack and
   // kill islands, so take the island shot before the re-rack.
   rounds:[
-    { rackZ:-124, cupScale:1.00, balls:14, islandVal:300, msg:'CLEAR THE RACK!' },
-    { rackZ:-142, cupScale:0.93, balls:12, islandVal:450, msg:'RACK 2 · DEEPER' },
-    { rackZ:-158, cupScale:0.87, balls:10, islandVal:600, msg:'FINAL RACK · TINY CUPS' },
+    { rackZ:-124, cupScale:1.00, balls:20, islandVal:300, msg:'CLEAR THE RACK!' },
+    { rackZ:-142, cupScale:0.93, balls:20, islandVal:450, msg:'RACK 2 · DEEPER' },
+    { rackZ:-158, cupScale:0.87, balls:20, islandVal:600, msg:'FINAL RACK · TINY CUPS' },
   ],
   islandThr:1.25,          // isolated = no neighbour within spacing·cupScale·this
   reracks:2,               // tap re-racks per run (real-pong rule) — compacting erases islands
   // --- scoring
   pts:{ cup:100, bounce:150, extraBounce:50, precision:50, bank:100, rimRollIn:75, rimmedOut:25,
-        clear:1000, perfect:2500, ballLeft:100 },
+        clear:1000, perfect:2500, ballLeft:250 },   // ballLeft pays ONLY on completing the game (final rack clear)
   mult:[1,2,3,5,8],
   potBoost:1.5,            // clearing a rack multiplies ALL points ahead — deeper = richer = riskier
   // --- feel
@@ -1048,7 +1048,8 @@ function tallyStep(dt){
   }
   if(S.tallyFired===2&&S.tallyT>=1.4){
     S.tallyFired=3;
-    if(S.balls>0){ const b=potPts(S.balls*P.ballLeft); addScore(b);
+    // leftover balls only pay when the whole game is completed (final rack)
+    if(S.round>=CFG.rounds.length-1&&S.balls>0){ const b=potPts(S.balls*P.ballLeft); addScore(b);
       pop(at.clone().setY(14),`<span class="plbl">${S.balls} BALLS LEFT</span>+${fmt(b)}`,'big'); SFX.tally(); }
   }
   if(S.tallyFired===3&&S.tallyT>=1.9&&S.round<CFG.rounds.length-1){
