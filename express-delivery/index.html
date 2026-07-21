@@ -203,7 +203,7 @@
     <div class="tag">Drag anywhere to steer 🛞 &nbsp;Double-tap to throw 📦 &nbsp;Cash out 💰</div>
     <button id="startBtn">START ROUTE</button>
     <div id="menuBest"></div>
-    <div class="brand" id="brand">EXPRESS DELIVERY v0.3.8 · BIG RUN STUDIOS</div>
+    <div class="brand" id="brand">EXPRESS DELIVERY v0.3.9 · BIG RUN STUDIOS</div>
   </div>
 
   <div id="over">
@@ -221,7 +221,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.3.8',
+  ver:'0.3.9',
   // --- vehicle
   baseSpeed:8.5,          // forward m/s at run start
   speedGrowth:0.09,       // m/s gained per second
@@ -319,8 +319,10 @@ const CFG = {
   // --- feel
   camYawDeg:22.5,         // run camera orbits this far around the hero toward the delivery (right) side
   camSpring:30, camDamp:11,  // critically-damped lateral follow — ramps up, no snap
-  // narrower than iPad portrait (3:4): pull back, rise, cheat left so the target house stays in frame
-  camNarrowBack:3.5, camNarrowUp:2.2, camNarrowLeft:2.2, camNarrowLook:2.0,
+  // narrower than iPad portrait (3:4): pull back+up, cheat left, and lead the look down the road —
+  // enough forward view to navigate at speed AND the delivery side in frame to watch throws land
+  // phones: hero parks on the LEFT of the screen so the whole right side (houses + throws) is visible
+  camNarrowBack:3.0, camNarrowUp:3.2, camNarrowLeft:-0.5, camNarrowLook:3.6, camNarrowAhead:4.5, camNarrowFov:22, camNarrowYaw:-7,
   slowMoScale:0.35, slowMoTime:0.5,
   shakeDecay:5.5,
   // --- pickup stack (inverted triangle on the rack)
@@ -458,16 +460,20 @@ function cyl(m,r,h,x=0,y=0,z=0,r2){
 }
 function sph(m,r,x=0,y=0,z=0){ const o=new THREE.Mesh(G.sph,m); o.scale.setScalar(r*2); o.position.set(x,y,z); o.castShadow=true; return o; }
 function cone(m,r,h,x=0,y=0,z=0){ const o=new THREE.Mesh(G.cone,m); o.scale.set(r*2,h,r*2); o.position.set(x,y,z); o.castShadow=true; return o; }
-/* gable-roof prism, ridge along z */
+/* gable-roof prism, ridge along z — fully SEALED: both gable ends, both slopes, and a bottom */
 function prismGeo(){
   const g=new THREE.BufferGeometry();
-  const v=new Float32Array([
-    -0.5,0,-0.5,  0.5,0,-0.5,  0,1,-0.5,          // back tri
-    -0.5,0, 0.5,  0,1, 0.5,    0.5,0, 0.5,        // front tri
-    -0.5,0,-0.5,  0,1,-0.5,   -0.5,0,0.5,   0,1,-0.5,  0,1,0.5,  -0.5,0,0.5,   // left slope
-     0.5,0,-0.5,  0.5,0,0.5,   0,1,-0.5,    0,1,-0.5,  0.5,0,0.5, 0,1,0.5,     // right slope
-  ]);
-  g.setAttribute('position',new THREE.BufferAttribute(v,3)); g.computeVertexNormals(); return g;
+  const A=[-0.5,0,-0.5], B=[0.5,0,-0.5], C=[0,1,-0.5],     // back face corners + ridge
+        D=[-0.5,0, 0.5], E=[0.5,0, 0.5], F=[0,1, 0.5];     // front face corners + ridge
+  const tris=[
+    A,C,B,           // back gable  (outward -Z)
+    D,E,F,           // front gable (outward +Z)
+    A,D,F,  A,F,C,   // left slope
+    B,C,F,  B,F,E,   // right slope
+    A,B,E,  A,E,D,   // bottom (seals the underside)
+  ];
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(tris.flat()),3));
+  g.computeVertexNormals(); return g;
 }
 G.prism=prismGeo();
 function prism(m,w,h,d,x=0,y=0,z=0){ const o=new THREE.Mesh(G.prism,m); o.scale.set(w,h,d); o.position.set(x,y,z); o.castShadow=true; return o; }
@@ -2085,12 +2091,12 @@ function updateCamera(dt){
   } else {
     // orbit the camera around the hero toward the right side (where the targets are), hero stays centered
     // n: 0 at iPad portrait (3:4) and wider, 1 on narrow phones — pull back, rise, cheat left so the houses stay visible
-    const n=clamp((0.75-camera.aspect)/0.25,0,1);
-    const yaw=CFG.camYawDeg*Math.PI/180, camD=9.0+CFG.camNarrowBack*n;
+    const n=narrowN();
+    const yaw=(CFG.camYawDeg+CFG.camNarrowYaw*n)*Math.PI/180, camD=9.0+CFG.camNarrowBack*n;
     tx=veh.x-Math.sin(yaw)*camD-CFG.camNarrowLeft*n;
     ty=7.2+CFG.camNarrowUp*n+veh.y*0.6; tz=veh.z+Math.cos(yaw)*camD;
     lx=veh.x+veh.vx*0.35+CFG.camNarrowLook*n;             // frame centers between hero and the delivery side
-    ly=0.9+veh.y*0.4; lz=veh.z-1;
+    ly=0.9+veh.y*0.4; lz=veh.z-1-CFG.camNarrowAhead*n;    // look leads down-road on phones — navigation view
   }
   if(S.state==='menu'){
     const k=Math.min(1,6*dt);
@@ -2308,10 +2314,12 @@ function frame(now){
 }
 
 /* ==================================================== resize / boot */
+function narrowN(){ return clamp((0.75-innerWidth/innerHeight)/0.29,0,1); }   // 0 at iPad portrait, 1 on phones
 function resize(){
   renderer.setSize(innerWidth,innerHeight);   // let three set the canvas CSS size too — inset:0 alone doesn't stretch a canvas
   camera.aspect=innerWidth/innerHeight;
-  camera.fov=innerWidth>innerHeight?52:62;                  // keep the street readable in landscape too
+  // widen the FOV on narrow screens — a phone's horizontal frustum is too tight to hold road + houses otherwise
+  camera.fov=innerWidth>innerHeight?52:62+CFG.camNarrowFov*narrowN();
   camera.updateProjectionMatrix();
 }
 addEventListener('resize',resize); resize();
