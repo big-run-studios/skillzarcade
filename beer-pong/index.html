@@ -270,7 +270,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>; a lone cup glows purple — an <b style="color:#c98aff">island</b>, worth 3×. Run out of balls and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.12</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.13</div>
   </div>
 
   <div id="over">
@@ -324,7 +324,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.12',
+  ver:'0.1.13',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
@@ -1412,11 +1412,14 @@ $('legendBtn').addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPro
 $('startBtn').addEventListener('click',()=>{ auInit(); SFX.ui(); startRun(); });
 $('againBtn').addEventListener('click',()=>{ auInit(); SFX.ui(); startRun(); });
 $('menuBtn2').addEventListener('click',toMenu);
-$('homeBtn').addEventListener('click',toMenu);
-$('muteBtn').addEventListener('click',()=>setMute(!AU.muted));
-$('helpBtn').addEventListener('click',()=>{ $('helpOv').classList.add('show'); paused=true; });
+/* in-game minis on pointerdown, not click — iOS drops clicks for taps made while
+   another finger is down (mid-swipe), see hud-buttons-pointerdown */
+const miniTap=(id,fn)=>$(id).addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); fn(); });
+miniTap('homeBtn',toMenu);
+miniTap('muteBtn',()=>setMute(!AU.muted));
+miniTap('helpBtn',()=>{ $('helpOv').classList.add('show'); paused=true; });
 $('helpClose').addEventListener('click',()=>{ $('helpOv').classList.remove('show'); paused=false; });
-$('pauseBtn').addEventListener('click',()=>{ $('pauseOv').classList.add('show'); paused=true; });
+miniTap('pauseBtn',()=>{ $('pauseOv').classList.add('show'); paused=true; });
 $('resumeBtn').addEventListener('click',()=>{ $('pauseOv').classList.remove('show'); paused=false; });
 $('lastCash').addEventListener('click',()=>{ $('lastOv').classList.remove('show'); paused=false; cashOut(false); });
 $('lastGo').addEventListener('click',()=>{ $('lastOv').classList.remove('show'); paused=false; SFX.ui(); showHint(false); });
