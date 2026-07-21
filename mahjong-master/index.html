@@ -118,6 +118,9 @@
 
   /* ---------- message area ---------- */
   #msg{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4px 20px;min-height:40px;}
+  /* panel so instructional text stays legible over the central lotus — matches the official-hands panel */
+  #msgBox{background:rgba(6,26,18,.7);border:1px solid rgba(61,220,151,.22);border-radius:12px;padding:10px 16px;max-width:min(92%,420px);}
+  #msgBox.empty{display:none;}
   #msgTxt{font-size:15px;font-weight:600;color:var(--ice);}
   #msgSub{font-size:12px;color:var(--dim);margin-top:3px;}
 
@@ -261,7 +264,7 @@
     <div id="candRows"></div>
   </div>
 
-  <div id="msg"><div><div id="msgTxt"></div><div id="msgSub"></div></div></div>
+  <div id="msg"><div id="msgBox" class="empty"><div id="msgTxt"></div><div id="msgSub"></div></div></div>
 
   <div id="rackZone">
     <div id="rackBar">
@@ -1083,7 +1086,7 @@ function endRun(kind){
 }
 
 /* ================= UI plumbing ================= */
-function setMsg(a,b){ $('msgTxt').textContent=a; $('msgSub').textContent=b||''; }
+function setMsg(a,b){ $('msgTxt').textContent=a; $('msgSub').textContent=b||''; $('msgBox').classList.toggle('empty', !a && !b); }
 function updatePhaseUI(){
   if(S.phase==='charleston'){
     $('phaseChip').textContent='CHARLESTON — PASS '+(S.passes+1)+' OF 4';
