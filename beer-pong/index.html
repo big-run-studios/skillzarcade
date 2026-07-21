@@ -255,7 +255,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>; a lone cup glows purple — an <b style="color:#c98aff">island</b>, worth 3×. Run out of balls and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.3</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.4</div>
   </div>
 
   <div id="over">
@@ -299,7 +299,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.3',
+  ver:'0.1.4',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
@@ -721,6 +721,46 @@ const aimGrp=new THREE.Group(); world.add(aimGrp);
 const bounceMark=new THREE.Mesh(new THREE.TorusGeometry(3,0.3,8,24),
   new THREE.MeshBasicMaterial({color:0xff9d2e,transparent:true,opacity:0.8,depthWrite:false}));
 bounceMark.rotation.x=-Math.PI/2; bounceMark.visible=false; world.add(bounceMark);
+/* dotted trajectory preview — live while swiping, same physics as the real throw */
+const prevDots=[];
+{
+  const geo=new THREE.SphereGeometry(0.75,8,6);
+  for(let i=0;i<26;i++){
+    const m=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x9feaff,transparent:true,opacity:0,depthWrite:false}));
+    m.visible=false; world.add(m); prevDots.push(m);
+  }
+}
+function hidePreview(){ for(const d of prevDots) d.visible=false; }
+function updatePreviewPath(sw){
+  const mv=swipeToVel(sw);
+  let px=CFG.tee.x, py=CFG.tee.y, pz=CFG.tee.z;
+  let vx=mv.vx, vy=mv.vy, vz=mv.vz, side=mv.side, top=mv.top;
+  const dt=0.03; let bounced=false, di=0;
+  for(let s=0;s<110&&di<prevDots.length;s++){
+    const sp=Math.hypot(vx,vy,vz);
+    vy-=CFG.gravity*dt;
+    vx+=side*CFG.magnusSide*(sp/400)*dt;
+    vy-=top*CFG.magnusTop*(sp/400)*dt;
+    px+=vx*dt; py+=vy*dt; pz+=vz*dt;
+    if(py-CFG.ballR<=0&&vy<0){                 // mirror the real bounce, once
+      if(bounced||Math.abs(vy)<=36) break;
+      bounced=true; py=CFG.ballR;
+      vy=Math.abs(vy)*CFG.rest;
+      vx=vx*CFG.fricX+side*CFG.kickSide;
+      vz=vz*CFG.fricZ-top*CFG.kickFwd;
+      if(top<0) vy+=(-top)*CFG.popBack;
+      side*=0.55; top*=0.5;
+    }
+    if(pz<(CFG.rounds[S.round]?.rackZ||-124)-26||py<-4||Math.abs(px)>L.half) break;
+    if(s%2===0){
+      const d=prevDots[di++], k=1-di/prevDots.length;
+      d.visible=true; d.position.set(px,py,pz);
+      d.material.opacity=0.16+0.62*k;
+      d.scale.setScalar(0.75+k*0.5);
+    }
+  }
+  for(let i=di;i<prevDots.length;i++) prevDots[i].visible=false;
+}
 
 /* ------------------------------------------------ FX pools */
 const rings=[];
@@ -857,7 +897,7 @@ function startFlight(vx,vy,vz,side=0,top=0){
   S.flightT=0; S.settleT=0; S.trailAcc=0;
   S.throws++; S.balls--; hudBalls();
   S.phase='flight';
-  aimGrp.visible=false; bounceMark.visible=false; $('meters').classList.remove('on');
+  aimGrp.visible=false; bounceMark.visible=false; hidePreview(); $('meters').classList.remove('on');
   SFX.throw();
 }
 
@@ -895,7 +935,7 @@ function toMenu(){
   $('pauseOv').classList.remove('show'); $('helpOv').classList.remove('show');
   $('cashStack').classList.remove('on'); $('rerackBtn').classList.remove('on');
   $('menuBest').textContent='BEST '+fmt(S.best);
-  ball.visible=false; aimGrp.visible=false; bounceMark.visible=false;
+  ball.visible=false; aimGrp.visible=false; bounceMark.visible=false; hidePreview();
   S.round=0; buildRack(0);                                // fresh rack as the menu backdrop
 }
 function showOver(kind,title,sub,banked){
@@ -1289,17 +1329,17 @@ function endDrag(e){
   dragPts.push({t:performance.now(),x:e.clientX,y:e.clientY});
   const sw=computeSwipe(dragPts);
   dragPts=null; S.drag=null;
-  aimGrp.visible=false; bounceMark.visible=false; $('meters').classList.remove('on');
+  aimGrp.visible=false; bounceMark.visible=false; hidePreview(); $('meters').classList.remove('on');
   if(sw&&S.phase==='aim') throwBall(sw);
 }
 addEventListener('pointerup',endDrag); addEventListener('pointercancel',()=>{ dragPts=null; S.drag=null;
-  aimGrp.visible=false; bounceMark.visible=false; $('meters').classList.remove('on'); });
+  aimGrp.visible=false; bounceMark.visible=false; hidePreview(); $('meters').classList.remove('on'); });
 
 const meterEase={pow:0,spin:0,loft:0,aim:0};
 function updateAimFX(){
-  if(!dragPts||dragPts.length<3){ aimGrp.visible=false; bounceMark.visible=false; return; }
+  if(!dragPts||dragPts.length<3){ aimGrp.visible=false; bounceMark.visible=false; hidePreview(); return; }
   const sw=computeSwipe(dragPts);
-  if(!sw){ aimGrp.visible=false; bounceMark.visible=false; $('meters').classList.remove('on'); return; }
+  if(!sw){ aimGrp.visible=false; bounceMark.visible=false; hidePreview(); $('meters').classList.remove('on'); return; }
   // the raw last-90ms readouts are twitchy — ease the displayed values (throw still uses the raw release)
   meterEase.pow+=(sw.pow-meterEase.pow)*0.22;
   meterEase.spin+=(clamp(sw.curve,-1,1)-meterEase.spin)*0.22;
@@ -1319,7 +1359,9 @@ function updateAimFX(){
     ch.position.set(0,0,-(12+i*9*(0.6+meterEase.pow)));
     ch.material.opacity=0.75-i*0.18;
   });
-  // predicted first bounce (only when it lands short of the rack — never the full solution)
+  // live dotted trajectory (eased inputs so it doesn't jitter) — helps zero in
+  updatePreviewPath({pow:meterEase.pow,aimDeg:meterEase.aim,curve:meterEase.spin,acc:-meterEase.loft});
+  // predicted first bounce marker
   const m=swipeToVel(sw);
   const land=predictLanding(m.vx,m.vy,m.vz);
   const frontZ=CFG.rounds[S.round].rackZ+CU.spacing*1.6;
@@ -1436,6 +1478,8 @@ window.__game={
   sinkIsland(){ const c=cups.find(c=>c.island&&c.alive); if(!c) return;
     const v=solveShot(c.x,c.z,54); startFlight(v.vx,v.vy,v.vz,0,0); },
   rerackNow(){ return requestRerack(); },
+  previewShot(pow=0.5,aimDeg=0,curve=0,acc=0){ updatePreviewPath({pow,aimDeg,curve,acc}); },
+  hidePreview,
   skip(){ if(S.phase==='result') S.resT=99; if(S.phase==='sunk') S.sinkT=99; if(S.phase==='tally') S.tallyT=99; },
   cashNow(){ cashOut(false); }, crashNow(){ crash(); },
   setBalls(n){ S.balls=n; hudBalls(); },
