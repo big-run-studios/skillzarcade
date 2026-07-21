@@ -229,7 +229,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>. Run out of balls with cups standing and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it. Each rack you clear boosts all points ahead.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.0</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.1</div>
   </div>
 
   <div id="over">
@@ -272,24 +272,26 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.0',
+  ver:'0.1.1',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
   cup:{ rimR:6.0, innerR:5.4, baseR:4.3, h:14.5, spacing:13.2 },
   tee:{ x:0, y:13, z:30 },
   gravity:620,
-  // --- lane bounce
-  rest:0.62, fricX:0.82, fricZ:0.80,
+  // --- lane bounce (ping-pong balls are lively — dead rest made bounce-ins impossible to clear the rim)
+  rest:0.78, fricX:0.82, fricZ:0.80,
   kickSide:52, kickFwd:58, popBack:36,       // spin cash-in at the bounce
   railRest:0.55,
   // --- spin in flight (magnus, scaled by speed/400)
   magnusSide:62, magnusTop:88,
-  // --- swipe → throw mapping
-  vMin:215, vMax:560,
+  // --- swipe → throw mapping. The solved make-speed (~300cm/s) must sit at a MID swipe:
+  // v0.1.0 normalized so a normal flick pegged max power and every throw sailed long.
+  vMin:190, vMax:420,
+  swipeNorm:{spd:3.5,len:0.5},               // release px/s ÷ (H·spd) → full power needs a genuine rip
   elevBase:50, elevAccel:-11, elevSoft:7,    // deg: base + accel·acc + soft·(1−pow)
   aimK:0.55, aimMaxDeg:38,
-  assist:0.16, assistR:6.5,                  // tiny nudge toward a cup you nearly aimed at — never a snap
+  assist:0.35, assistR:8,                    // proximity-scaled nudge toward a near-missed mouth — never a snap
   // --- rim roll capture
   roll:{ tangRatio:1.55, maxVy:150, maxVt:330, dropVn:42, decay:1.5 },
   // --- rounds
@@ -745,8 +747,8 @@ function computeSwipe(pts){
   const relSpeed=relLen/relDt, avgSpeed=len/T;
   const acc=clamp((relSpeed-avgSpeed)/(avgSpeed+60),-1,1);            // burst vs fade at release
   const H=innerHeight;
-  const spdN=clamp((0.6*relSpeed+0.4*avgSpeed)/(H*2.4),0,1);
-  const lenN=clamp(len/(H*0.5),0,1);
+  const spdN=clamp((0.6*relSpeed+0.4*avgSpeed)/(H*CFG.swipeNorm.spd),0,1);
+  const lenN=clamp(len/(H*CFG.swipeNorm.len),0,1);
   const pow=clamp(0.7*spdN+0.3*lenN,0.06,1);
   // signed curvature: max perpendicular deviation from the chord
   const chordL=Math.hypot(dx,dy)||1;
@@ -783,8 +785,10 @@ function throwBall(sw){
     if(d<bestD){ bestD=d; bestC=c; }
   }
   if(bestC&&bestD<CFG.assistR&&bestD>CU.innerR*0.5){
+    // stronger pull the closer you were — tops out ~0.33, fades to nothing at the assist edge
+    const k=CFG.assist*clamp(1.15-bestD/CFG.assistR,0,1);
     const ideal=solveShot(bestC.x,bestC.z,m.elevDeg);
-    vx=lerp(vx,ideal.vx,CFG.assist); vy=lerp(vy,ideal.vy,CFG.assist); vz=lerp(vz,ideal.vz,CFG.assist);
+    vx=lerp(vx,ideal.vx,k); vy=lerp(vy,ideal.vy,k); vz=lerp(vz,ideal.vz,k);
   }
   S.lastSwipe=sw;
   startFlight(vx,vy,vz,m.side,m.top);
@@ -1210,6 +1214,7 @@ app.addEventListener('pointerdown',e=>{
   auInit();
   dragPts=[{t:performance.now(),x:e.clientX,y:e.clientY}];
   S.drag={ok:false};
+  meterEase.pow=0; meterEase.spin=0; meterEase.loft=0; meterEase.aim=0;
   showHint(false);
 });
 app.addEventListener('pointermove',e=>{
@@ -1228,22 +1233,28 @@ function endDrag(e){
 addEventListener('pointerup',endDrag); addEventListener('pointercancel',()=>{ dragPts=null; S.drag=null;
   aimGrp.visible=false; bounceMark.visible=false; $('meters').classList.remove('on'); });
 
+const meterEase={pow:0,spin:0,loft:0,aim:0};
 function updateAimFX(){
   if(!dragPts||dragPts.length<3){ aimGrp.visible=false; bounceMark.visible=false; return; }
   const sw=computeSwipe(dragPts);
   if(!sw){ aimGrp.visible=false; bounceMark.visible=false; $('meters').classList.remove('on'); return; }
+  // the raw last-90ms readouts are twitchy — ease the displayed values (throw still uses the raw release)
+  meterEase.pow+=(sw.pow-meterEase.pow)*0.22;
+  meterEase.spin+=(clamp(sw.curve,-1,1)-meterEase.spin)*0.22;
+  meterEase.loft+=(clamp(-sw.acc,-1,1)-meterEase.loft)*0.22;
+  meterEase.aim+=(sw.aimDeg-meterEase.aim)*0.35;
   $('meters').classList.add('on');
-  $('mPow').style.width=(sw.pow*100).toFixed(1)+'%';
-  const sp=clamp(sw.curve,-1,1)*50, lf=clamp(-sw.acc,-1,1)*50;   // loft bar: soft release → right/green
+  $('mPow').style.width=(meterEase.pow*100).toFixed(1)+'%';
+  const sp=meterEase.spin*50, lf=meterEase.loft*50;   // loft bar: soft release → right/green
   $('mSpin').style.left=(sp>=0?50:50+sp)+'%'; $('mSpin').style.width=Math.abs(sp)+'%';
   $('mLoft').style.left=(lf>=0?50:50+lf)+'%'; $('mLoft').style.width=Math.abs(lf)+'%';
   // chevrons along the aim line
-  const aim=sw.aimDeg*Math.PI/180;
+  const aim=meterEase.aim*Math.PI/180;
   aimGrp.visible=true;
   aimGrp.position.set(CFG.tee.x,0.14,CFG.tee.z);
   aimGrp.rotation.y=-aim;
   aimGrp.children.forEach((ch,i)=>{
-    ch.position.set(0,0,-(12+i*9*(0.6+sw.pow)));
+    ch.position.set(0,0,-(12+i*9*(0.6+meterEase.pow)));
     ch.material.opacity=0.75-i*0.18;
   });
   // predicted first bounce (only when it lands short of the rack — never the full solution)
