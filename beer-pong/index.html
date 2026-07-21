@@ -270,7 +270,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>; a lone cup glows purple — an <b style="color:#c98aff">island</b>, worth 3×. Run out of balls and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.18</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.19</div>
   </div>
 
   <div id="over">
@@ -324,7 +324,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.18',
+  ver:'0.1.19',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
@@ -342,7 +342,11 @@ const CFG = {
   vMin:190, vMax:420,
   swipeNorm:{spd:4.6,len:0.62},              // a natural thumb flick (~1600px/s) = make-band center; full power needs a genuine rip
   elevBase:50, elevAccel:-11, elevSoft:7,    // deg: base + accel·acc + soft·(1−pow)
-  aimK:0.55, aimMaxDeg:38, curveTurnGain:12,
+  aimK:0.55, aimMaxDeg:38,
+  // spin needs INTENT: natural thumb strokes always arc a little, so turn readings
+  // inside the dead cone are zero — straight throws stay dead straight at any cup.
+  // Above the cone the range remaps so a deliberate wrap still reaches full curve.
+  curveTurnGain:12, curveDead:0.33, curveExp:1.2,
   assist:0.35, assistR:8,                    // proximity-scaled nudge toward a near-missed mouth — never a snap
   // --- pity assist: consecutive misses (max 3) escalate help so nobody rage-quits.
   // Launch assist strengthens/widens, and close shots get steered in FROM THE AIR:
@@ -861,7 +865,10 @@ function computeSwipe(pts){
     const w=i/pts.length;
     turn+=((ax*by-ay*bx)/(la*lb))*w; wsum+=w;
   }
-  const curve=clamp(wsum?(turn/wsum)*CFG.curveTurnGain:0,-1,1);
+  const raw=clamp(wsum?(turn/wsum)*CFG.curveTurnGain:0,-1.6,1.6);
+  const dz=CFG.curveDead;
+  const curve=Math.abs(raw)<=dz?0
+    :clamp(Math.sign(raw)*Math.pow((Math.abs(raw)-dz)/(1-dz),CFG.curveExp),-1,1);
   const aimDeg=clamp(Math.atan2(dx,-dy)*180/Math.PI*CFG.aimK,-CFG.aimMaxDeg,CFG.aimMaxDeg);
   return {pow,aimDeg,curve,acc};
 }
