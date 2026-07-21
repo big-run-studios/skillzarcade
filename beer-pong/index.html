@@ -270,7 +270,7 @@
     <div class="secret">Swipe up to throw — speed is power, a curved swipe bends the ball, a soft release floats a drop shot. Every cup feeds the <b style="color:#ffd75e">pot</b>; a lone cup glows purple — an <b style="color:#c98aff">island</b>, worth 3×. Run out of balls and the pot is <b style="color:#ff4b3a">gone</b> — tap <b style="color:#39ffa0">CASH OUT</b> any time to bank it.</div>
     <button id="startBtn">🏓 RACK ’EM</button>
     <div id="menuBest">BEST 0</div>
-    <div class="brand">CRASHARCADE · BEER PONG v0.1.19</div>
+    <div class="brand">CRASHARCADE · BEER PONG v0.1.20</div>
   </div>
 
   <div id="over">
@@ -324,7 +324,7 @@ import * as THREE from './lib/three.module.js';
 
 /* ================================================================== CFG */
 const CFG = {
-  ver:'0.1.19',
+  ver:'0.1.20',
   // --- world scale: 1 unit = 1 cm
   ballR:2.3,
   lane:{ half:50, zFront:44, zBack:-216 },
@@ -343,10 +343,11 @@ const CFG = {
   swipeNorm:{spd:4.6,len:0.62},              // a natural thumb flick (~1600px/s) = make-band center; full power needs a genuine rip
   elevBase:50, elevAccel:-11, elevSoft:7,    // deg: base + accel·acc + soft·(1−pow)
   aimK:0.55, aimMaxDeg:38,
-  // spin needs INTENT: natural thumb strokes always arc a little, so turn readings
-  // inside the dead cone are zero — straight throws stay dead straight at any cup.
-  // Above the cone the range remaps so a deliberate wrap still reaches full curve.
-  curveTurnGain:12, curveDead:0.33, curveExp:1.2,
+  // spin needs INTENT: even careful strokes arc a little, so turn readings inside
+  // the dead cone are zero — straight throws stay dead straight at any cup. Cone
+  // sized for POINTER-FINGER play (straighter than thumb strokes): a lazy ~20° drift
+  // reads 0, a light 46° flick ~0.1, a committed hook ~0.4, a hard wrap ~0.95.
+  curveTurnGain:12, curveDead:0.22, curveExp:1.2,
   assist:0.35, assistR:8,                    // proximity-scaled nudge toward a near-missed mouth — never a snap
   // --- pity assist: consecutive misses (max 3) escalate help so nobody rage-quits.
   // Launch assist strengthens/widens, and close shots get steered in FROM THE AIR:
